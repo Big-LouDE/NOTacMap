@@ -41,6 +41,17 @@ namespace NOTacMap
 		public float x;
 		public float z;
 		public bool hangarsAvailable;
+		public List<RunwaySnapshot> runways = new List<RunwaySnapshot>();
+	}
+
+	internal class RunwaySnapshot
+	{
+		// Real threshold positions (Runway.Start/End), not a guess at heading -
+		// the client draws the extended centerline by projecting past these.
+		public float startX;
+		public float startZ;
+		public float endX;
+		public float endZ;
 	}
 
 	internal class WaypointSnapshot
@@ -312,14 +323,34 @@ namespace NOTacMap
 						continue;
 					}
 					GlobalPosition pos = airbase.center.GlobalPosition();
-					snapshot.airbases.Add(new AirbaseSnapshot
+					var airbaseSnap = new AirbaseSnapshot
 					{
 						name = airbase.SavedAirbase != null ? airbase.SavedAirbase.DisplayName : airbase.name,
 						faction = FactionString(airbase.CurrentHQ),
 						x = pos.x,
 						z = pos.z,
 						hangarsAvailable = !airbase.disabled && airbase.AnyHangarsAvailable()
-					});
+					};
+					if (airbase.runways != null)
+					{
+						foreach (Airbase.Runway runway in airbase.runways)
+						{
+							if (runway == null || !runway.Landing || runway.Start == null || runway.End == null)
+							{
+								continue;
+							}
+							GlobalPosition start = runway.Start.GlobalPosition();
+							GlobalPosition end = runway.End.GlobalPosition();
+							airbaseSnap.runways.Add(new RunwaySnapshot
+							{
+								startX = start.x,
+								startZ = start.z,
+								endX = end.x,
+								endZ = end.z
+							});
+						}
+					}
+					snapshot.airbases.Add(airbaseSnap);
 				}
 			}
 

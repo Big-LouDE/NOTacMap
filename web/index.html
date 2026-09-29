@@ -90,6 +90,28 @@
     background: #000; color: var(--hud-dim); border: 1px solid var(--hud-dim);
     font: calc(10px * var(--text-scale)) "Consolas", monospace; cursor: pointer;
   }
+  .color-row {
+    display: flex; align-items: center; gap: 4px; padding: 2px 0; cursor: default;
+    white-space: nowrap;
+  }
+  .color-label { flex: 1 1 auto; min-width: 90px; }
+  .color-swatch {
+    width: 14px; height: 14px; flex: none; border: 1px solid var(--hud-dim);
+    background: #000;
+  }
+  .color-row input[type=number] {
+    width: 52px; flex: none; background: #000; color: var(--hud-dim);
+    border: 1px solid var(--hud-dim); font: calc(10px * var(--text-scale)) "Consolas", monospace;
+    padding: 1px 2px;
+  }
+  .color-row input[type=number]:disabled { opacity: 0.4; }
+  .color-reset {
+    flex: none; background: transparent; border: 1px solid var(--hud-dim); color: var(--hud-dim);
+    cursor: pointer; font-size: calc(11px * var(--text-scale)); line-height: 1; padding: 1px 4px;
+  }
+  .color-reset:hover { color: var(--hud-green); border-color: var(--hud-green); }
+  .hud-text-custom { flex: none; display: flex; align-items: center; gap: 3px; cursor: pointer; }
+  .hud-text-custom input { cursor: pointer; }
   #legend {
     position: absolute; top: 34px; left: 14px;
     display: flex; flex-direction: column; gap: 3px;
@@ -142,6 +164,10 @@
       <label><input type="checkbox" data-group="weapons" data-key="air2ground" checked>Air-to-ground</label>
       <label><input type="checkbox" data-group="weapons" data-key="unlocked" checked>Unlocked / other</label>
     </div>
+    <div class="group">
+      <h4>Overlays</h4>
+      <label><input type="checkbox" data-group="overlays" data-key="runwayGuides" checked>Runway approach guides</label>
+    </div>
   </div>
   <div id="displayPanel" class="panel">
     <div class="group">
@@ -153,6 +179,82 @@
           <option value="1.5">X-Large</option>
         </select>
       </label>
+    </div>
+    <div class="group">
+      <h4>Colors</h4>
+      <div class="color-row" data-color-key="friend">
+        <span class="color-label">Friendly (you)</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="npc">
+        <span class="color-label">AI / structures</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="enemy">
+        <span class="color-label">Enemy</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="myMissile">
+        <span class="color-label">Your missile</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="teammateMissile">
+        <span class="color-label">Teammate missile</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="lock">
+        <span class="color-label">Lock indicator</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="mark">
+        <span class="color-label">Marked target</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="runwayGuide">
+        <span class="color-label">Runway guide</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="hudText">
+        <span class="color-label">HUD text</span>
+        <label class="hud-text-custom"><input type="checkbox" id="hudTextCustomToggle">custom</label>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r" disabled>
+        <input type="number" min="0" max="255" class="c-g" disabled>
+        <input type="number" min="0" max="255" class="c-b" disabled>
+        <button type="button" class="color-reset" title="Reset to default (follow live theme)">&#8634;</button>
+      </div>
     </div>
   </div>
 </div>
@@ -238,7 +340,24 @@ if ((urlParams.get('theme') || '') === 'dark') {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { textScale: 1.25 }
+  display: { textScale: 1.25 },
+  overlays: { runwayGuides: true },
+  // Every fixed (non-theme) color on the map, customizable. hudText is the
+  // one exception: {r:-1,g:-1,b:-1} means "keep following the game's own
+  // live HUD theme" (the normal default) - anything else means the user
+  // explicitly opted into overriding that. Every other color always uses
+  // its stored value; there's no live-theme relationship to preserve there.
+  colors: {
+    friend: { r: 255, g: 230, b: 0 },
+    npc: { r: 63, g: 160, b: 255 },
+    enemy: { r: 255, g: 59, b: 59 },
+    myMissile: { r: 102, g: 234, b: 255 },
+    teammateMissile: { r: 58, g: 125, b: 140 },
+    lock: { r: 255, g: 63, b: 216 },
+    mark: { r: 255, g: 176, b: 32 },
+    runwayGuide: { r: 120, g: 200, b: 190 },
+    hudText: { r: -1, g: -1, b: -1 }
+  }
 };
 const settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
 
@@ -277,11 +396,89 @@ function applyTextScale() {
   document.documentElement.style.setProperty('--text-scale', settings.display.textScale);
 }
 
+function rgbStr(c) { return `rgb(${c.r},${c.g},${c.b})`; }
+function rgbaStr(c, a) { return `rgba(${c.r},${c.g},${c.b},${a})`; }
+
+// hudText is the one color setting with a real default behavior to
+// preserve: out of the box, the HUD text should keep matching the game's
+// own live ThemeManager colors (see the /theme fetch further down), not a
+// fixed value. {r:-1,...} is the sentinel for "haven't opted into a custom
+// one" - only then do we touch the CSS vars the theme fetch also writes to.
+function applyHudTextColor() {
+  const c = settings.colors.hudText;
+  if (c.r < 0) return; // following live theme - leave --hud-green/--hud-dim alone
+  document.documentElement.style.setProperty('--hud-green', rgbStr(c));
+  document.documentElement.style.setProperty('--hud-dim', rgbaStr(c, 0.55));
+}
+
 function syncDisplayControls() {
   const sel = document.getElementById('textScaleSelect');
   if (sel) sel.value = String(settings.display.textScale);
   applyTextScale();
 }
+
+function updateSwatch(row, c) {
+  const swatch = row.querySelector('.color-swatch');
+  // hudText's sentinel (-1) means "following the live theme" - show
+  // whatever --hud-green is currently computed as, not an invalid color.
+  swatch.style.background = c.r < 0
+    ? getComputedStyle(document.documentElement).getPropertyValue('--hud-green').trim() || '#3fdb5e'
+    : rgbStr(c);
+}
+
+function syncColorRow(row) {
+  const key = row.dataset.colorKey;
+  const c = settings.colors[key];
+  const isHudText = key === 'hudText';
+  const custom = !isHudText || c.r >= 0;
+  const [rIn, gIn, bIn] = ['.c-r', '.c-g', '.c-b'].map(sel => row.querySelector(sel));
+  rIn.value = custom ? c.r : '';
+  gIn.value = custom ? c.g : '';
+  bIn.value = custom ? c.b : '';
+  rIn.disabled = gIn.disabled = bIn.disabled = isHudText && !custom;
+  if (isHudText) {
+    row.querySelector('#hudTextCustomToggle').checked = custom;
+  }
+  updateSwatch(row, c);
+}
+
+function syncColorControls() {
+  document.querySelectorAll('.color-row').forEach(syncColorRow);
+}
+
+function applyColorChange(key) {
+  if (key === 'hudText') applyHudTextColor();
+  saveSettings();
+}
+
+document.querySelectorAll('.color-row').forEach(row => {
+  const key = row.dataset.colorKey;
+  const rIn = row.querySelector('.c-r'), gIn = row.querySelector('.c-g'), bIn = row.querySelector('.c-b');
+
+  function commit() {
+    const clamp = v => Math.max(0, Math.min(255, Math.round(Number(v)) || 0));
+    settings.colors[key] = { r: clamp(rIn.value), g: clamp(gIn.value), b: clamp(bIn.value) };
+    updateSwatch(row, settings.colors[key]);
+    applyColorChange(key);
+  }
+  [rIn, gIn, bIn].forEach(input => input.addEventListener('change', commit));
+
+  row.querySelector('.color-reset').addEventListener('click', () => {
+    settings.colors[key] = { ...DEFAULT_SETTINGS.colors[key] };
+    syncColorRow(row);
+    applyColorChange(key);
+  });
+
+  if (key === 'hudText') {
+    row.querySelector('#hudTextCustomToggle').addEventListener('change', e => {
+      settings.colors.hudText = e.target.checked
+        ? { r: 63, g: 219, b: 94 } // starting point when first enabling - matches the CSS fallback green
+        : { r: -1, g: -1, b: -1 };
+      syncColorRow(row);
+      applyColorChange('hudText');
+    });
+  }
+});
 
 function saveSettings() {
   fetch('/settings', {
@@ -296,6 +493,8 @@ fetch('/settings').then(r => r.ok ? r.json() : null).catch(() => null).then(load
   applyLegacyWeaponsParam(urlParams.get('weapons'));
   syncFilterCheckboxes();
   syncDisplayControls();
+  syncColorControls();
+  applyHudTextColor();
 });
 
 document.querySelectorAll('#filterPanel input[type=checkbox]').forEach(cb => {
@@ -384,20 +583,14 @@ function displayNameFor(ownerName) {
   return nameMode === 'real' ? ownerName : callsignFor(ownerName);
 }
 
-// Human teammates get a color that actually pops (yellow), AI/structures
-// on your side blue, enemies red - regardless of the game's own theme
-// (which uses blue only for "friendly" without distinguishing player from
-// AI). Fixed, not pulled from ThemeManager, since that distinction doesn't
-// exist in-game. Was blue/green before - with dozens of AI contacts on
-// screen, a human teammate needs to visually pop out of that crowd rather
-// than blend into "yet another friendly-colored icon."
-const FRIEND_COLOR = '#ffe600';
-const NPC_COLOR = '#3fa0ff';
-const ENEMY_COLOR = '#ff3b3b';
+// Human teammates, AI/structures, and enemies each get their own
+// customizable color (Display > Colors), regardless of the game's own
+// theme (which uses blue only for "friendly" without distinguishing player
+// from AI) - that distinction doesn't exist in-game, only here.
 
 function unitColor(u) {
-  if (u.faction === 'enemy') return ENEMY_COLOR;
-  if (u.faction === 'friendly') return u.isPlayer ? FRIEND_COLOR : NPC_COLOR;
+  if (u.faction === 'enemy') return rgbStr(settings.colors.enemy);
+  if (u.faction === 'friendly') return u.isPlayer ? rgbStr(settings.colors.friend) : rgbStr(settings.colors.npc);
   return col('--neutral');
 }
 
@@ -555,12 +748,13 @@ function pixelToWorld(px, py) {
 }
 
 let latest = null;
-const MY_MISSILE_COLOR = '#66eaff';
-const TEAMMATE_MISSILE_COLOR = '#3a7d8c'; // dimmer than mine - keeps the "whose weapon is this" hierarchy readable at a glance
-const LOCK_COLOR = '#ff3fd8'; // pink/purple highlight for a missile's target
-const LOCK_COLOR_DIM = 'rgba(255,63,216,0.5)'; // teammates' locks: same hue, dimmer
-const MARK_COLOR = '#ffb020'; // amber - "about to engage", distinct from the pink fired-weapon lock
-const MARK_COLOR_DIM = 'rgba(255,176,32,0.55)'; // secondary marks (targetList[1+] in a salvo), dimmer than the primary
+// All customizable (Display > Colors); teammate/secondary variants derive
+// their dimmer look from the same base color rather than being separately
+// customizable, keeping the settings list from ballooning.
+function myMissileColor() { return rgbStr(settings.colors.myMissile); }
+function teammateMissileColor() { return rgbStr(settings.colors.teammateMissile); }
+function lockColorFor(mine) { return mine ? rgbStr(settings.colors.lock) : rgbaStr(settings.colors.lock, 0.5); }
+function markColorFor(isPrimary) { return isPrimary ? rgbStr(settings.colors.mark) : rgbaStr(settings.colors.mark, 0.55); }
 
 function drawBackground(origin) {
   if (!mapInfo || !bgReady || !bgCanvas) return;
@@ -954,6 +1148,33 @@ function draw() {
   const sortedAirbases = [...(latest.airbases || [])].sort((a, b) => labelSortKey(a) - labelSortKey(b));
   const sortedUnits = [...(latest.units || [])].sort((a, b) => labelSortKey(a) - labelSortKey(b));
 
+  // Extended runway centerlines - real threshold positions (Runway.Start/
+  // End from the game's own Airbase data, not a guessed heading), extended
+  // 5km past each end so they're visible as a line-up reference well
+  // before you're actually on final. Drawn under the airbase icon/label so
+  // the line never draws over the more important text.
+  if (settings.overlays.runwayGuides) {
+    const GUIDE_EXTEND = 5000;
+    sortedAirbases.forEach(ab => {
+      (ab.runways || []).forEach(rw => {
+        const dx = rw.endX - rw.startX, dz = rw.endZ - rw.startZ;
+        const len = Math.hypot(dx, dz);
+        if (len < 1) return;
+        const ux = dx / len, uz = dz / len;
+        const [x0, y0] = toScreen(rw.startX - ux * GUIDE_EXTEND, rw.startZ - uz * GUIDE_EXTEND);
+        const [x1, y1] = toScreen(rw.endX + ux * GUIDE_EXTEND, rw.endZ + uz * GUIDE_EXTEND);
+        ctx.strokeStyle = rgbStr(settings.colors.runwayGuide);
+        ctx.lineWidth = 1;
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      });
+    });
+  }
+
   sortedAirbases.forEach(ab => {
     const [sx, sy] = toScreen(ab.x, ab.z);
     ctx.strokeStyle = factionColor[ab.faction] ? factionColor[ab.faction]() : col('--neutral');
@@ -995,11 +1216,11 @@ function draw() {
       // Yours brightest/solid, a teammate's dimmer. Only where it's going
       // (the lock, drawn below), never where it's been - no flight-path
       // trail, keeps clutter down.
-      ctx.fillStyle = mine ? MY_MISSILE_COLOR : TEAMMATE_MISSILE_COLOR;
+      ctx.fillStyle = mine ? myMissileColor() : teammateMissileColor();
       drawMissileShape(ctx, sx, sy, mine ? 5 : 4, u.heading);
       ctx.fill();
       setFont(mine ? 10 : 9);
-      ctx.fillStyle = mine ? col('--hud-dim') : TEAMMATE_MISSILE_COLOR;
+      ctx.fillStyle = mine ? col('--hud-dim') : teammateMissileColor();
       tryDrawLabel(mine ? u.name.trim() : displayNameFor(u.ownerName), sx + 7, sy + 3);
       if (u.hasTarget) {
         lockTargets.push(u);
@@ -1101,7 +1322,7 @@ function draw() {
     // risk, not whose weapon it is); only mine vs. a teammate's varies in
     // brightness/dash, matching the same visual-hierarchy language as the
     // missile icons themselves.
-    const lockColor = mine ? LOCK_COLOR : LOCK_COLOR_DIM;
+    const lockColor = lockColorFor(mine);
 
     ctx.strokeStyle = lockColor;
     ctx.lineWidth = mine ? 1.5 : 1;
@@ -1145,7 +1366,7 @@ function draw() {
   // this is more transient and lower-stakes than an actual weapon in flight.
   (latest.markedTargets || []).forEach(mt => {
     const [tx, ty] = toScreen(mt.x, mt.z);
-    const color = mt.isPrimary ? MARK_COLOR : MARK_COLOR_DIM;
+    const color = markColorFor(mt.isPrimary);
     ctx.strokeStyle = color;
     ctx.lineWidth = mt.isPrimary ? 1.5 : 1;
     drawMarkReticle(ctx, tx, ty, mt.isPrimary ? 12 : 9);
@@ -1249,6 +1470,7 @@ fetch('/theme').then(r => r.ok ? r.json() : Promise.reject())
       }
       document.documentElement.style.setProperty('--' + k, v);
     }
+    applyHudTextColor(); // re-assert a custom override in case it lost this race
   })
   .catch(() => { document.getElementById('themeWarning').style.display = 'block'; });
 </script>
