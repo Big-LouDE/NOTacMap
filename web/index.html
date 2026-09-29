@@ -842,6 +842,25 @@ function tryDrawLabel(text, x, y) {
   return true;
 }
 
+// For boxes that must never be hidden (an incoming-missile warning - every
+// live threat has to stay visible, dropping one would be actively
+// dangerous): finds the nearest clear vertical slot instead of declining.
+// The icon itself stays at its real position; only this text box moves, so
+// several missiles converging from the same direction stack into a
+// readable list instead of piling into one illegible block.
+function findClearBoxY(x, y, w, h) {
+  for (let guard = 0; guard < 20; guard++) {
+    const box = { x, y, w, h };
+    const collides = placedLabels.some(other =>
+      box.x < other.x + other.w && box.x + box.w > other.x &&
+      box.y < other.y + other.h && box.y + box.h > other.y
+    );
+    if (!collides) return y;
+    y += h + 2;
+  }
+  return y;
+}
+
 // Capped well below the display's native refresh rate: the underlying game
 // data only updates 5x/sec from the server anyway, so redrawing the full
 // canvas (background image blit, grid, every icon) at 60fps+ was pure waste
@@ -1012,16 +1031,19 @@ function draw() {
       const label1 = 'MISSILE';
       const label2 = `${spdText}  ETA ${etaText}`;
       const boxW = Math.max(ctx.measureText(label1).width, ctx.measureText(label2).width) + 8;
+      const boxH = 26;
+      // Every incoming missile is a live threat - never hidden, but if two
+      // are close enough that their boxes would overlap, stack this one
+      // below the others instead of drawing on top (the icon stays at its
+      // real position; only the text box moves).
+      const boxY = findClearBoxY(sx + 5, sy - 10, boxW, boxH);
       ctx.fillStyle = 'rgba(40,0,0,0.6)';
-      ctx.fillRect(sx + 5, sy - 10, boxW, 26);
+      ctx.fillRect(sx + 5, boxY, boxW, boxH);
       ctx.fillStyle = '#ffe020';
-      ctx.fillText(label1, sx + 9, sy + 1);
+      ctx.fillText(label1, sx + 9, boxY + 11);
       setFont(10);
-      ctx.fillText(label2, sx + 9, sy + 13);
-      // Always shown regardless of overlap (too important to hide), but
-      // still claims its space so other, less urgent labels yield to it
-      // instead of drawing on top of it.
-      placedLabels.push({ x: sx + 5, y: sy - 10, w: boxW, h: 26 });
+      ctx.fillText(label2, sx + 9, boxY + 23);
+      placedLabels.push({ x: sx + 5, y: boxY, w: boxW, h: boxH });
       return;
     }
 
