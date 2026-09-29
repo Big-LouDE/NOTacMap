@@ -179,6 +179,7 @@
           <option value="1.5">X-Large</option>
         </select>
       </label>
+      <label><input type="checkbox" data-group="display" data-key="showPilotNames">Show pilot names</label>
     </div>
     <div class="group">
       <h4>Colors</h4>
@@ -340,7 +341,7 @@ if ((urlParams.get('theme') || '') === 'dark') {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { textScale: 1.25 },
+  display: { textScale: 1.25, showPilotNames: false },
   overlays: { runwayGuides: true },
   // Every fixed (non-theme) color on the map, customizable. hudText is the
   // one exception: {r:-1,g:-1,b:-1} means "keep following the game's own
@@ -384,7 +385,11 @@ function applyLegacyWeaponsParam(wf) {
 }
 
 function syncFilterCheckboxes() {
-  document.querySelectorAll('#filterPanel input[type=checkbox]').forEach(cb => {
+  // .panel (not just #filterPanel) so this same generic wiring also covers
+  // checkboxes placed in #displayPanel, like "Show pilot names" - one
+  // data-group/data-key pattern for every settings checkbox regardless of
+  // which dropdown it visually lives in.
+  document.querySelectorAll('.panel input[type=checkbox][data-group]').forEach(cb => {
     cb.checked = settings[cb.dataset.group][cb.dataset.key];
   });
 }
@@ -497,7 +502,7 @@ fetch('/settings').then(r => r.ok ? r.json() : null).catch(() => null).then(load
   applyHudTextColor();
 });
 
-document.querySelectorAll('#filterPanel input[type=checkbox]').forEach(cb => {
+document.querySelectorAll('.panel input[type=checkbox][data-group]').forEach(cb => {
   cb.addEventListener('change', () => {
     settings[cb.dataset.group][cb.dataset.key] = cb.checked;
     saveSettings();
@@ -564,23 +569,30 @@ const CALLSIGN_POOL = [
   'Diesel', 'Echo', 'Fang', 'Grim', 'Hex', 'Jackal', 'Kraken', 'Lynx'
 ];
 let availableCallsigns = [...CALLSIGN_POOL];
-const callsignByRealName = new Map();
+// Keyed by ownerSteamId (a real Steam ID, never changes), NOT by the
+// display-name string - GetDisplayName() can change format (e.g. gains or
+// loses a "[3] " player-index prefix) across a respawn depending on that
+// player's own settings, and keying on the name string made a respawn
+// look like "a new player" and hand out a fresh random callsign each time.
+const callsignByStableKey = new Map();
 
-function callsignFor(realName) {
-  if (callsignByRealName.has(realName)) return callsignByRealName.get(realName);
+function callsignFor(stableKey) {
+  if (callsignByStableKey.has(stableKey)) return callsignByStableKey.get(stableKey);
   if (availableCallsigns.length === 0) {
     availableCallsigns = [...CALLSIGN_POOL]; // pool exhausted - rare; just recycle
   }
   const idx = Math.floor(Math.random() * availableCallsigns.length);
   const callsign = availableCallsigns.splice(idx, 1)[0];
-  callsignByRealName.set(realName, callsign);
+  callsignByStableKey.set(stableKey, callsign);
   return callsign;
 }
 
-// null ownerName means AI-flown - callers show an "AI" tag instead of a name.
-function displayNameFor(ownerName) {
+// null ownerName means AI-flown - callers show an "AI" tag instead of a
+// name. Falls back to ownerName itself as the callsign key on an older
+// server build that hasn't sent ownerSteamId yet, rather than crashing.
+function displayNameFor(ownerName, ownerSteamId) {
   if (!ownerName) return 'AI';
-  return nameMode === 'real' ? ownerName : callsignFor(ownerName);
+  return nameMode === 'real' ? ownerName : callsignFor(ownerSteamId || ownerName);
 }
 
 // Human teammates, AI/structures, and enemies each get their own
@@ -1221,7 +1233,16 @@ function draw() {
       ctx.fill();
       setFont(mine ? 10 : 9);
       ctx.fillStyle = mine ? col('--hud-dim') : teammateMissileColor();
-      tryDrawLabel(mine ? u.name.trim() : displayNameFor(u.ownerName), sx + 7, sy + 3);
+      // A teammate's label includes the weapon's own designation too, not
+      // just who's flying it - without it, the pilot name/callsign was the
+      // only text there at all, giving nothing else to sanity-check it
+      // against. Pilot name/callsign itself is opt-in (Display > Show pilot
+      // names, off by default) - when off, just the weapon name shows.
+      tryDrawLabel(
+        mine ? u.name.trim()
+          : settings.display.showPilotNames ? `${displayNameFor(u.ownerName, u.ownerSteamId)} (${u.name.trim()})` : u.name.trim(),
+        sx + 7, sy + 3
+      );
       if (u.hasTarget) {
         lockTargets.push(u);
       }
@@ -1352,7 +1373,9 @@ function draw() {
     const etaText = etaSeconds !== null ? ` (${etaSeconds.toFixed(0)}s)` : '';
     const lockLabel = mine
       ? `LOCK: ${missile.targetName.trim()}${etaText}`
-      : `${displayNameFor(missile.ownerName)} → ${missile.targetName.trim()}${etaText}`;
+      : settings.display.showPilotNames
+        ? `${displayNameFor(missile.ownerName, missile.ownerSteamId)} → ${missile.targetName.trim()}${etaText}`
+        : `${missile.targetName.trim()}${etaText}`;
     ctx.fillText(lockLabel, tx + 12, ty + 3);
     // Always shown (rare and important), but still claims its space.
     placedLabels.push({ x: tx + 12, y: ty - 6, w: ctx.measureText(lockLabel).width, h: 12 });

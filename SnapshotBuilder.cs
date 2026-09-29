@@ -21,6 +21,7 @@ namespace NOTacMap
 		public bool isMyMissile; // a missile the local player personally launched
 		public bool isFriendlyMissile; // any friendly-faction missile, mine or a teammate's
 		public string ownerName; // isFriendlyMissile only: pilot's real display name, null if AI-flown or unowned
+		public string ownerSteamId; // isFriendlyMissile only: stable key for the client's callsign assignment - GetDisplayName() can change format (e.g. a "[3] " player-index prefix) across a respawn depending on THAT player's own settings, which would otherwise look like a "new" name and get a fresh random callsign
 		public bool hasTarget; // isFriendlyMissile only: it has a live lock
 		public bool targetIsAircraft; // hasTarget only: air-to-air vs air-to-ground, for client-side filtering
 		public float targetX;
@@ -281,6 +282,7 @@ namespace NOTacMap
 						if (snap.isFriendlyMissile && missile.owner is Aircraft ownerAircraft && ownerAircraft.Player != null)
 						{
 							snap.ownerName = ownerAircraft.Player.GetDisplayName(PlayerNameContext.Other);
+							snap.ownerSteamId = ownerAircraft.Player.CSteamID.ToString();
 						}
 						// !target.disabled matters: without it, a missile whose target was
 						// destroyed by someone else while still in flight would keep
