@@ -247,6 +247,7 @@ namespace NOTacMap
 							: unit is GroundVehicle ? "groundvehicle"
 							: unit is Building ? "building"
 							: unit is Ship ? "ship"
+							: unit is PilotDismounted ? "pilot"
 							: "other",
 						faction = FactionString(unit.NetworkHQ),
 						isPlayer = unit is Aircraft occupiedAircraft && occupiedAircraft.Player != null,

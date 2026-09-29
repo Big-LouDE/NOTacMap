@@ -114,6 +114,7 @@
   <div class="row"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="3.5" fill="currentColor" stroke="none"/></svg>Building</div>
   <div class="row"><svg viewBox="0 0 16 16"><polygon points="8,0.5 11,8 8,13.5 5,8" fill="currentColor" stroke="none"/></svg>Missile</div>
   <div class="row"><svg viewBox="0 0 16 16" style="color:#ffb020"><path d="M2,5 L2,2 L5,2"/><path d="M11,2 L14,2 L14,5"/><path d="M14,11 L14,14 L11,14"/><path d="M5,14 L2,14 L2,11"/></svg>Marked target (yours)</div>
+  <div class="row"><svg viewBox="0 0 16 16"><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/></svg>Pilot (ejected, hidden by default)</div>
 </div>
 <div id="gridRef"></div>
 <div id="themeWarning">Live theme not loaded yet - showing fallback palette. Fly a mission, then reload.</div>
@@ -133,6 +134,7 @@
       <label><input type="checkbox" data-group="unitTypes" data-key="ship" checked>Ship</label>
       <label><input type="checkbox" data-group="unitTypes" data-key="vehicle" checked>Vehicle (other)</label>
       <label><input type="checkbox" data-group="unitTypes" data-key="building" checked>Building</label>
+      <label><input type="checkbox" data-group="unitTypes" data-key="pilot">Pilot (ejected)</label>
     </div>
     <div class="group">
       <h4>Weapons</h4>
@@ -234,7 +236,7 @@ if ((urlParams.get('theme') || '') === 'dark') {
 // remember or re-type a URL. The server treats this as an opaque blob -
 // the schema lives entirely here.
 const DEFAULT_SETTINGS = {
-  unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true },
+  unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
   display: { textScale: 1.25 }
 };
@@ -382,12 +384,15 @@ function displayNameFor(ownerName) {
   return nameMode === 'real' ? ownerName : callsignFor(ownerName);
 }
 
-// Human teammates blue, AI/structures on your side green, enemies red,
-// regardless of the game's own theme (which uses blue only for "friendly"
-// without distinguishing player from AI). Fixed, not pulled from
-// ThemeManager, since that distinction doesn't exist in-game.
-const FRIEND_COLOR = '#3fa0ff';
-const NPC_COLOR = '#3fdb5e';
+// Human teammates get a color that actually pops (yellow), AI/structures
+// on your side blue, enemies red - regardless of the game's own theme
+// (which uses blue only for "friendly" without distinguishing player from
+// AI). Fixed, not pulled from ThemeManager, since that distinction doesn't
+// exist in-game. Was blue/green before - with dozens of AI contacts on
+// screen, a human teammate needs to visually pop out of that crowd rather
+// than blend into "yet another friendly-colored icon."
+const FRIEND_COLOR = '#ffe600';
+const NPC_COLOR = '#3fa0ff';
 const ENEMY_COLOR = '#ff3b3b';
 
 function unitColor(u) {
@@ -441,6 +446,7 @@ function classifyUnit(u) {
   if (u.baseType === 'groundvehicle') return 'vehicle';
   if (u.baseType === 'building') return 'building';
   if (u.baseType === 'ship') return 'ship';
+  if (u.baseType === 'pilot') return 'pilot';
   return 'generic';
 }
 
@@ -686,6 +692,16 @@ function drawCircle(ctx, x, y, r) {
 // target selection. Deliberately not the pink lock ring used for an actual
 // weapon in flight (a different, earlier state: "about to engage" vs.
 // "already fired").
+// A downed/ejected pilot - hidden by default (see DEFAULT_SETTINGS), since
+// it's usually just clutter, but a plain X reads as "not an active threat"
+// for the rare times you toggle it on to go find one to rescue.
+function drawXMark(ctx, x, y, r) {
+  ctx.beginPath();
+  ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r);
+  ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r);
+  ctx.stroke();
+}
+
 function drawMarkReticle(ctx, x, y, r) {
   const len = r * 0.6;
   ctx.beginPath();
@@ -791,6 +807,11 @@ function drawUnitIcon(ctx, category, x, y, r, headingDeg) {
     case 'building':
       drawCircle(ctx, 0, 0, r * 0.6);
       ctx.fill();
+      break;
+    case 'pilot':
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = ctx.fillStyle;
+      drawXMark(ctx, 0, 0, r * 0.6);
       break;
     default: // 'plane' and true catch-all 'generic'
       drawChevron(ctx, 0, 0, r, 0);
@@ -931,6 +952,17 @@ function draw() {
   // everything else and don't get immediately covered by other icons.
   const lockTargets = [];
 
+  // Names that will get a lock label drawn on them (below) - computed up
+  // front so the generic-unit pass can skip that unit's own plain name
+  // label and avoid drawing directly on top of it. Only counts locks that
+  // will actually render (respects the weapon filter), so a unit whose
+  // lock got filtered out still gets its normal label.
+  const namesWithLockLabel = new Set(
+    (latest.units || [])
+      .filter(u => u.isFriendlyMissile && u.hasTarget && passesWeaponFilter(u))
+      .map(u => u.targetName)
+  );
+
   sortedUnits.forEach(u => {
     const [sx, sy] = toScreen(u.x, u.z);
 
@@ -997,9 +1029,15 @@ function draw() {
     if (!unitTypeVisible(category)) return;
     ctx.fillStyle = unitColor(u);
     drawUnitIcon(ctx, category, sx, sy, 6, u.heading);
-    ctx.fillStyle = col('--hud-dim');
-    setFont(10);
-    tryDrawLabel(u.name, sx + 8, sy + 3);
+    // Label matches its icon's faction color (not a flat dim theme color)
+    // so a red enemy contact reads as red everywhere, not just its icon.
+    // Skipped entirely if this unit is an active lock target - the lock
+    // label (drawn below, in its own pass) already shows its name right
+    // at the same spot, so drawing both just overlaps into illegible text.
+    if (!namesWithLockLabel.has(u.name)) {
+      setFont(10);
+      tryDrawLabel(u.name, sx + 8, sy + 3);
+    }
   });
 
   // Collapse multiple weapons from the same shooter onto the same target
@@ -1018,7 +1056,22 @@ function draw() {
     if (!groupedLocks.has(key)) groupedLocks.set(key, u);
   });
 
+  // If several different shooters are locked onto the same target, drawing
+  // every one of their lines/labels on the same point is unreadable - keep
+  // only whichever is closest to actually hitting (lowest ETA), the same
+  // "soonest first" urgency already used for the incoming-missile blink.
+  const oneLockPerTarget = new Map();
   groupedLocks.forEach(missile => {
+    const dist = Math.hypot(missile.targetX - missile.x, missile.targetY - missile.y, missile.targetZ - missile.z);
+    const spd = missile.speedKmh;
+    const eta = (spd && spd > 5) ? dist / (spd / 3.6) : Infinity;
+    const existing = oneLockPerTarget.get(missile.targetName);
+    if (!existing || eta < existing.eta) {
+      oneLockPerTarget.set(missile.targetName, { missile, eta });
+    }
+  });
+
+  oneLockPerTarget.forEach(({ missile }) => {
     const [tx, ty] = toScreen(missile.targetX, missile.targetZ);
     const [msx, msy] = toScreen(missile.x, missile.z);
     const mine = missile.isMyMissile;
@@ -1055,7 +1108,7 @@ function draw() {
     setFont(10, true);
     const etaText = etaSeconds !== null ? ` (${etaSeconds.toFixed(0)}s)` : '';
     const lockLabel = mine
-      ? `LOCK: ${missile.targetName.trim()}`
+      ? `LOCK: ${missile.targetName.trim()}${etaText}`
       : `${displayNameFor(missile.ownerName)} → ${missile.targetName.trim()}${etaText}`;
     ctx.fillText(lockLabel, tx + 12, ty + 3);
     // Always shown (rare and important), but still claims its space.
