@@ -16,10 +16,10 @@ A lean, second-screen tactical map for [Nuclear Option](https://store.steampower
 - Runway approach guide lines — a dashed extension past each real runway threshold, for lining up a landing from a distance
 - Ejected/dismounted pilots are hidden by default to cut clutter (togglable in FILTER, for the rescue mechanic)
 - Every fixed map color is customizable — friendly, AI/structures, enemy, missiles, lock indicator, marked target, runway guide, weapon range, and HUD text — with RGB inputs, a live preview swatch, and a reset-to-default button, all in the DISPLAY panel
-- On-screen FILTER and DISPLAY buttons (top-right, below recenter): toggle any unit-type, weapon category, or overlay on/off individually, set the text size (Small/Normal/Large/X-Large), and show/hide teammate pilot names. Saved to a `settings.json` next to the plugin, so it's remembered across game restarts — no URL editing needed
+- On-screen FILTER and DISPLAY buttons (top-right, below recenter): toggle any unit-type, weapon category, or overlay on/off individually, set the text size (Small/Normal/Large/X-Large), show/hide teammate pilot names and switch them between real names and callsigns, and toggle dark mode — no URL parameters for any of it. Saved to a `settings.json` next to the plugin, so it's remembered across game restarts
 - Live-captured background map image, straight from the game's own terrain texture — works for any map automatically, no calibration step
 - Free pan/zoom with a recenter-on-me control
-- Night mode (`?theme=dark`)
+- Dark mode (red-tinted HUD text, preserves night vision) — DISPLAY panel toggle
 
 ## Possible add-ons
 
@@ -41,16 +41,7 @@ To build from source instead:
 
 ## Configuration
 
-Most of this is now on-screen: click **FILTER** to toggle unit-types, weapon categories, and overlays, or **DISPLAY** for text size, pilot names, and every color. Both persist to `settings.json` next to the plugin automatically — nothing to type.
-
-A couple of settings are still URL-only (append to the page address):
-
-| Param | Values | Default | Effect |
-|---|---|---|---|
-| `names` | `real`, `callsign` | `callsign` | Show teammates' real names, or a randomly-assigned callsign |
-| `theme` | `dark` | (unset) | Red-tinted night mode |
-
-`?weapons=` still works too, but only as a one-off override for that page load — it's never saved, so it can't override what you've actually set in the FILTER panel beyond that one load.
+Everything is on-screen — no URL parameters at all. Click **FILTER** to toggle unit-types, weapon categories, and overlays, or **DISPLAY** for text size, pilot names (shown/hidden, real name vs. callsign), dark mode, and every color. Both panels persist to `settings.json` next to the plugin automatically — nothing to type, and nothing that resets when you reopen the page.
 
 ## Credits / third-party components
 

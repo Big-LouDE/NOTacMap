@@ -181,6 +181,8 @@
         </select>
       </label>
       <label><input type="checkbox" data-group="display" data-key="showPilotNames">Show pilot names</label>
+      <label><input type="checkbox" data-group="display" data-key="realNames">Use real names instead of callsigns</label>
+      <label><input type="checkbox" data-group="display" data-key="darkMode">Dark mode (night vision)</label>
     </div>
     <div class="group">
       <h4>Colors</h4>
@@ -338,15 +340,16 @@ document.getElementById('recenterBtn').addEventListener('click', () => {
   viewCenter = null;
 });
 
-// --- URL-param config ---
-// A couple of settings (names, theme) are still URL-only rather than
-// on-screen controls - not worth a button for something you'd set once
-// and rarely change mid-session. e.g.
-// http://localhost:8123/?names=real&theme=dark
-const urlParams = new URLSearchParams(location.search);
-const nameMode = urlParams.get('names') || 'callsign'; // real | callsign
-if ((urlParams.get('theme') || '') === 'dark') {
-  document.documentElement.setAttribute('data-theme', 'dark');
+// Real names/callsigns and dark mode used to be URL-only (?names=,
+// ?theme=) - both are now real settings (display.realNames,
+// display.darkMode) in the DISPLAY panel, persisted the same as everything
+// else, so there's nothing left to configure via the URL at all.
+function applyDarkMode() {
+  if (settings.display.darkMode) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
 }
 
 // --- Persistent filter settings ---
@@ -358,7 +361,7 @@ if ((urlParams.get('theme') || '') === 'dark') {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { textScale: 1.25, showPilotNames: false },
+  display: { textScale: 1.25, showPilotNames: false, realNames: false, darkMode: false },
   overlays: { runwayGuides: true, weaponRange: true },
   // Every fixed (non-theme) color on the map, customizable. hudText is the
   // one exception: {r:-1,g:-1,b:-1} means "keep following the game's own
@@ -385,21 +388,6 @@ function mergeSettings(loaded) {
   if (!loaded) return;
   for (const group of Object.keys(DEFAULT_SETTINGS)) {
     if (loaded[group]) Object.assign(settings[group], loaded[group]);
-  }
-}
-
-// Old ?weapons= URL param kept working as a one-off override for this load
-// only (matches the original "config via URL, no on-page controls" design)
-// - it's never written back to settings.json, so it can't silently clobber
-// whatever you've actually set in the panel.
-function applyLegacyWeaponsParam(wf) {
-  if (!wf || wf === 'all') return;
-  if (wf === 'off' || wf === 'mine') {
-    settings.weapons.air2air = false; settings.weapons.air2ground = false; settings.weapons.unlocked = false;
-  } else if (wf === 'air2air') {
-    settings.weapons.air2air = true; settings.weapons.air2ground = false; settings.weapons.unlocked = false;
-  } else if (wf === 'air2ground') {
-    settings.weapons.air2air = false; settings.weapons.air2ground = true; settings.weapons.unlocked = false;
   }
 }
 
@@ -514,11 +502,11 @@ function saveSettings() {
 
 fetch('/settings').then(r => r.ok ? r.json() : null).catch(() => null).then(loaded => {
   mergeSettings(loaded);
-  applyLegacyWeaponsParam(urlParams.get('weapons'));
   syncFilterCheckboxes();
   syncDisplayControls();
   syncColorControls();
   applyHudTextColor();
+  applyDarkMode();
 });
 
 document.querySelectorAll('.panel input[type=checkbox][data-group]').forEach(cb => {
@@ -527,6 +515,8 @@ document.querySelectorAll('.panel input[type=checkbox][data-group]').forEach(cb 
     saveSettings();
   });
 });
+
+document.querySelector('[data-group="display"][data-key="darkMode"]').addEventListener('change', applyDarkMode);
 
 document.getElementById('textScaleSelect').addEventListener('change', e => {
   settings.display.textScale = parseFloat(e.target.value);
@@ -612,7 +602,7 @@ function callsignFor(stableKey) {
 // server build that hasn't sent ownerSteamId yet, rather than crashing.
 function displayNameFor(ownerName, ownerSteamId) {
   if (!ownerName) return 'AI';
-  return nameMode === 'real' ? ownerName : callsignFor(ownerSteamId || ownerName);
+  return settings.display.realNames ? ownerName : callsignFor(ownerSteamId || ownerName);
 }
 
 // Human teammates, AI/structures, and enemies each get their own
