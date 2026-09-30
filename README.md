@@ -27,12 +27,15 @@ The plugin (`NOTacMap.dll`) runs inside the game process and starts a local HTTP
 
 ## Installation
 
-No packaged release yet — build from source:
+Grab the latest release from the [Releases page](https://github.com/Big-LouDE/NOTacMap/releases) and extract the `NOTacMap` folder into `BepInEx/plugins/` in your Nuclear Option install. Requires BepInEx 5. Launch the game — the map page opens automatically in your default browser (drag it to your second monitor). Turn this off in the BepInEx config (`Server > AutoOpenBrowser`) if you'd rather open `http://localhost:8123/` yourself.
+
+Newer features that aren't in the stable release yet (customizable colors, runway approach guides, a weapon range ring, and more) are available in pre-release test builds on the same Releases page, while they're still being tried out before becoming the default version.
+
+To build from source instead:
 
 1. Requires the .NET 8 SDK and a local copy of Nuclear Option with BepInEx 5 installed.
 2. `dotnet build NOTacMap.csproj -c Release` (pass `-p:GameDir=<path>` if your game isn't at the default path referenced in the `.csproj`).
 3. Copy `NOTacMap.dll`, `Newtonsoft.Json.dll`, and `web/index.html` into `BepInEx/plugins/NOTacMap/` in your game folder.
-4. Launch the game — the map page opens automatically in your default browser (drag it to your second monitor). Turn this off in the BepInEx config (`Server > AutoOpenBrowser`) if you'd rather open `http://localhost:8123/` yourself.
 
 ## Configuration
 
