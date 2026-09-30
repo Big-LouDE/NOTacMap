@@ -8,11 +8,15 @@ A lean, second-screen tactical map for [Nuclear Option](https://store.steampower
 - Live player position, tracked units, airbases, and waypoints
 - Unit-type shapes — planes, helicopters, tanks, APCs, radar, AA/SAM, ships, and buildings each get a distinct icon (with a fallback for anything not yet catalogued), plus an on-screen legend. Classification is name-based against a verified keyword list (vanilla units and installed mods alike — nothing guessed), falling back to a plain C# type check for anything unrecognized
 - Heading rotation where it's actually meaningful: your own plane icon, missiles/bombs in flight, and your own helicopter icon (shown as its real glyph with a small heading tick, not a misleading plane chevron) — ground vehicles and other static/symmetric shapes intentionally don't rotate, since their heading is either invisible at that shape or too noisy to mean anything
-- Friend (blue) / NPC (green) / enemy (red) coloring
+- Faction coloring — human teammates, AI/structures, and enemies each get their own distinct default color, fully customizable (see below)
 - Incoming-missile warnings gated on the same RWR detection the game's own cockpit uses, with real speed and ETA
 - Flight-wide weapon tracking: every friendly missile in flight shows, not just yours, attributed to its pilot (toggle between real names and randomly-assigned callsigns), rendered with its own distinct shape
 - Your own marked target(s) show with a distinct amber reticle before you even fire — separate from the pink lock line a weapon in flight gets
-- On-screen FILTER and DISPLAY buttons (top-right, below recenter): toggle any unit-type or weapon category on/off individually, and set the text size (Small/Normal/Large/X-Large). Saved to a `settings.json` next to the plugin, so it's remembered across game restarts — no URL editing needed
+- Weapon range ring around your own aircraft: a static circle at your selected weapon's baseline max range, narrowing to a live, heading-aligned cone once you mark a target — the cone's angle is the weapon's own real alignment requirement, and its range comes from the same calculation the cockpit HUD itself uses (factoring your speed/altitude and the target's)
+- Runway approach guide lines — a dashed extension past each real runway threshold, for lining up a landing from a distance
+- Ejected/dismounted pilots are hidden by default to cut clutter (togglable in FILTER, for the rescue mechanic)
+- Every fixed map color is customizable — friendly, AI/structures, enemy, missiles, lock indicator, marked target, runway guide, weapon range, and HUD text — with RGB inputs, a live preview swatch, and a reset-to-default button, all in the DISPLAY panel
+- On-screen FILTER and DISPLAY buttons (top-right, below recenter): toggle any unit-type, weapon category, or overlay on/off individually, set the text size (Small/Normal/Large/X-Large), and show/hide teammate pilot names. Saved to a `settings.json` next to the plugin, so it's remembered across game restarts — no URL editing needed
 - Live-captured background map image, straight from the game's own terrain texture — works for any map automatically, no calibration step
 - Free pan/zoom with a recenter-on-me control
 - Night mode (`?theme=dark`)
@@ -27,16 +31,17 @@ The plugin (`NOTacMap.dll`) runs inside the game process and starts a local HTTP
 
 ## Installation
 
-No packaged release yet — build from source:
+Grab the latest release from the [Releases page](https://github.com/Big-LouDE/NOTacMap/releases) and extract the `NOTacMap` folder into `BepInEx/plugins/` in your Nuclear Option install. Requires BepInEx 5. Launch the game — the map page opens automatically in your default browser (drag it to your second monitor). Turn this off in the BepInEx config (`Server > AutoOpenBrowser`) if you'd rather open `http://localhost:8123/` yourself.
+
+To build from source instead:
 
 1. Requires the .NET 8 SDK and a local copy of Nuclear Option with BepInEx 5 installed.
 2. `dotnet build NOTacMap.csproj -c Release` (pass `-p:GameDir=<path>` if your game isn't at the default path referenced in the `.csproj`).
 3. Copy `NOTacMap.dll`, `Newtonsoft.Json.dll`, and `web/index.html` into `BepInEx/plugins/NOTacMap/` in your game folder.
-4. Launch the game — the map page opens automatically in your default browser (drag it to your second monitor). Turn this off in the BepInEx config (`Server > AutoOpenBrowser`) if you'd rather open `http://localhost:8123/` yourself.
 
 ## Configuration
 
-Most of this is now on-screen: click **FILTER** to toggle unit-type/weapon categories, or **DISPLAY** to change text size. Both persist to `settings.json` next to the plugin automatically — nothing to type.
+Most of this is now on-screen: click **FILTER** to toggle unit-types, weapon categories, and overlays, or **DISPLAY** for text size, pilot names, and every color. Both persist to `settings.json` next to the plugin automatically — nothing to type.
 
 A couple of settings are still URL-only (append to the page address):
 

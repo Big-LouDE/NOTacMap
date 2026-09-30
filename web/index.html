@@ -167,6 +167,7 @@
     <div class="group">
       <h4>Overlays</h4>
       <label><input type="checkbox" data-group="overlays" data-key="runwayGuides" checked>Runway approach guides</label>
+      <label><input type="checkbox" data-group="overlays" data-key="weaponRange" checked>Weapon range</label>
     </div>
   </div>
   <div id="displayPanel" class="panel">
@@ -241,6 +242,22 @@
       </div>
       <div class="color-row" data-color-key="runwayGuide">
         <span class="color-label">Runway guide</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="weaponRange">
+        <span class="color-label">Weapon range (static)</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="weaponRangeArmed">
+        <span class="color-label">Weapon range (armed)</span>
         <span class="color-swatch"></span>
         <input type="number" min="0" max="255" class="c-r">
         <input type="number" min="0" max="255" class="c-g">
@@ -342,7 +359,7 @@ const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
   display: { textScale: 1.25, showPilotNames: false },
-  overlays: { runwayGuides: true },
+  overlays: { runwayGuides: true, weaponRange: true },
   // Every fixed (non-theme) color on the map, customizable. hudText is the
   // one exception: {r:-1,g:-1,b:-1} means "keep following the game's own
   // live HUD theme" (the normal default) - anything else means the user
@@ -357,6 +374,8 @@ const DEFAULT_SETTINGS = {
     lock: { r: 255, g: 63, b: 216 },
     mark: { r: 255, g: 176, b: 32 },
     runwayGuide: { r: 120, g: 200, b: 190 },
+    weaponRange: { r: 90, g: 130, b: 150 },
+    weaponRangeArmed: { r: 255, g: 120, b: 0 },
     hudText: { r: -1, g: -1, b: -1 }
   }
 };
@@ -566,7 +585,8 @@ const CALLSIGN_POOL = [
   'Viper', 'Ghost', 'Reaper', 'Falcon', 'Maverick', 'Hawk', 'Widow', 'Raptor',
   'Phantom', 'Cyclone', 'Havoc', 'Juggler', 'Nomad', 'Outlaw', 'Renegade',
   'Saber', 'Talon', 'Vandal', 'Warlock', 'Zephyr', 'Banshee', 'Cobra',
-  'Diesel', 'Echo', 'Fang', 'Grim', 'Hex', 'Jackal', 'Kraken', 'Lynx'
+  'Diesel', 'Echo', 'Fang', 'Grim', 'Hex', 'Jackal', 'Kraken', 'Lynx',
+  'Herr der Krallen' // easter egg - shoutout to a friend of the programmer, drops in the pool same odds as everyone else
 ];
 let availableCallsigns = [...CALLSIGN_POOL];
 // Keyed by ownerSteamId (a real Steam ID, never changes), NOT by the
@@ -916,6 +936,63 @@ function drawMarkReticle(ctx, x, y, r) {
   ctx.moveTo(x + r, y + r - len); ctx.lineTo(x + r, y + r); ctx.lineTo(x + r - len, y + r);
   ctx.moveTo(x - r + len, y + r); ctx.lineTo(x - r, y + r); ctx.lineTo(x - r, y + r - len);
   ctx.stroke();
+}
+
+function formatRangeM(m) {
+  return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : Math.round(m) + 'm';
+}
+
+// The selected weapon's max range around your own aircraft. A full circle
+// with nothing marked (weaponRange.maxRange is just the static
+// TargetRequirements baseline then) - narrows to a cone toward your heading
+// once a target is marked and the server starts sending the live
+// Missile.CalcRange() figure instead, since a shot that has to turn hard
+// off-axis won't reach that same straight-line distance. The cone's half-
+// angle is the weapon's own TargetRequirements.minAlignment - real per-
+// weapon data, not a fixed guess, so different weapons draw different
+// widths on purpose.
+function drawWeaponRangeRing(ctx, x, y, headingDeg, wr) {
+  const radiusPx = wr.maxRange / scale;
+  if (!(radiusPx > 2)) return;
+  const headingRad = (headingDeg || 0) * Math.PI / 180;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(headingRad);
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([5, 5]);
+  if (!wr.armed) {
+    ctx.strokeStyle = rgbaStr(settings.colors.weaponRange, 0.4);
+    ctx.beginPath();
+    ctx.arc(0, 0, radiusPx, 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    const halfArc = Math.max(0, wr.minAlignment || 0) * Math.PI / 180;
+    const start = -Math.PI / 2 - halfArc;
+    const end = -Math.PI / 2 + halfArc;
+    ctx.strokeStyle = rgbStr(settings.colors.weaponRangeArmed);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(radiusPx * Math.cos(start), radiusPx * Math.sin(start));
+    ctx.arc(0, 0, radiusPx, start, end);
+    ctx.lineTo(0, 0);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.restore();
+
+  if (wr.armed) {
+    // Computed in absolute screen space (not the rotated/translated frame
+    // above) since text must never inherit that rotation. Sits just past
+    // the cone's forward tip (heading direction), biased outward along the
+    // same axis, so it defaults to clear of a lock label at the target
+    // itself rather than sitting on top of one.
+    const labelAngle = headingRad - Math.PI / 2;
+    const lx = x + (radiusPx + 14) * Math.cos(labelAngle);
+    const ly = y + (radiusPx + 14) * Math.sin(labelAngle);
+    ctx.fillStyle = rgbStr(settings.colors.weaponRangeArmed);
+    setFont(10);
+    tryDrawLabel(formatRangeM(wr.maxRange), lx, ly);
+  }
 }
 
 // Thin elongated "needle" - deliberately unlike every other glyph here
@@ -1405,6 +1482,11 @@ function draw() {
     // away to look elsewhere. Only correct when the view was forced to
     // always follow you; broke as soon as free panning existed.
     const [sx, sy] = toScreen(latest.player.x, latest.player.z);
+
+    if (settings.overlays.weaponRange && latest.weaponRange) {
+      drawWeaponRangeRing(ctx, sx, sy, latest.player.heading, latest.weaponRange);
+    }
+
     // Matches the real game's MapIcon.HighlightIcon(): the local player's
     // own icon is plain white, distinct from any faction color, rather
     // than reusing "friendly-sel" green (which now collides with NPC green).

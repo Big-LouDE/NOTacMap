@@ -73,6 +73,18 @@ namespace NOTacMap
 		public bool isPrimary; // targetList[0] - what actually fires first
 	}
 
+	internal class WeaponRangeSnapshot
+	{
+		// Your currently selected weapon station (WeaponManager.currentWeaponStation).
+		// maxRange is the static baseline (TargetRequirements.maxRange) until a
+		// target is marked, at which point it's replaced by a live figure from
+		// the weapon's own Missile.CalcRange() - the exact call the cockpit's
+		// own HUD uses, factoring current speed/altitude and the target's.
+		public float maxRange;
+		public float minAlignment; // degrees off nose - TargetRequirements.minAlignment, real per-weapon value
+		public bool armed; // false = static circle, true = live cone toward a marked target
+	}
+
 	internal class PlayerSnapshot
 	{
 		public bool inAircraft;
@@ -99,10 +111,17 @@ namespace NOTacMap
 		public List<AirbaseSnapshot> airbases = new List<AirbaseSnapshot>();
 		public List<WaypointSnapshot> waypoints = new List<WaypointSnapshot>();
 		public List<MarkedTargetSnapshot> markedTargets = new List<MarkedTargetSnapshot>();
+		public WeaponRangeSnapshot weaponRange;
 	}
 
 	internal static class SnapshotBuilder
 	{
+		// Weapon.CalcRange() runs an actual iterative drag/ballistics sim - the
+		// cockpit HUD (HUDMissileState) only calls it once a second and holds
+		// the last result in between, so we do the same instead of recomputing
+		// it every 0.2s snapshot tick for no benefit.
+		private static float lastWeaponRangeCalcTime;
+		private static float lastLiveMaxRange;
 		// One-time data collection for a future plane/heli and tank/APC shape
 		// split: the C# side only has Aircraft and GroundVehicle as base types
 		// (no Helicopter/Tank/APC subclasses, no category field on either),
@@ -197,6 +216,57 @@ namespace NOTacMap
 							name = target.unitName,
 							isPrimary = i == 0
 						});
+					}
+
+					WeaponStation station = playerAircraft.weaponManager.currentWeaponStation;
+					if (station != null && station.WeaponInfo.gun == false && station.WeaponInfo.targetRequirements.maxRange > 0f)
+					{
+						TargetRequirements req = station.WeaponInfo.targetRequirements;
+						var rangeSnap = new WeaponRangeSnapshot
+						{
+							maxRange = req.maxRange,
+							minAlignment = req.minAlignment,
+							armed = false
+						};
+
+						Missile prefabMissile = station.WeaponInfo.weaponPrefab != null
+							? station.WeaponInfo.weaponPrefab.GetComponent<Missile>()
+							: null;
+
+						if (targets.Count > 0 && prefabMissile != null)
+						{
+							if (Time.timeSinceLevelLoad - lastWeaponRangeCalcTime >= 1f)
+							{
+								lastWeaponRangeCalcTime = Time.timeSinceLevelLoad;
+								Unit farTarget = null;
+								GlobalPosition farPos = default;
+								float farDist = 0f;
+								foreach (Unit target in targets)
+								{
+									if (target == null || target.disabled)
+									{
+										continue;
+									}
+									GlobalPosition targetPos = target.GlobalPosition();
+									float dist = FastMath.Distance(targetPos, pos);
+									if (dist > farDist)
+									{
+										farDist = dist;
+										farPos = targetPos;
+										farTarget = target;
+									}
+								}
+								if (farTarget != null)
+								{
+									lastLiveMaxRange = prefabMissile.CalcRange(
+										playerAircraft.speed, pos.y, farPos.y, farDist, farTarget.speed, out _);
+								}
+							}
+							rangeSnap.maxRange = lastLiveMaxRange;
+							rangeSnap.armed = true;
+						}
+
+						snapshot.weaponRange = rangeSnap;
 					}
 				}
 			}
