@@ -31,7 +31,11 @@ The plugin (`NOTacMap.dll`) runs inside the game process and starts a local HTTP
 
 ## Installation
 
-Grab the latest release from the [Releases page](https://github.com/Big-LouDE/NOTacMap/releases) and extract the `NOTacMap` folder into `BepInEx/plugins/` in your Nuclear Option install. Requires BepInEx 5. Launch the game — the map page opens automatically in your default browser (drag it to your second monitor). Turn this off in the BepInEx config (`Server > AutoOpenBrowser`) if you'd rather open `http://localhost:8123/` yourself.
+NOTacMap is listed on [NOMNOM](https://github.com/KopterBuzz/NOMNOM), the community registry that mod managers like [NOMM](https://github.com/Combat787/NuclearOptionModManager) use, so the easiest way to install it is to search for it in the manager and install from there. (NOMNOM is a community project, not affiliated with Shockfront Studios.)
+
+To install by hand instead, grab the latest release from the [Releases page](https://github.com/Big-LouDE/NOTacMap/releases) and extract the `NOTacMap` folder into `BepInEx/plugins/` in your Nuclear Option install. Requires BepInEx 5.
+
+Either way, once the game starts the map page opens automatically in your default browser (drag it to your second monitor). Turn this off in the BepInEx config (`Server > AutoOpenBrowser`) if you'd rather open `http://localhost:8123/` yourself.
 
 To build from source instead:
 
