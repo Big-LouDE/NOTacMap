@@ -4,6 +4,8 @@
     <TargetFramework>net472</TargetFramework>
     <AssemblyName>NOTacMap</AssemblyName>
     <RootNamespace>NOTacMap</RootNamespace>
+    <Version>1.1.0</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <!-- Where the backup game install lives; override with -p:GameDir=... if you move it -->
@@ -40,6 +42,10 @@
     </Reference>
     <Reference Include="UnityEngine.ImageConversionModule">
       <HintPath>$(GameDir)\NuclearOption_Data\Managed\UnityEngine.ImageConversionModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="com.rlabrecque.steamworks.net">
+      <HintPath>$(GameDir)\NuclearOption_Data\Managed\com.rlabrecque.steamworks.net.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>

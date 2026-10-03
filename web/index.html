@@ -81,6 +81,11 @@
     color: var(--hud-green); letter-spacing: 0.05em;
     border-bottom: 1px solid var(--hud-dim); padding-bottom: 2px;
   }
+  .panel summary {
+    font-size: calc(10px * var(--text-scale)); text-transform: uppercase;
+    color: var(--hud-green); letter-spacing: 0.05em; cursor: pointer;
+    border-bottom: 1px solid var(--hud-dim); padding-bottom: 2px; margin-bottom: 4px;
+  }
   .panel .group { margin-bottom: 8px; }
   .panel .group:last-child { margin-bottom: 0; }
   .panel label { display: flex; align-items: center; gap: 6px; padding: 1px 0; cursor: pointer; }
@@ -90,6 +95,28 @@
     background: #000; color: var(--hud-dim); border: 1px solid var(--hud-dim);
     font: calc(10px * var(--text-scale)) "Consolas", monospace; cursor: pointer;
   }
+  .color-row {
+    display: flex; align-items: center; gap: 4px; padding: 2px 0; cursor: default;
+    white-space: nowrap;
+  }
+  .color-label { flex: 1 1 auto; min-width: 90px; }
+  .color-swatch {
+    width: 14px; height: 14px; flex: none; border: 1px solid var(--hud-dim);
+    background: #000;
+  }
+  .color-row input[type=number] {
+    width: 52px; flex: none; background: #000; color: var(--hud-dim);
+    border: 1px solid var(--hud-dim); font: calc(10px * var(--text-scale)) "Consolas", monospace;
+    padding: 1px 2px;
+  }
+  .color-row input[type=number]:disabled { opacity: 0.4; }
+  .color-reset {
+    flex: none; background: transparent; border: 1px solid var(--hud-dim); color: var(--hud-dim);
+    cursor: pointer; font-size: calc(11px * var(--text-scale)); line-height: 1; padding: 1px 4px;
+  }
+  .color-reset:hover { color: var(--hud-green); border-color: var(--hud-green); }
+  .hud-text-custom { flex: none; display: flex; align-items: center; gap: 3px; cursor: pointer; }
+  .hud-text-custom input { cursor: pointer; }
   #legend {
     position: absolute; top: 34px; left: 14px;
     display: flex; flex-direction: column; gap: 3px;
@@ -114,6 +141,7 @@
   <div class="row"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="3.5" fill="currentColor" stroke="none"/></svg>Building</div>
   <div class="row"><svg viewBox="0 0 16 16"><polygon points="8,0.5 11,8 8,13.5 5,8" fill="currentColor" stroke="none"/></svg>Missile</div>
   <div class="row"><svg viewBox="0 0 16 16" style="color:#ffb020"><path d="M2,5 L2,2 L5,2"/><path d="M11,2 L14,2 L14,5"/><path d="M14,11 L14,14 L11,14"/><path d="M5,14 L2,14 L2,11"/></svg>Marked target (yours)</div>
+  <div class="row"><svg viewBox="0 0 16 16"><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/></svg>Pilot (ejected, hidden by default)</div>
 </div>
 <div id="gridRef"></div>
 <div id="themeWarning">Live theme not loaded yet - showing fallback palette. Fly a mission, then reload.</div>
@@ -133,6 +161,7 @@
       <label><input type="checkbox" data-group="unitTypes" data-key="ship" checked>Ship</label>
       <label><input type="checkbox" data-group="unitTypes" data-key="vehicle" checked>Vehicle (other)</label>
       <label><input type="checkbox" data-group="unitTypes" data-key="building" checked>Building</label>
+      <label><input type="checkbox" data-group="unitTypes" data-key="pilot">Pilot (ejected)</label>
     </div>
     <div class="group">
       <h4>Weapons</h4>
@@ -140,6 +169,20 @@
       <label><input type="checkbox" data-group="weapons" data-key="air2ground" checked>Air-to-ground</label>
       <label><input type="checkbox" data-group="weapons" data-key="unlocked" checked>Unlocked / other</label>
     </div>
+    <div class="group">
+      <h4>Overlays</h4>
+      <label><input type="checkbox" data-group="overlays" data-key="runwayGuides" checked>Runway approach guides</label>
+      <label><input type="checkbox" data-group="overlays" data-key="weaponRange" checked>Weapon range</label>
+      <label><input type="checkbox" data-group="overlays" data-key="grid" checked>Grid</label>
+    </div>
+    <details class="group">
+      <summary>Trails</summary>
+      <label><input type="checkbox" data-group="trails" data-key="friendlyAircraft" checked>Friendly aircraft</label>
+      <label><input type="checkbox" data-group="trails" data-key="enemyAircraft" checked>Enemy aircraft</label>
+      <label><input type="checkbox" data-group="trails" data-key="friendlyMissiles" checked>Friendly missiles/bombs</label>
+      <label><input type="checkbox" data-group="trails" data-key="enemyMissiles" checked>Enemy missiles/bombs</label>
+      <label><input type="checkbox" data-group="trails" data-key="other" checked>Ground units and ships</label>
+    </details>
   </div>
   <div id="displayPanel" class="panel">
     <div class="group">
@@ -151,6 +194,102 @@
           <option value="1.5">X-Large</option>
         </select>
       </label>
+      <label><input type="checkbox" data-group="display" data-key="showPilotNames">Show pilot names</label>
+      <label><input type="checkbox" data-group="display" data-key="realNames">Use real names instead of callsigns</label>
+      <label><input type="checkbox" data-group="display" data-key="darkMode">Dark mode (night vision)</label>
+      <label><input type="checkbox" data-group="display" data-key="closeOnGameExit" checked>Close this tab when the game closes</label>
+    </div>
+    <div class="group">
+      <h4>Colors</h4>
+      <div class="color-row" data-color-key="friend">
+        <span class="color-label">Friendly (you)</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="npc">
+        <span class="color-label">AI / structures</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="enemy">
+        <span class="color-label">Enemy</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="myMissile">
+        <span class="color-label">Your missile</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="teammateMissile">
+        <span class="color-label">Teammate missile</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="lock">
+        <span class="color-label">Lock indicator</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="mark">
+        <span class="color-label">Marked target</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="runwayGuide">
+        <span class="color-label">Runway guide</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="weaponRange">
+        <span class="color-label">Weapon range (static)</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="weaponRangeArmed">
+        <span class="color-label">Weapon range (armed)</span>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r">
+        <input type="number" min="0" max="255" class="c-g">
+        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="hudText">
+        <span class="color-label">HUD text</span>
+        <label class="hud-text-custom"><input type="checkbox" id="hudTextCustomToggle">custom</label>
+        <span class="color-swatch"></span>
+        <input type="number" min="0" max="255" class="c-r" disabled>
+        <input type="number" min="0" max="255" class="c-g" disabled>
+        <input type="number" min="0" max="255" class="c-b" disabled>
+        <button type="button" class="color-reset" title="Reset to default (follow live theme)">&#8634;</button>
+      </div>
     </div>
   </div>
 </div>
@@ -175,6 +314,17 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 resize();
+
+// A page can't press F11 for you, and browsers only allow fullscreen from a
+// real click or key press, so it can't happen on its own at startup.
+// Double-clicking the map toggles it (F11 and Esc work as usual too).
+canvas.addEventListener('dblclick', () => {
+  if (document.fullscreenElement) {
+    document.exitFullscreen();
+  } else {
+    document.documentElement.requestFullscreen().catch(() => {});
+  }
+});
 
 let scale = 35; // meters per pixel; wheel to zoom
 canvas.addEventListener('wheel', e => {
@@ -216,15 +366,16 @@ document.getElementById('recenterBtn').addEventListener('click', () => {
   viewCenter = null;
 });
 
-// --- URL-param config ---
-// A couple of settings (names, theme) are still URL-only rather than
-// on-screen controls - not worth a button for something you'd set once
-// and rarely change mid-session. e.g.
-// http://localhost:8123/?names=real&theme=dark
-const urlParams = new URLSearchParams(location.search);
-const nameMode = urlParams.get('names') || 'callsign'; // real | callsign
-if ((urlParams.get('theme') || '') === 'dark') {
-  document.documentElement.setAttribute('data-theme', 'dark');
+// Real names/callsigns and dark mode used to be URL-only (?names=,
+// ?theme=) - both are now real settings (display.realNames,
+// display.darkMode) in the DISPLAY panel, persisted the same as everything
+// else, so there's nothing left to configure via the URL at all.
+function applyDarkMode() {
+  if (settings.display.darkMode) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
 }
 
 // --- Persistent filter settings ---
@@ -234,9 +385,29 @@ if ((urlParams.get('theme') || '') === 'dark') {
 // remember or re-type a URL. The server treats this as an opaque blob -
 // the schema lives entirely here.
 const DEFAULT_SETTINGS = {
-  unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true },
+  unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { textScale: 1.25 }
+  display: { textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true },
+  overlays: { runwayGuides: true, weaponRange: true, grid: true },
+  trails: { friendlyAircraft: true, enemyAircraft: true, friendlyMissiles: true, enemyMissiles: true, other: true },
+  // Every fixed (non-theme) color on the map, customizable. hudText is the
+  // one exception: {r:-1,g:-1,b:-1} means "keep following the game's own
+  // live HUD theme" (the normal default) - anything else means the user
+  // explicitly opted into overriding that. Every other color always uses
+  // its stored value; there's no live-theme relationship to preserve there.
+  colors: {
+    friend: { r: 255, g: 230, b: 0 },
+    npc: { r: 63, g: 160, b: 255 },
+    enemy: { r: 255, g: 59, b: 59 },
+    myMissile: { r: 102, g: 234, b: 255 },
+    teammateMissile: { r: 58, g: 125, b: 140 },
+    lock: { r: 255, g: 63, b: 216 },
+    mark: { r: 255, g: 176, b: 32 },
+    runwayGuide: { r: 120, g: 200, b: 190 },
+    weaponRange: { r: 90, g: 130, b: 150 },
+    weaponRangeArmed: { r: 255, g: 120, b: 0 },
+    hudText: { r: -1, g: -1, b: -1 }
+  }
 };
 const settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
 
@@ -247,23 +418,12 @@ function mergeSettings(loaded) {
   }
 }
 
-// Old ?weapons= URL param kept working as a one-off override for this load
-// only (matches the original "config via URL, no on-page controls" design)
-// - it's never written back to settings.json, so it can't silently clobber
-// whatever you've actually set in the panel.
-function applyLegacyWeaponsParam(wf) {
-  if (!wf || wf === 'all') return;
-  if (wf === 'off' || wf === 'mine') {
-    settings.weapons.air2air = false; settings.weapons.air2ground = false; settings.weapons.unlocked = false;
-  } else if (wf === 'air2air') {
-    settings.weapons.air2air = true; settings.weapons.air2ground = false; settings.weapons.unlocked = false;
-  } else if (wf === 'air2ground') {
-    settings.weapons.air2air = false; settings.weapons.air2ground = true; settings.weapons.unlocked = false;
-  }
-}
-
 function syncFilterCheckboxes() {
-  document.querySelectorAll('#filterPanel input[type=checkbox]').forEach(cb => {
+  // .panel (not just #filterPanel) so this same generic wiring also covers
+  // checkboxes placed in #displayPanel, like "Show pilot names" - one
+  // data-group/data-key pattern for every settings checkbox regardless of
+  // which dropdown it visually lives in.
+  document.querySelectorAll('.panel input[type=checkbox][data-group]').forEach(cb => {
     cb.checked = settings[cb.dataset.group][cb.dataset.key];
   });
 }
@@ -275,11 +435,89 @@ function applyTextScale() {
   document.documentElement.style.setProperty('--text-scale', settings.display.textScale);
 }
 
+function rgbStr(c) { return `rgb(${c.r},${c.g},${c.b})`; }
+function rgbaStr(c, a) { return `rgba(${c.r},${c.g},${c.b},${a})`; }
+
+// hudText is the one color setting with a real default behavior to
+// preserve: out of the box, the HUD text should keep matching the game's
+// own live ThemeManager colors (see the /theme fetch further down), not a
+// fixed value. {r:-1,...} is the sentinel for "haven't opted into a custom
+// one" - only then do we touch the CSS vars the theme fetch also writes to.
+function applyHudTextColor() {
+  const c = settings.colors.hudText;
+  if (c.r < 0) return; // following live theme - leave --hud-green/--hud-dim alone
+  document.documentElement.style.setProperty('--hud-green', rgbStr(c));
+  document.documentElement.style.setProperty('--hud-dim', rgbaStr(c, 0.55));
+}
+
 function syncDisplayControls() {
   const sel = document.getElementById('textScaleSelect');
   if (sel) sel.value = String(settings.display.textScale);
   applyTextScale();
 }
+
+function updateSwatch(row, c) {
+  const swatch = row.querySelector('.color-swatch');
+  // hudText's sentinel (-1) means "following the live theme" - show
+  // whatever --hud-green is currently computed as, not an invalid color.
+  swatch.style.background = c.r < 0
+    ? getComputedStyle(document.documentElement).getPropertyValue('--hud-green').trim() || '#3fdb5e'
+    : rgbStr(c);
+}
+
+function syncColorRow(row) {
+  const key = row.dataset.colorKey;
+  const c = settings.colors[key];
+  const isHudText = key === 'hudText';
+  const custom = !isHudText || c.r >= 0;
+  const [rIn, gIn, bIn] = ['.c-r', '.c-g', '.c-b'].map(sel => row.querySelector(sel));
+  rIn.value = custom ? c.r : '';
+  gIn.value = custom ? c.g : '';
+  bIn.value = custom ? c.b : '';
+  rIn.disabled = gIn.disabled = bIn.disabled = isHudText && !custom;
+  if (isHudText) {
+    row.querySelector('#hudTextCustomToggle').checked = custom;
+  }
+  updateSwatch(row, c);
+}
+
+function syncColorControls() {
+  document.querySelectorAll('.color-row').forEach(syncColorRow);
+}
+
+function applyColorChange(key) {
+  if (key === 'hudText') applyHudTextColor();
+  saveSettings();
+}
+
+document.querySelectorAll('.color-row').forEach(row => {
+  const key = row.dataset.colorKey;
+  const rIn = row.querySelector('.c-r'), gIn = row.querySelector('.c-g'), bIn = row.querySelector('.c-b');
+
+  function commit() {
+    const clamp = v => Math.max(0, Math.min(255, Math.round(Number(v)) || 0));
+    settings.colors[key] = { r: clamp(rIn.value), g: clamp(gIn.value), b: clamp(bIn.value) };
+    updateSwatch(row, settings.colors[key]);
+    applyColorChange(key);
+  }
+  [rIn, gIn, bIn].forEach(input => input.addEventListener('change', commit));
+
+  row.querySelector('.color-reset').addEventListener('click', () => {
+    settings.colors[key] = { ...DEFAULT_SETTINGS.colors[key] };
+    syncColorRow(row);
+    applyColorChange(key);
+  });
+
+  if (key === 'hudText') {
+    row.querySelector('#hudTextCustomToggle').addEventListener('change', e => {
+      settings.colors.hudText = e.target.checked
+        ? { r: 63, g: 219, b: 94 } // starting point when first enabling - matches the CSS fallback green
+        : { r: -1, g: -1, b: -1 };
+      syncColorRow(row);
+      applyColorChange('hudText');
+    });
+  }
+});
 
 function saveSettings() {
   fetch('/settings', {
@@ -289,19 +527,36 @@ function saveSettings() {
   }).catch(() => { /* best-effort - a failed save just means next reload uses the last-saved state */ });
 }
 
+// Bump when a default changes in a way that should reach people who already
+// have a settings.json. A saved file stores every value as if it were an
+// explicit choice, so a changed default would otherwise never show up for them.
+// Version 2: pilot names and real names now default to on.
+const SETTINGS_VERSION = 2;
+
 fetch('/settings').then(r => r.ok ? r.json() : null).catch(() => null).then(loaded => {
   mergeSettings(loaded);
-  applyLegacyWeaponsParam(urlParams.get('weapons'));
+  if (loaded && (loaded.version || 1) < SETTINGS_VERSION) {
+    settings.display.showPilotNames = true;
+    settings.display.realNames = true;
+    settings.version = SETTINGS_VERSION;
+    saveSettings();
+  }
+  settings.version = SETTINGS_VERSION;
   syncFilterCheckboxes();
   syncDisplayControls();
+  syncColorControls();
+  applyHudTextColor();
+  applyDarkMode();
 });
 
-document.querySelectorAll('#filterPanel input[type=checkbox]').forEach(cb => {
+document.querySelectorAll('.panel input[type=checkbox][data-group]').forEach(cb => {
   cb.addEventListener('change', () => {
     settings[cb.dataset.group][cb.dataset.key] = cb.checked;
     saveSettings();
   });
 });
+
+document.querySelector('[data-group="display"][data-key="darkMode"]').addEventListener('change', applyDarkMode);
 
 document.getElementById('textScaleSelect').addEventListener('change', e => {
   settings.display.textScale = parseFloat(e.target.value);
@@ -360,39 +615,44 @@ const CALLSIGN_POOL = [
   'Viper', 'Ghost', 'Reaper', 'Falcon', 'Maverick', 'Hawk', 'Widow', 'Raptor',
   'Phantom', 'Cyclone', 'Havoc', 'Juggler', 'Nomad', 'Outlaw', 'Renegade',
   'Saber', 'Talon', 'Vandal', 'Warlock', 'Zephyr', 'Banshee', 'Cobra',
-  'Diesel', 'Echo', 'Fang', 'Grim', 'Hex', 'Jackal', 'Kraken', 'Lynx'
+  'Diesel', 'Echo', 'Fang', 'Grim', 'Hex', 'Jackal', 'Kraken', 'Lynx',
+  'Herr der Krallen' // easter egg - shoutout to a friend of the programmer, drops in the pool same odds as everyone else
 ];
 let availableCallsigns = [...CALLSIGN_POOL];
-const callsignByRealName = new Map();
+// Keyed by ownerSteamId (a real Steam ID, never changes), NOT by the
+// display-name string - GetDisplayName() can change format (e.g. gains or
+// loses a "[3] " player-index prefix) across a respawn depending on that
+// player's own settings, and keying on the name string made a respawn
+// look like "a new player" and hand out a fresh random callsign each time.
+const callsignByStableKey = new Map();
 
-function callsignFor(realName) {
-  if (callsignByRealName.has(realName)) return callsignByRealName.get(realName);
+function callsignFor(stableKey) {
+  if (callsignByStableKey.has(stableKey)) return callsignByStableKey.get(stableKey);
   if (availableCallsigns.length === 0) {
     availableCallsigns = [...CALLSIGN_POOL]; // pool exhausted - rare; just recycle
   }
   const idx = Math.floor(Math.random() * availableCallsigns.length);
   const callsign = availableCallsigns.splice(idx, 1)[0];
-  callsignByRealName.set(realName, callsign);
+  callsignByStableKey.set(stableKey, callsign);
   return callsign;
 }
 
-// null ownerName means AI-flown - callers show an "AI" tag instead of a name.
-function displayNameFor(ownerName) {
+// null ownerName means AI-flown - callers show an "AI" tag instead of a
+// name. Falls back to ownerName itself as the callsign key on an older
+// server build that hasn't sent ownerSteamId yet, rather than crashing.
+function displayNameFor(ownerName, ownerSteamId) {
   if (!ownerName) return 'AI';
-  return nameMode === 'real' ? ownerName : callsignFor(ownerName);
+  return settings.display.realNames ? ownerName : callsignFor(ownerSteamId || ownerName);
 }
 
-// Human teammates blue, AI/structures on your side green, enemies red,
-// regardless of the game's own theme (which uses blue only for "friendly"
-// without distinguishing player from AI). Fixed, not pulled from
-// ThemeManager, since that distinction doesn't exist in-game.
-const FRIEND_COLOR = '#3fa0ff';
-const NPC_COLOR = '#3fdb5e';
-const ENEMY_COLOR = '#ff3b3b';
+// Human teammates, AI/structures, and enemies each get their own
+// customizable color (Display > Colors), regardless of the game's own
+// theme (which uses blue only for "friendly" without distinguishing player
+// from AI) - that distinction doesn't exist in-game, only here.
 
 function unitColor(u) {
-  if (u.faction === 'enemy') return ENEMY_COLOR;
-  if (u.faction === 'friendly') return u.isPlayer ? FRIEND_COLOR : NPC_COLOR;
+  if (u.faction === 'enemy') return rgbStr(settings.colors.enemy);
+  if (u.faction === 'friendly') return u.isPlayer ? rgbStr(settings.colors.friend) : rgbStr(settings.colors.npc);
   return col('--neutral');
 }
 
@@ -441,6 +701,7 @@ function classifyUnit(u) {
   if (u.baseType === 'groundvehicle') return 'vehicle';
   if (u.baseType === 'building') return 'building';
   if (u.baseType === 'ship') return 'ship';
+  if (u.baseType === 'pilot') return 'pilot';
   return 'generic';
 }
 
@@ -549,12 +810,162 @@ function pixelToWorld(px, py) {
 }
 
 let latest = null;
-const MY_MISSILE_COLOR = '#66eaff';
-const TEAMMATE_MISSILE_COLOR = '#3a7d8c'; // dimmer than mine - keeps the "whose weapon is this" hierarchy readable at a glance
-const LOCK_COLOR = '#ff3fd8'; // pink/purple highlight for a missile's target
-const LOCK_COLOR_DIM = 'rgba(255,63,216,0.5)'; // teammates' locks: same hue, dimmer
-const MARK_COLOR = '#ffb020'; // amber - "about to engage", distinct from the pink fired-weapon lock
-const MARK_COLOR_DIM = 'rgba(255,176,32,0.55)'; // secondary marks (targetList[1+] in a salvo), dimmer than the primary
+// All customizable (Display > Colors); teammate/secondary variants derive
+// their dimmer look from the same base color rather than being separately
+// customizable, keeping the settings list from ballooning.
+function myMissileColor() { return rgbStr(settings.colors.myMissile); }
+function teammateMissileColor() { return rgbStr(settings.colors.teammateMissile); }
+function lockColorFor(mine) { return mine ? rgbStr(settings.colors.lock) : rgbaStr(settings.colors.lock, 0.5); }
+function markColorFor(isPrimary) { return isPrimary ? rgbStr(settings.colors.mark) : rgbaStr(settings.colors.mark, 0.55); }
+
+// Unit trails: positions are recorded client-side from each snapshot, using
+// the server's own timestamp (snapshot.t) rather than arrival time, since
+// this tab is usually in the background and gets its events bunched up.
+// A point is only added once a unit has moved far enough, so parked units
+// never build up a trail. Missiles are fast and short-lived, so they get a
+// shorter trail sampled more finely.
+const trails = new Map(); // unit id -> { pts: [{x, z, t}], missile }
+const TRAIL_SECONDS = 30;
+const MISSILE_TRAIL_SECONDS = 10;
+const TRAIL_MIN_DIST = 25;
+const MISSILE_TRAIL_MIN_DIST = 10;
+
+function updateTrails(snap) {
+  const now = snap.t;
+  const seen = new Set();
+  for (const u of snap.units || []) {
+    seen.add(u.id);
+    const missile = !!(u.isMissile || u.isFriendlyMissile || u.isIncomingMissile);
+    let tr = trails.get(u.id);
+    if (!tr) {
+      tr = { pts: [], missile };
+      trails.set(u.id, tr);
+    }
+    const last = tr.pts[tr.pts.length - 1];
+    const minDist = missile ? MISSILE_TRAIL_MIN_DIST : TRAIL_MIN_DIST;
+    if (!last || Math.hypot(u.x - last.x, u.z - last.z) >= minDist) {
+      tr.pts.push({ x: u.x, z: u.z, t: now });
+    }
+    const keep = missile ? MISSILE_TRAIL_SECONDS : TRAIL_SECONDS;
+    while (tr.pts.length && now - tr.pts[0].t > keep) tr.pts.shift();
+  }
+  for (const [id, tr] of trails) {
+    if (!seen.has(id)) trails.delete(id);
+  }
+}
+
+// When the tracker drops a marked target, the server only reports "lost"
+// (id, no position). The page remembers the last position it was tracked
+// at and shows it as a fading dashed reticle labeled LOST - the last place
+// the game itself showed it, not where it is now. Unmarking a target
+// removes it from the list entirely, which clears this.
+const markedMemory = new Map(); // id -> { x, z, name, lostAt, foundWall }
+const LOST_GHOST_SECONDS = 20;
+const FOUND_ANIM_SECONDS = 0.9; // lock-on snap when a lost target is picked back up
+const FOUND_SPIN_SECONDS = 0.45; // spin-and-shrink part; the rest is the flash
+
+function updateMarked(snap) {
+  const present = new Set();
+  for (const mt of snap.markedTargets || []) {
+    present.add(mt.id);
+    const m = markedMemory.get(mt.id);
+    if (mt.name != null) {
+      // Has a position: either tracked right now, or lost but with the
+      // tracker's stale last-known spot (lostFor = seconds since it was last
+      // spotted, so the age is right even if the page was opened after).
+      const lostAt = mt.lost ? (m && m.lostAt !== null ? m.lostAt : snap.t - (mt.lostFor || 0)) : null;
+      const reacquired = !mt.lost && !!m && m.lostAt !== null;
+      markedMemory.set(mt.id, {
+        x: mt.x, z: mt.z, name: mt.name, lostAt,
+        // Wall clock, not snapshot time - the animation has to keep moving
+        // smoothly between snapshots, which only arrive a few times a second.
+        foundWall: reacquired ? performance.now() : (m ? m.foundWall : null)
+      });
+    } else if (m && m.lostAt === null) {
+      // Tracker has nothing at all anymore: keep the last position we had.
+      m.lostAt = snap.t;
+    }
+  }
+  for (const id of markedMemory.keys()) {
+    if (!present.has(id)) markedMemory.delete(id);
+  }
+}
+
+// Lost-lock cue for your own missiles against aircraft. A seeker that loses
+// its target (flares, notching, jamming) clears the missile's target itself,
+// so "had a lock, now doesn't, and it's not a kill" means the lock was lost.
+// First a searching ring at the target's last spot, then the line from the
+// missile snaps and fades. Locking the same target with another missile of
+// yours cancels the whole thing.
+const myLockMemory = new Map(); // missile id -> { shooter, mine, owner..., targetId, targetName, x, z, aircraft }
+const lockLosses = new Map(); // missile id -> { ...lock, startWall }
+const NOLOCK_RING_SECONDS = 4;
+const NOLOCK_TETHER_SECONDS = 3;
+
+// Works for human teammates too. A lost lock is cancelled by another missile
+// from the same shooter locking that target. AI-flown missiles have no
+// shooter identity and are skipped.
+function lockShooter(u) {
+  return u.isMyMissile ? 'me' : (u.ownerSteamId || u.ownerName || null);
+}
+
+function updateLockLoss(snap) {
+  const present = new Set();
+  const lockedNow = new Map(); // shooter -> Set of target ids they currently have a lock on
+  for (const u of snap.units || []) {
+    if (!u.isFriendlyMissile) continue;
+    const shooter = lockShooter(u);
+    if (!shooter) continue;
+    present.add(u.id);
+    if (u.hasTarget) {
+      if (!lockedNow.has(shooter)) lockedNow.set(shooter, new Set());
+      lockedNow.get(shooter).add(u.targetId);
+      myLockMemory.set(u.id, {
+        shooter, mine: !!u.isMyMissile, ownerName: u.ownerName, ownerSteamId: u.ownerSteamId,
+        targetId: u.targetId, targetName: u.targetName, x: u.targetX, z: u.targetZ, aircraft: u.targetIsAircraft
+      });
+    } else {
+      const prev = myLockMemory.get(u.id);
+      if (prev && prev.aircraft && !u.targetDestroyed && !lockLosses.has(u.id)) {
+        lockLosses.set(u.id, { ...prev, startWall: performance.now() });
+      }
+      myLockMemory.delete(u.id);
+    }
+  }
+  for (const id of [...myLockMemory.keys()]) {
+    if (!present.has(id)) myLockMemory.delete(id);
+  }
+  for (const [id, l] of lockLosses) {
+    const set = lockedNow.get(l.shooter);
+    if (set && set.has(l.targetId)) lockLosses.delete(id);
+  }
+}
+
+// Oldest third faintest, newest third brightest - three strokes per unit
+// instead of one per segment, which matters with a few hundred units.
+function drawTrail(pts, headX, headZ, color, toScreen) {
+  const n = pts.length;
+  if (n === 0) return;
+  const alphas = [0.15, 0.3, 0.55];
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  const at = k => (k < n ? toScreen(pts[k].x, pts[k].z) : toScreen(headX, headZ));
+  for (let b = 0; b < 3; b++) {
+    const s = Math.floor(n * b / 3);
+    const e = Math.floor(n * (b + 1) / 3) - 1;
+    if (e < s) continue;
+    ctx.globalAlpha = alphas[b];
+    ctx.beginPath();
+    const [x0, y0] = at(s);
+    ctx.moveTo(x0, y0);
+    for (let k = s + 1; k <= e + 1; k++) {
+      const [x, y] = at(k);
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
 
 function drawBackground(origin) {
   if (!mapInfo || !bgReady || !bgCanvas) return;
@@ -686,6 +1097,16 @@ function drawCircle(ctx, x, y, r) {
 // target selection. Deliberately not the pink lock ring used for an actual
 // weapon in flight (a different, earlier state: "about to engage" vs.
 // "already fired").
+// A downed/ejected pilot - hidden by default (see DEFAULT_SETTINGS), since
+// it's usually just clutter, but a plain X reads as "not an active threat"
+// for the rare times you toggle it on to go find one to rescue.
+function drawXMark(ctx, x, y, r) {
+  ctx.beginPath();
+  ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r);
+  ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r);
+  ctx.stroke();
+}
+
 function drawMarkReticle(ctx, x, y, r) {
   const len = r * 0.6;
   ctx.beginPath();
@@ -694,6 +1115,63 @@ function drawMarkReticle(ctx, x, y, r) {
   ctx.moveTo(x + r, y + r - len); ctx.lineTo(x + r, y + r); ctx.lineTo(x + r - len, y + r);
   ctx.moveTo(x - r + len, y + r); ctx.lineTo(x - r, y + r); ctx.lineTo(x - r, y + r - len);
   ctx.stroke();
+}
+
+function formatRangeM(m) {
+  return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : Math.round(m) + 'm';
+}
+
+// The selected weapon's max range around your own aircraft. A full circle
+// with nothing marked (weaponRange.maxRange is just the static
+// TargetRequirements baseline then) - narrows to a cone toward your heading
+// once a target is marked and the server starts sending the live
+// Missile.CalcRange() figure instead, since a shot that has to turn hard
+// off-axis won't reach that same straight-line distance. The cone's half-
+// angle is the weapon's own TargetRequirements.minAlignment - real per-
+// weapon data, not a fixed guess, so different weapons draw different
+// widths on purpose.
+function drawWeaponRangeRing(ctx, x, y, headingDeg, wr) {
+  const radiusPx = wr.maxRange / scale;
+  if (!(radiusPx > 2)) return;
+  const headingRad = (headingDeg || 0) * Math.PI / 180;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(headingRad);
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([5, 5]);
+  if (!wr.armed) {
+    ctx.strokeStyle = rgbaStr(settings.colors.weaponRange, 0.4);
+    ctx.beginPath();
+    ctx.arc(0, 0, radiusPx, 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    const halfArc = Math.max(0, wr.minAlignment || 0) * Math.PI / 180;
+    const start = -Math.PI / 2 - halfArc;
+    const end = -Math.PI / 2 + halfArc;
+    ctx.strokeStyle = rgbStr(settings.colors.weaponRangeArmed);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(radiusPx * Math.cos(start), radiusPx * Math.sin(start));
+    ctx.arc(0, 0, radiusPx, start, end);
+    ctx.lineTo(0, 0);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.restore();
+
+  if (wr.armed) {
+    // Computed in absolute screen space (not the rotated/translated frame
+    // above) since text must never inherit that rotation. Sits just past
+    // the cone's forward tip (heading direction), biased outward along the
+    // same axis, so it defaults to clear of a lock label at the target
+    // itself rather than sitting on top of one.
+    const labelAngle = headingRad - Math.PI / 2;
+    const lx = x + (radiusPx + 14) * Math.cos(labelAngle);
+    const ly = y + (radiusPx + 14) * Math.sin(labelAngle);
+    ctx.fillStyle = rgbStr(settings.colors.weaponRangeArmed);
+    setFont(10);
+    tryDrawLabel(formatRangeM(wr.maxRange), lx, ly);
+  }
 }
 
 // Thin elongated "needle" - deliberately unlike every other glyph here
@@ -792,6 +1270,11 @@ function drawUnitIcon(ctx, category, x, y, r, headingDeg) {
       drawCircle(ctx, 0, 0, r * 0.6);
       ctx.fill();
       break;
+    case 'pilot':
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = ctx.fillStyle;
+      drawXMark(ctx, 0, 0, r * 0.6);
+      break;
     default: // 'plane' and true catch-all 'generic'
       drawChevron(ctx, 0, 0, r, 0);
       ctx.fill();
@@ -819,6 +1302,99 @@ function tryDrawLabel(text, x, y) {
   placedLabels.push(box);
   ctx.fillText(text, x, y);
   return true;
+}
+
+// For boxes that must never be hidden (an incoming-missile warning - every
+// live threat has to stay visible, dropping one would be actively
+// dangerous): finds the nearest clear vertical slot instead of declining.
+// The icon itself stays at its real position; only this text box moves, so
+// several missiles converging from the same direction stack into a
+// readable list instead of piling into one illegible block.
+// Which lock gets drawn in full, which wait in the queue, and which missiles
+// should go without a text label. One place decides it so the missile icons
+// and the lock drawing always agree.
+//  1. Several missiles from the same shooter on the same target collapse to one.
+//  2. If different shooters lock the same target, only the soonest to hit stays.
+//  3. Per shooter (each pilot; all AI together), the lock closest to impact is
+//     "first" and gets the full line and label. Its missile is the only one of
+//     that shooter's locked missiles that keeps a text label.
+function buildLockPlan(units) {
+  const lockTargets = units.filter(u => u.isFriendlyMissile && u.hasTarget && passesWeaponFilter(u));
+
+  const groupedLocks = new Map();
+  lockTargets.forEach(u => {
+    // AI-flown missiles have no distinguishing name (ownerName is null for
+    // all of them), so a shared literal here would merge every AI missile at
+    // the same target into one entry. The missile's own id keeps an AI
+    // missile from grouping with another AI's.
+    const shooterKey = u.isMyMissile ? 'me' : (u.ownerName || ('ai-' + u.id));
+    const key = shooterKey + '|' + u.targetName;
+    if (!groupedLocks.has(key)) groupedLocks.set(key, u);
+  });
+
+  const oneLockPerTarget = new Map();
+  groupedLocks.forEach(missile => {
+    const dist = Math.hypot(missile.targetX - missile.x, missile.targetY - missile.y, missile.targetZ - missile.z);
+    const spd = missile.speedKmh;
+    const eta = (spd && spd > 5) ? dist / (spd / 3.6) : Infinity;
+    const existing = oneLockPerTarget.get(missile.targetName);
+    if (!existing || eta < existing.eta) {
+      oneLockPerTarget.set(missile.targetName, { missile, eta });
+    }
+  });
+
+  const lockGroup = m => (m.isMyMissile ? 'me' : (m.ownerSteamId || m.ownerName || 'ai'));
+  const lockGroups = new Map(); // shooter -> { first, count }
+  oneLockPerTarget.forEach(entry => {
+    const key = lockGroup(entry.missile);
+    const g = lockGroups.get(key);
+    if (!g) {
+      lockGroups.set(key, { first: entry, count: 1 });
+    } else {
+      g.count++;
+      if (entry.eta < g.first.eta) g.first = entry;
+    }
+  });
+
+  const labeledMissileIds = new Set();
+  lockGroups.forEach(g => labeledMissileIds.add(g.first.missile.id));
+  const unlabeledMissileIds = new Set();
+  lockTargets.forEach(u => {
+    if (!labeledMissileIds.has(u.id)) unlabeledMissileIds.add(u.id);
+  });
+
+  return { oneLockPerTarget, lockGroups, lockGroup, unlabeledMissileIds };
+}
+
+// Same idea for lock labels, but tries both directions around the preferred
+// spot (0, up one slot, down one slot, up two...) so a label lands close to
+// its target instead of drifting far below it.
+function findClearLabelY(x, y, w, h) {
+  const step = h + 2;
+  const offsets = [0];
+  for (let i = 1; i <= 8; i++) offsets.push(-i * step, i * step);
+  for (const dy of offsets) {
+    const box = { x, y: y + dy, w, h };
+    const collides = placedLabels.some(other =>
+      box.x < other.x + other.w && box.x + box.w > other.x &&
+      box.y < other.y + other.h && box.y + box.h > other.y
+    );
+    if (!collides) return y + dy;
+  }
+  return y;
+}
+
+function findClearBoxY(x, y, w, h) {
+  for (let guard = 0; guard < 20; guard++) {
+    const box = { x, y, w, h };
+    const collides = placedLabels.some(other =>
+      box.x < other.x + other.w && box.x + box.w > other.x &&
+      box.y < other.y + other.h && box.y + box.h > other.y
+    );
+    if (!collides) return y;
+    y += h + 2;
+  }
+  return y;
 }
 
 // Capped well below the display's native refresh rate: the underlying game
@@ -880,7 +1456,7 @@ function draw() {
   }
 
   drawBackground(origin);
-  drawGrid(cx - origin.x / scale, cy + origin.z / scale);
+  if (settings.overlays.grid) drawGrid(cx - origin.x / scale, cy + origin.z / scale);
 
   // Grid ref always reflects your actual position, not wherever you've
   // panned the view to look at - it answers "where am I", not "what's on
@@ -914,6 +1490,33 @@ function draw() {
   const sortedAirbases = [...(latest.airbases || [])].sort((a, b) => labelSortKey(a) - labelSortKey(b));
   const sortedUnits = [...(latest.units || [])].sort((a, b) => labelSortKey(a) - labelSortKey(b));
 
+  // Extended runway centerlines - real threshold positions (Runway.Start/
+  // End from the game's own Airbase data, not a guessed heading), extended
+  // 5km past each end so they're visible as a line-up reference well
+  // before you're actually on final. Drawn under the airbase icon/label so
+  // the line never draws over the more important text.
+  if (settings.overlays.runwayGuides) {
+    const GUIDE_EXTEND = 5000;
+    sortedAirbases.forEach(ab => {
+      (ab.runways || []).forEach(rw => {
+        const dx = rw.endX - rw.startX, dz = rw.endZ - rw.startZ;
+        const len = Math.hypot(dx, dz);
+        if (len < 1) return;
+        const ux = dx / len, uz = dz / len;
+        const [x0, y0] = toScreen(rw.startX - ux * GUIDE_EXTEND, rw.startZ - uz * GUIDE_EXTEND);
+        const [x1, y1] = toScreen(rw.endX + ux * GUIDE_EXTEND, rw.endZ + uz * GUIDE_EXTEND);
+        ctx.strokeStyle = rgbStr(settings.colors.runwayGuide);
+        ctx.lineWidth = 1;
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      });
+    });
+  }
+
   sortedAirbases.forEach(ab => {
     const [sx, sy] = toScreen(ab.x, ab.z);
     ctx.strokeStyle = factionColor[ab.faction] ? factionColor[ab.faction]() : col('--neutral');
@@ -929,7 +1532,50 @@ function draw() {
 
   // Target-lock markers drawn in a separate pass so they sit on top of
   // everything else and don't get immediately covered by other icons.
-  const lockTargets = [];
+  const lockPlan = buildLockPlan(latest.units || []);
+
+  // Names that will get a lock label drawn on them (below) - computed up
+  // front so the generic-unit pass can skip that unit's own plain name
+  // label and avoid drawing directly on top of it. Only counts locks that
+  // will actually render (respects the weapon filter), so a unit whose
+  // lock got filtered out still gets its normal label.
+  const namesWithLockLabel = new Set(
+    (latest.units || [])
+      .filter(u => u.isFriendlyMissile && u.hasTarget && passesWeaponFilter(u))
+      .map(u => u.targetName)
+  );
+
+  // Trails go under every icon, and follow the same filters the icons do,
+  // so a hidden unit type or filtered-out weapon doesn't leave a line behind.
+  const tf = settings.trails;
+  if (tf.friendlyAircraft || tf.enemyAircraft || tf.friendlyMissiles || tf.enemyMissiles || tf.other) {
+    sortedUnits.forEach(u => {
+      const tr = trails.get(u.id);
+      if (!tr || tr.pts.length === 0) return;
+      let color;
+      if (u.isFriendlyMissile) {
+        if (!tf.friendlyMissiles || !passesWeaponFilter(u)) return;
+        color = u.isMyMissile ? myMissileColor() : teammateMissileColor();
+      } else if (u.isMissile || u.isIncomingMissile) {
+        if (!tf.enemyMissiles) return;
+        color = u.isIncomingMissile ? '#ff2020' : unitColor(u);
+      } else {
+        if (!unitTypeVisible(classifyUnit(u))) return;
+        const allowed = u.baseType === 'aircraft' && u.faction === 'friendly' ? tf.friendlyAircraft
+          : u.baseType === 'aircraft' && u.faction === 'enemy' ? tf.enemyAircraft
+          : tf.other;
+        if (!allowed) return;
+        color = unitColor(u);
+      }
+      drawTrail(tr.pts, u.x, u.z, color, toScreen);
+    });
+  }
+
+  // The NO LOCK ring label sits where the target's own name would, so hide
+  // the plain one while the ring is showing.
+  lockLosses.forEach(l => {
+    if ((performance.now() - l.startWall) / 1000 < NOLOCK_RING_SECONDS) namesWithLockLabel.add(l.targetName);
+  });
 
   sortedUnits.forEach(u => {
     const [sx, sy] = toScreen(u.x, u.z);
@@ -941,17 +1587,26 @@ function draw() {
       if (!passesWeaponFilter(u)) return;
 
       const mine = u.isMyMissile;
-      // Yours brightest/solid, a teammate's dimmer. Only where it's going
-      // (the lock, drawn below), never where it's been - no flight-path
-      // trail, keeps clutter down.
-      ctx.fillStyle = mine ? MY_MISSILE_COLOR : TEAMMATE_MISSILE_COLOR;
+      // Yours brightest/solid, a teammate's dimmer. Where it's going is the
+      // lock (drawn below); where it's been is the optional trail pass above.
+      ctx.fillStyle = mine ? myMissileColor() : teammateMissileColor();
       drawMissileShape(ctx, sx, sy, mine ? 5 : 4, u.heading);
       ctx.fill();
       setFont(mine ? 10 : 9);
-      ctx.fillStyle = mine ? col('--hud-dim') : TEAMMATE_MISSILE_COLOR;
-      tryDrawLabel(mine ? u.name.trim() : displayNameFor(u.ownerName), sx + 7, sy + 3);
-      if (u.hasTarget) {
-        lockTargets.push(u);
+      ctx.fillStyle = mine ? col('--hud-dim') : teammateMissileColor();
+      // A teammate's label includes the weapon's own designation too, not
+      // just who's flying it - without it, the pilot name/callsign was the
+      // only text there at all, giving nothing else to sanity-check it
+      // against. Pilot name/callsign itself is opt-in (Display > Show pilot
+      // names, on by default) - when off, just the weapon name shows.
+      // With several missiles out, only the one belonging to the full lock
+      // label keeps a text label here; the others stay as bare icons.
+      if (!lockPlan.unlabeledMissileIds.has(u.id)) {
+        tryDrawLabel(
+          mine ? u.name.trim()
+            : settings.display.showPilotNames ? `${displayNameFor(u.ownerName, u.ownerSteamId)} (${u.name.trim()})` : u.name.trim(),
+          sx + 7, sy + 3
+        );
       }
       return;
     }
@@ -980,16 +1635,19 @@ function draw() {
       const label1 = 'MISSILE';
       const label2 = `${spdText}  ETA ${etaText}`;
       const boxW = Math.max(ctx.measureText(label1).width, ctx.measureText(label2).width) + 8;
+      const boxH = 26;
+      // Every incoming missile is a live threat - never hidden, but if two
+      // are close enough that their boxes would overlap, stack this one
+      // below the others instead of drawing on top (the icon stays at its
+      // real position; only the text box moves).
+      const boxY = findClearBoxY(sx + 5, sy - 10, boxW, boxH);
       ctx.fillStyle = 'rgba(40,0,0,0.6)';
-      ctx.fillRect(sx + 5, sy - 10, boxW, 26);
+      ctx.fillRect(sx + 5, boxY, boxW, boxH);
       ctx.fillStyle = '#ffe020';
-      ctx.fillText(label1, sx + 9, sy + 1);
+      ctx.fillText(label1, sx + 9, boxY + 11);
       setFont(10);
-      ctx.fillText(label2, sx + 9, sy + 13);
-      // Always shown regardless of overlap (too important to hide), but
-      // still claims its space so other, less urgent labels yield to it
-      // instead of drawing on top of it.
-      placedLabels.push({ x: sx + 5, y: sy - 10, w: boxW, h: 26 });
+      ctx.fillText(label2, sx + 9, boxY + 23);
+      placedLabels.push({ x: sx + 5, y: boxY, w: boxW, h: boxH });
       return;
     }
 
@@ -997,36 +1655,61 @@ function draw() {
     if (!unitTypeVisible(category)) return;
     ctx.fillStyle = unitColor(u);
     drawUnitIcon(ctx, category, sx, sy, 6, u.heading);
-    ctx.fillStyle = col('--hud-dim');
-    setFont(10);
-    tryDrawLabel(u.name, sx + 8, sy + 3);
+    // Label matches its icon's faction color (not a flat dim theme color)
+    // so a red enemy contact reads as red everywhere, not just its icon.
+    // Skipped entirely if this unit is an active lock target - the lock
+    // label (drawn below, in its own pass) already shows its name right
+    // at the same spot, so drawing both just overlaps into illegible text.
+    if (!namesWithLockLabel.has(u.name)) {
+      setFont(10);
+      tryDrawLabel(u.name, sx + 8, sy + 3);
+    }
   });
 
-  // Collapse multiple weapons from the same shooter onto the same target
-  // into one lock line/label - two of a teammate's missiles converging on
-  // one SAM site shouldn't draw two overlapping lines.
-  const groupedLocks = new Map();
-  lockTargets.forEach(u => {
-    // AI-flown missiles have no distinguishing name (ownerName is null for
-    // all of them), so falling back to a shared literal 'ai' here would
-    // merge every AI missile at the same target into one entry - two
-    // different bots locking the same target would wrongly look like one.
-    // Falling back to the missile's own unique id instead means an AI
-    // missile only ever groups with itself, never with another AI's.
-    const shooterKey = u.isMyMissile ? 'me' : (u.ownerName || ('ai-' + u.id));
-    const key = shooterKey + '|' + u.targetName;
-    if (!groupedLocks.has(key)) groupedLocks.set(key, u);
+  // Which locks show in full and which wait as small rings (a "+N" on the
+  // first one's label) is decided in buildLockPlan, so the missile icons
+  // above and this pass always agree.
+  const { oneLockPerTarget, lockGroups, lockGroup } = lockPlan;
+
+  // Every lock target reserves the space of its own icon first, so a label
+  // never gets drawn across a neighbouring target in a tight formation.
+  oneLockPerTarget.forEach(({ missile }) => {
+    const [rx, ry] = toScreen(missile.targetX, missile.targetZ);
+    placedLabels.push({ x: rx - 9, y: ry - 9, w: 18, h: 18 });
   });
 
-  groupedLocks.forEach(missile => {
+  // Queued ones first, then the full labels with the most urgent (lowest
+  // ETA) picking its spot before the rest.
+  const lockOrder = [...oneLockPerTarget.values()].sort((a, b) => {
+    const af = a === lockGroups.get(lockGroup(a.missile)).first ? 1 : 0;
+    const bf = b === lockGroups.get(lockGroup(b.missile)).first ? 1 : 0;
+    return af !== bf ? af - bf : a.eta - b.eta;
+  });
+
+  lockOrder.forEach(entry => {
+    const missile = entry.missile;
     const [tx, ty] = toScreen(missile.targetX, missile.targetZ);
     const [msx, msy] = toScreen(missile.x, missile.z);
     const mine = missile.isMyMissile;
+    const group = lockGroups.get(lockGroup(missile));
+    if (entry !== group.first) {
+      ctx.strokeStyle = lockColorFor(false);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(tx, ty, 9, 0, Math.PI * 2);
+      ctx.stroke();
+      // The target's own name label is suppressed while it's a lock target
+      // (see namesWithLockLabel), so a queued one gets a small name here.
+      ctx.fillStyle = lockColorFor(false);
+      setFont(9);
+      tryDrawLabel(missile.targetName.trim(), tx + 9, ty + 3);
+      return;
+    }
     // Same pink/purple hue for every lock (it's about the target being at
     // risk, not whose weapon it is); only mine vs. a teammate's varies in
     // brightness/dash, matching the same visual-hierarchy language as the
     // missile icons themselves.
-    const lockColor = mine ? LOCK_COLOR : LOCK_COLOR_DIM;
+    const lockColor = lockColorFor(mine);
 
     ctx.strokeStyle = lockColor;
     ctx.lineWidth = mine ? 1.5 : 1;
@@ -1046,7 +1729,7 @@ function draw() {
     // decoration" reasoning as the incoming-missile blink above.
     const pulse = 8 + Math.sin(performance.now() / 1000 * (urgent ? 10 : 6)) * (urgent ? 3 : 2);
     ctx.strokeStyle = lockColor;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
     ctx.arc(tx, ty, pulse, 0, Math.PI * 2);
     ctx.stroke();
@@ -1054,13 +1737,85 @@ function draw() {
     ctx.fillStyle = lockColor;
     setFont(10, true);
     const etaText = etaSeconds !== null ? ` (${etaSeconds.toFixed(0)}s)` : '';
+    const queuedText = group.count > 1 ? ` +${group.count - 1}` : '';
     const lockLabel = mine
-      ? `LOCK: ${missile.targetName.trim()}`
-      : `${displayNameFor(missile.ownerName)} → ${missile.targetName.trim()}${etaText}`;
-    ctx.fillText(lockLabel, tx + 12, ty + 3);
-    // Always shown (rare and important), but still claims its space.
-    placedLabels.push({ x: tx + 12, y: ty - 6, w: ctx.measureText(lockLabel).width, h: 12 });
+      ? `LOCK: ${missile.targetName.trim()}${etaText}${queuedText}`
+      : settings.display.showPilotNames
+        ? `${displayNameFor(missile.ownerName, missile.ownerSteamId)} → ${missile.targetName.trim()}${etaText}${queuedText}`
+        : `${missile.targetName.trim()}${etaText}${queuedText}`;
+    // Always shown (rare and important), but steps up or down to the nearest
+    // free slot instead of landing on another label.
+    const textW = ctx.measureText(lockLabel).width;
+    const boxY = findClearLabelY(tx + 12, ty - 6, textW, 12);
+    if (boxY !== ty - 6) {
+      ctx.strokeStyle = lockColor;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(tx + 9, ty);
+      ctx.lineTo(tx + 12, boxY + 5);
+      ctx.stroke();
+    }
+    ctx.fillText(lockLabel, tx + 12, boxY + 9);
+    placedLabels.push({ x: tx + 12, y: boxY, w: textW, h: 12 });
   });
+
+  if (lockLosses.size > 0) {
+    const nowMs = performance.now();
+    const unitById = new Map((latest.units || []).map(u => [u.id, u]));
+    lockLosses.forEach((l, id) => {
+      const el = (nowMs - l.startWall) / 1000;
+      if (el > NOLOCK_RING_SECONDS + NOLOCK_TETHER_SECONDS) {
+        lockLosses.delete(id);
+        return;
+      }
+      const [tx, ty] = toScreen(l.x, l.z);
+      if (el < NOLOCK_RING_SECONDS) {
+        // Searching ring: slowly turning dashed circle where the lock was.
+        ctx.save();
+        ctx.translate(tx, ty);
+        ctx.rotate(nowMs / 1000 * Math.PI * 0.8);
+        // A teammate's is dimmer, same as their locks and missiles.
+        const ringColor = lockColorFor(l.mine);
+        ctx.strokeStyle = ringColor;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.arc(0, 0, 11 + Math.sin(nowMs / 300) * 1.5, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+        ctx.fillStyle = ringColor;
+        setFont(10, true);
+        const who = !l.mine && settings.display.showPilotNames ? `${displayNameFor(l.ownerName, l.ownerSteamId)}: ` : '';
+        const text = `${who}NO LOCK: ${l.targetName.trim()} (${Math.floor(el)}s)`;
+        ctx.fillText(text, tx + 15, ty + 3);
+        placedLabels.push({ x: tx + 15, y: ty - 6, w: ctx.measureText(text).width, h: 12 });
+      } else {
+        // Tether snaps: the line from the missile to the old lock spot breaks
+        // in the middle, the halves pull apart, and it all fades.
+        const missile = unitById.get(id);
+        if (!missile) return;
+        const p = (el - NOLOCK_RING_SECONDS) / NOLOCK_TETHER_SECONDS;
+        const [mx, my] = toScreen(missile.x, missile.z);
+        const gap = 0.1 + 0.4 * p;
+        const lerp = f => [mx + (tx - mx) * f, my + (ty - my) * f];
+        const [ax, ay] = lerp(0.5 - gap / 2);
+        const [bx, by] = lerp(0.5 + gap / 2);
+        ctx.globalAlpha = Math.max(0, 1 - p);
+        ctx.strokeStyle = 'rgb(170,170,170)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(mx, my); ctx.lineTo(ax, ay);
+        ctx.moveTo(bx, by); ctx.lineTo(tx, ty);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgb(200,200,200)';
+        setFont(10, true);
+        ctx.fillText('LOCK LOST', mx + 9, my - 16);
+        ctx.globalAlpha = 1;
+      }
+    });
+  }
 
   // Your own pre-fire target selection (WeaponManager.GetTargetList()) -
   // local-only by nature, so there's no teammate/AI version of this to
@@ -1069,11 +1824,68 @@ function draw() {
   // skipped if crowded) rather than always-shown like a live weapon lock -
   // this is more transient and lower-stakes than an actual weapon in flight.
   (latest.markedTargets || []).forEach(mt => {
+    if (mt.lost) {
+      const m = markedMemory.get(mt.id);
+      if (!m || m.lostAt === null) return;
+      const age = Math.max(0, latest.t - m.lostAt);
+      const [gx, gy] = toScreen(m.x, m.z);
+      // Fades to a faint floor rather than disappearing: it keeps searching
+      // until the target is picked up again or unmarked.
+      ctx.globalAlpha = Math.max(0.3, 1 - age / LOST_GHOST_SECONDS);
+      ctx.strokeStyle = markColorFor(true);
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([3, 3]);
+      // Slowly turning with a slight breathing size, like it's scanning for
+      // the target.
+      const nowMs = performance.now();
+      ctx.save();
+      ctx.translate(gx, gy);
+      ctx.rotate(nowMs / 1000 * (Math.PI / 3));
+      drawMarkReticle(ctx, 0, 0, 12 + Math.sin(nowMs / 400) * 1.5);
+      ctx.restore();
+      ctx.setLineDash([]);
+      ctx.fillStyle = markColorFor(true);
+      setFont(10, true);
+      const ageText = age < 60 ? `${Math.floor(age)}s` : `${Math.floor(age / 60)}m${String(Math.floor(age % 60)).padStart(2, '0')}s`;
+      tryDrawLabel(`LOST: ${m.name.trim()} (${ageText})`, gx + 14, gy + 3);
+      ctx.globalAlpha = 1;
+      return;
+    }
     const [tx, ty] = toScreen(mt.x, mt.z);
-    const color = mt.isPrimary ? MARK_COLOR : MARK_COLOR_DIM;
+    const color = markColorFor(mt.isPrimary);
     ctx.strokeStyle = color;
     ctx.lineWidth = mt.isPrimary ? 1.5 : 1;
-    drawMarkReticle(ctx, tx, ty, mt.isPrimary ? 12 : 9);
+    let r = mt.isPrimary ? 12 : 9;
+    let angle = 0;
+    let flash = 0;
+    // Picked a lost target back up: the searching square spins fast and
+    // shrinks inward, snaps upright, then a bright flash fades out.
+    const mem = markedMemory.get(mt.id);
+    const sinceFound = mem && mem.foundWall ? (performance.now() - mem.foundWall) / 1000 : Infinity;
+    if (sinceFound < FOUND_ANIM_SECONDS) {
+      const p = Math.min(1, sinceFound / FOUND_SPIN_SECONDS);
+      const ease = 1 - Math.pow(1 - p, 3);
+      r *= 1 + (1 - ease) * 1.2;
+      angle = (1 - ease) * 3 * Math.PI;
+      if (sinceFound > FOUND_SPIN_SECONDS) {
+        flash = 1 - (sinceFound - FOUND_SPIN_SECONDS) / (FOUND_ANIM_SECONDS - FOUND_SPIN_SECONDS);
+      }
+    }
+    ctx.save();
+    ctx.translate(tx, ty);
+    ctx.rotate(angle);
+    drawMarkReticle(ctx, 0, 0, r);
+    ctx.restore();
+    if (flash > 0) {
+      ctx.globalAlpha = flash * 0.25;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(tx - r, ty - r, r * 2, r * 2);
+      ctx.globalAlpha = flash * 0.8;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      drawMarkReticle(ctx, tx, ty, r + 2);
+      ctx.globalAlpha = 1;
+    }
     ctx.fillStyle = color;
     setFont(10, mt.isPrimary);
     tryDrawLabel(mt.isPrimary ? `TGT: ${mt.name.trim()}` : mt.name.trim(), tx + 14, ty + 3);
@@ -1086,6 +1898,11 @@ function draw() {
     // away to look elsewhere. Only correct when the view was forced to
     // always follow you; broke as soon as free panning existed.
     const [sx, sy] = toScreen(latest.player.x, latest.player.z);
+
+    if (settings.overlays.weaponRange && latest.weaponRange) {
+      drawWeaponRangeRing(ctx, sx, sy, latest.player.heading, latest.weaponRange);
+    }
+
     // Matches the real game's MapIcon.HighlightIcon(): the local player's
     // own icon is plain white, distinct from any faction color, rather
     // than reusing "friendly-sel" green (which now collides with NPC green).
@@ -1124,11 +1941,30 @@ function draw() {
 }
 scheduleFrame();
 
+// The page only knows the game is gone once the server stops answering. A
+// brief blip (or the game being busy loading a mission) reconnects within
+// a try or two, so only a few failures in a row, after having been
+// connected at least once, count as "the game closed". window.close() is
+// allowed for a tab opened straight from a link/launcher with nothing else
+// in its history (Chrome/Edge); where the browser refuses, the status line
+// just says so and the page keeps retrying in case the game comes back.
+let everConnected = false;
+let failedAttempts = 0;
+const CLOSE_AFTER_FAILURES = 3;
+
 function connect() {
   const source = new EventSource('/events');
-  source.onopen = () => { status.textContent = 'live'; status.classList.add('live'); };
+  source.onopen = () => {
+    everConnected = true;
+    failedAttempts = 0;
+    status.textContent = 'live';
+    status.classList.add('live');
+  };
   source.onmessage = e => {
     latest = JSON.parse(e.data);
+    updateTrails(latest);
+    updateMarked(latest);
+    updateLockLoss(latest);
     // Speed (player and missiles alike) comes straight from the server now -
     // real Rigidbody.velocity.magnitude, the same value the game's own
     // cockpit HUD reads (see FlightHud.cs's cockpitRB.velocity.magnitude).
@@ -1141,9 +1977,15 @@ function connect() {
 
   };
   source.onerror = () => {
-    status.textContent = 'disconnected, retrying...';
+    failedAttempts++;
     status.classList.remove('live');
     source.close();
+    if (everConnected && failedAttempts >= CLOSE_AFTER_FAILURES && settings.display.closeOnGameExit) {
+      status.textContent = 'game closed, you can close this tab';
+      window.close();
+    } else {
+      status.textContent = 'disconnected, retrying...';
+    }
     setTimeout(connect, 2000);
   };
 }
@@ -1174,6 +2016,7 @@ fetch('/theme').then(r => r.ok ? r.json() : Promise.reject())
       }
       document.documentElement.style.setProperty('--' + k, v);
     }
+    applyHudTextColor(); // re-assert a custom override in case it lost this race
   })
   .catch(() => { document.getElementById('themeWarning').style.display = 'block'; });
 </script>

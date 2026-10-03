@@ -18,15 +18,19 @@ namespace NOTacMap
 		public string faction; // "friendly" | "enemy" | "neutral" | "spectator"
 		public bool isPlayer; // human-piloted aircraft, vs. an AI/structure on the same faction
 		public bool isIncomingMissile; // locked onto the local player's own aircraft right now
+		public bool isMissile; // any missile or bomb, any faction - lets the client tell enemy ones apart for trail filtering
 		public bool isMyMissile; // a missile the local player personally launched
 		public bool isFriendlyMissile; // any friendly-faction missile, mine or a teammate's
 		public string ownerName; // isFriendlyMissile only: pilot's real display name, null if AI-flown or unowned
+		public string ownerSteamId; // isFriendlyMissile only: stable key for the client's callsign assignment - GetDisplayName() can change format (e.g. a "[3] " player-index prefix) across a respawn depending on THAT player's own settings, which would otherwise look like a "new" name and get a fresh random callsign
 		public bool hasTarget; // isFriendlyMissile only: it has a live lock
 		public bool targetIsAircraft; // hasTarget only: air-to-air vs air-to-ground, for client-side filtering
 		public float targetX;
 		public float targetY;
 		public float targetZ;
 		public string targetName;
+		public uint targetId; // hasTarget only: lets the page match locks to a specific target instead of by name
+		public bool targetDestroyed; // missile's target is dead/gone - a kill, not a lost lock
 		public float speedKmh; // real Rigidbody.velocity.magnitude, not a derived estimate
 		public float x;
 		public float y;
@@ -41,6 +45,17 @@ namespace NOTacMap
 		public float x;
 		public float z;
 		public bool hangarsAvailable;
+		public List<RunwaySnapshot> runways = new List<RunwaySnapshot>();
+	}
+
+	internal class RunwaySnapshot
+	{
+		// Real threshold positions (Runway.Start/End), not a guess at heading -
+		// the client draws the extended centerline by projecting past these.
+		public float startX;
+		public float startZ;
+		public float endX;
+		public float endZ;
 	}
 
 	internal class WaypointSnapshot
@@ -54,11 +69,26 @@ namespace NOTacMap
 		// Your own pre-fire target selection (Aircraft.weaponManager.GetTargetList())
 		// - a plain local List<Unit> on WeaponManager, never networked, so this is
 		// only ever your own; there's no way to read a teammate's or an AI's.
+		public uint id; // so the client can remember where each one was last tracked
+		public bool lost; // still in the marked list, but not currently spotted. With a position and name it's the last-known spot (stale); with neither, the tracker has nothing at all
+		public float lostFor; // seconds since it was last spotted, for the stale case
 		public float x;
 		public float y;
 		public float z;
 		public string name;
 		public bool isPrimary; // targetList[0] - what actually fires first
+	}
+
+	internal class WeaponRangeSnapshot
+	{
+		// Your currently selected weapon station (WeaponManager.currentWeaponStation).
+		// maxRange is the static baseline (TargetRequirements.maxRange) until a
+		// target is marked, at which point it's replaced by a live figure from
+		// the weapon's own Missile.CalcRange() - the exact call the cockpit's
+		// own HUD uses, factoring current speed/altitude and the target's.
+		public float maxRange;
+		public float minAlignment; // degrees off nose - TargetRequirements.minAlignment, real per-weapon value
+		public bool armed; // false = static circle, true = live cone toward a marked target
 	}
 
 	internal class PlayerSnapshot
@@ -87,10 +117,17 @@ namespace NOTacMap
 		public List<AirbaseSnapshot> airbases = new List<AirbaseSnapshot>();
 		public List<WaypointSnapshot> waypoints = new List<WaypointSnapshot>();
 		public List<MarkedTargetSnapshot> markedTargets = new List<MarkedTargetSnapshot>();
+		public WeaponRangeSnapshot weaponRange;
 	}
 
 	internal static class SnapshotBuilder
 	{
+		// Weapon.CalcRange() runs an actual iterative drag/ballistics sim - the
+		// cockpit HUD (HUDMissileState) only calls it once a second and holds
+		// the last result in between, so we do the same instead of recomputing
+		// it every 0.2s snapshot tick for no benefit.
+		private static float lastWeaponRangeCalcTime;
+		private static float lastLiveMaxRange;
 		// One-time data collection for a future plane/heli and tank/APC shape
 		// split: the C# side only has Aircraft and GroundVehicle as base types
 		// (no Helicopter/Tank/APC subclasses, no category field on either),
@@ -176,15 +213,97 @@ namespace NOTacMap
 						{
 							continue;
 						}
-						GlobalPosition targetPos = target.GlobalPosition();
+						// Only where your own faction's tracker still has it, same as the
+						// cockpit HUD. The marked list can keep a target after contact is
+						// lost, and its real position (GlobalPosition) would keep showing
+						// where it actually is after the game itself stopped showing it.
+						if (!playerAircraft.NetworkHQ.TryGetKnownPosition(target, out GlobalPosition targetPos))
+						{
+							snapshot.markedTargets.Add(new MarkedTargetSnapshot
+							{
+								id = target.persistentID.Id,
+								lost = true,
+								isPrimary = i == 0
+							});
+							continue;
+						}
+						// A tracker entry can be stale: TrackingInfo.Observed() is only
+						// true if the unit was spotted in the last few seconds, and after
+						// that GetPosition() just returns a frozen last-known position. So
+						// "has an entry" isn't enough to call it tracked - that frozen
+						// point is where it was last seen, and it's flagged as lost.
+						bool observed = target.NetworkHQ == playerAircraft.NetworkHQ
+							|| (playerAircraft.NetworkHQ.trackingDatabase.TryGetValue(target.persistentID, out TrackingInfo info) && info.Observed());
+						float lostFor = 0f;
+						if (!observed && playerAircraft.NetworkHQ.trackingDatabase.TryGetValue(target.persistentID, out TrackingInfo staleInfo))
+						{
+							lostFor = Mathf.Max(0f, Time.timeSinceLevelLoad - staleInfo.lastSpottedTime);
+						}
 						snapshot.markedTargets.Add(new MarkedTargetSnapshot
 						{
+							id = target.persistentID.Id,
+							lost = !observed,
+							lostFor = lostFor,
 							x = targetPos.x,
 							y = targetPos.y,
 							z = targetPos.z,
 							name = target.unitName,
 							isPrimary = i == 0
 						});
+					}
+
+					WeaponStation station = playerAircraft.weaponManager.currentWeaponStation;
+					if (station != null && station.WeaponInfo.gun == false && station.WeaponInfo.targetRequirements.maxRange > 0f)
+					{
+						TargetRequirements req = station.WeaponInfo.targetRequirements;
+						var rangeSnap = new WeaponRangeSnapshot
+						{
+							maxRange = req.maxRange,
+							minAlignment = req.minAlignment,
+							armed = false
+						};
+
+						Missile prefabMissile = station.WeaponInfo.weaponPrefab != null
+							? station.WeaponInfo.weaponPrefab.GetComponent<Missile>()
+							: null;
+
+						if (targets.Count > 0 && prefabMissile != null)
+						{
+							if (Time.timeSinceLevelLoad - lastWeaponRangeCalcTime >= 1f)
+							{
+								lastWeaponRangeCalcTime = Time.timeSinceLevelLoad;
+								Unit farTarget = null;
+								GlobalPosition farPos = default;
+								float farDist = 0f;
+								foreach (Unit target in targets)
+								{
+									if (target == null || target.disabled)
+									{
+										continue;
+									}
+									if (!playerAircraft.NetworkHQ.TryGetKnownPosition(target, out GlobalPosition targetPos))
+									{
+										continue;
+									}
+									float dist = FastMath.Distance(targetPos, pos);
+									if (dist > farDist)
+									{
+										farDist = dist;
+										farPos = targetPos;
+										farTarget = target;
+									}
+								}
+								if (farTarget != null)
+								{
+									lastLiveMaxRange = prefabMissile.CalcRange(
+										playerAircraft.speed, pos.y, farPos.y, farDist, farTarget.speed, out _);
+								}
+							}
+							rangeSnap.maxRange = lastLiveMaxRange;
+							rangeSnap.armed = true;
+						}
+
+						snapshot.weaponRange = rangeSnap;
 					}
 				}
 			}
@@ -247,6 +366,7 @@ namespace NOTacMap
 							: unit is GroundVehicle ? "groundvehicle"
 							: unit is Building ? "building"
 							: unit is Ship ? "ship"
+							: unit is PilotDismounted ? "pilot"
 							: "other",
 						faction = FactionString(unit.NetworkHQ),
 						isPlayer = unit is Aircraft occupiedAircraft && occupiedAircraft.Player != null,
@@ -260,6 +380,7 @@ namespace NOTacMap
 
 					if (unit is Missile missile)
 					{
+						snap.isMissile = true;
 						snap.isMyMissile = playerAircraft != null && missile.owner == playerAircraft;
 						// Any friendly missile is exactly as visible to a teammate as any
 						// other friendly unit already is via trackingDatabase/factionUnits -
@@ -269,19 +390,31 @@ namespace NOTacMap
 						if (snap.isFriendlyMissile && missile.owner is Aircraft ownerAircraft && ownerAircraft.Player != null)
 						{
 							snap.ownerName = ownerAircraft.Player.GetDisplayName(PlayerNameContext.Other);
+							snap.ownerSteamId = ownerAircraft.Player.CSteamID.ToString();
 						}
 						// !target.disabled matters: without it, a missile whose target was
 						// destroyed by someone else while still in flight would keep
 						// reporting a stale lock on a dead unit's last-known position.
-						if (missile.targetID.TryGetUnit(out Unit target) && target != null && !target.disabled)
+						// Known position, not the target's real one: a lock on a unit
+						// your faction no longer tracks shouldn't reveal where it is.
+						if (missile.targetID.TryGetUnit(out Unit target) && target != null && !target.disabled
+							&& localHq.TryGetKnownPosition(target, out GlobalPosition targetPos))
 						{
-							GlobalPosition targetPos = target.GlobalPosition();
 							snap.hasTarget = true;
 							snap.targetIsAircraft = target is Aircraft;
 							snap.targetX = targetPos.x;
 							snap.targetY = targetPos.y;
 							snap.targetZ = targetPos.z;
 							snap.targetName = target.unitName;
+							snap.targetId = target.persistentID.Id;
+						}
+						else if (missile.targetID != PersistentID.None
+							&& (!missile.targetID.TryGetUnit(out Unit goneTarget) || goneTarget == null || goneTarget.disabled))
+						{
+							// Still pointed at a unit that's destroyed (or gone). Lets the page
+							// tell a kill apart from a seeker that dropped its lock - that one
+							// clears targetID itself (Missile.SetTarget(null)).
+							snap.targetDestroyed = true;
 						}
 					}
 
@@ -311,14 +444,34 @@ namespace NOTacMap
 						continue;
 					}
 					GlobalPosition pos = airbase.center.GlobalPosition();
-					snapshot.airbases.Add(new AirbaseSnapshot
+					var airbaseSnap = new AirbaseSnapshot
 					{
 						name = airbase.SavedAirbase != null ? airbase.SavedAirbase.DisplayName : airbase.name,
 						faction = FactionString(airbase.CurrentHQ),
 						x = pos.x,
 						z = pos.z,
 						hangarsAvailable = !airbase.disabled && airbase.AnyHangarsAvailable()
-					});
+					};
+					if (airbase.runways != null)
+					{
+						foreach (Airbase.Runway runway in airbase.runways)
+						{
+							if (runway == null || !runway.Landing || runway.Start == null || runway.End == null)
+							{
+								continue;
+							}
+							GlobalPosition start = runway.Start.GlobalPosition();
+							GlobalPosition end = runway.End.GlobalPosition();
+							airbaseSnap.runways.Add(new RunwaySnapshot
+							{
+								startX = start.x,
+								startZ = start.z,
+								endX = end.x,
+								endZ = end.z
+							});
+						}
+					}
+					snapshot.airbases.Add(airbaseSnap);
 				}
 			}
 
