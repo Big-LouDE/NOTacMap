@@ -4,6 +4,8 @@
     <TargetFramework>net472</TargetFramework>
     <AssemblyName>NOTacMap</AssemblyName>
     <RootNamespace>NOTacMap</RootNamespace>
+    <Version>1.1.0</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <!-- Where the backup game install lives; override with -p:GameDir=... if you move it -->
