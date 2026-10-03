@@ -2,3 +2,4 @@ bin/
 obj/
 *.user
 IDEAS.md
+thunderstore/*.zip
