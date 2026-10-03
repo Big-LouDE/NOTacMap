@@ -54,6 +54,10 @@ A couple of settings are still URL-only (append to the page address):
 
 `?weapons=` still works too, but only as a one-off override for that page load — it's never saved, so it can't override what you've actually set in the FILTER panel beyond that one load.
 
+## About this project
+
+Claude helped out here and there while I was building this, mostly to make sense of how the game's code works.
+
 ## Credits / third-party components
 
 - [BepInEx](https://github.com/BepInEx/BepInEx) (LGPL-2.1) — the mod loader this plugin runs under
