@@ -1,23 +1,27 @@
 # NOTacMap
 
-A live tactical map for [Nuclear Option](https://store.steampowered.com/app/2168680/Nuclear_Option/), meant for a second monitor. A BepInEx plugin reads game state and serves it to a page in your browser. Nothing to calibrate or set up per map.
+A live tactical map for [Nuclear Option](https://store.steampowered.com/app/2168680/Nuclear_Option/), for a second monitor. A BepInEx plugin reads game state and serves it to a page in your browser. Nothing to calibrate or set up per map.
 
 ## Features
 
-- Opens in your default browser when the game starts (can be turned off)
+- Opens in your browser when the game starts (can be turned off), and closes itself when the game does if the browser allows it
+- Double-click the map for fullscreen
 - Live position, tracked units, airbases, waypoints
-- Per-type icons (planes, helicopters, tanks, APCs, radar, AA/SAM, ships, buildings) with an on-screen legend. Classification is by unit name and covers vanilla and mod units. Anything unknown gets a fallback shape
-- Heading rotation only for your aircraft, missiles and bombs in flight, and your helicopter. Ground units stay fixed, their heading is too noisy to be useful
-- Separate colors for teammates, AI/structures, and enemies, all editable
-- Incoming-missile warnings with speed and ETA, using the same RWR detection as the cockpit
-- All friendly missiles in flight, not just yours, labeled with the pilot (real name or random callsign)
-- Your marked targets get an amber reticle before you fire. Once a weapon is in flight it gets the pink lock line
-- Weapon range ring around your aircraft: a full circle at the selected weapon's base range, which becomes a cone along your heading once you mark a target. The range matches the cockpit HUD
-- Runway approach lines extending past each runway end, for lining up a landing from far out
-- Ejected pilots are hidden by default (toggle in FILTER)
-- Every map color is editable under DISPLAY, with RGB inputs, a preview, and a reset button
-- FILTER and DISPLAY buttons (top right) control what's shown, text size, pilot names, dark mode, and colors. Saved to a `settings.json` next to the plugin
-- Background map comes from the game's own terrain texture. Works on every map
+- Icons per unit type (planes, helicopters, tanks, APCs, radar, AA/SAM, ships, buildings) with a legend. Units are matched by name, mods included. Anything unknown gets a fallback shape
+- Icons rotate for your aircraft, helicopter, missiles and bombs
+- Teammates, AI/structures, and enemies each get their own color
+- Incoming-missile warnings with speed and ETA, from the same RWR detection as the cockpit
+- Friendly missiles in flight are shown for everyone, labeled with the pilot
+- Marked targets get an amber reticle, which turns into a spinning "LOST" marker if you lose contact
+- Missile locks show as a pink line and ring. With several missiles out, the closest one gets the label and the rest are small rings (+N)
+- If a missile loses its lock on an aircraft, a ring shows where it was and the line snaps
+- Weapon range ring: a circle at your weapon's base range that turns into a cone along your heading once you mark a target. The range matches the cockpit HUD
+- Runway approach lines extending past each runway end
+- Fading trails behind moving units, with a Trails folder in FILTER to pick which kinds. The grid can be switched off too
+- Ejected pilots are hidden by default
+- Every map color is editable under DISPLAY
+- FILTER and DISPLAY (top right) control what's shown, text size, pilot names, dark mode, and colors. Saved to a `settings.json` next to the plugin
+- The background map comes from the game's own terrain texture, so any map works
 - Pan, zoom, and a button to recenter on you
 
 ## Possible add-ons
@@ -26,7 +30,7 @@ Sharing marked targets between teammates who both have the mod. The game doesn't
 
 ## How it works
 
-The plugin (`NOTacMap.dll`) runs inside the game and starts a local HTTP server (`http://localhost:8123/` by default). It only reads data your client already has, never asks the game server for anything extra, and never sends networked commands. The page it serves (`web/index.html`) is a single HTML/JS file that connects over Server-Sent Events and draws on a canvas.
+The plugin (`NOTacMap.dll`) runs inside the game and starts a local HTTP server (`http://localhost:8123/` by default). It only reads data your client already has, and never asks the game server for anything extra or sends networked commands. Marked targets and locks only show what the game's own tracker knows. The page (`web/index.html`) is a single HTML/JS file that connects over Server-Sent Events and draws on a canvas.
 
 ## Installation
 
@@ -40,11 +44,11 @@ To build from source:
 
 1. Requires the .NET 8 SDK and a local copy of Nuclear Option with BepInEx 5 installed.
 2. `dotnet build NOTacMap.csproj -c Release` (pass `-p:GameDir=<path>` if your game isn't at the default path in the `.csproj`).
-3. Copy `NOTacMap.dll`, `Newtonsoft.Json.dll`, and `web/index.html` into `BepInEx/plugins/NOTacMap/` in your game folder.
+3. Copy `NOTacMap.dll` and `Newtonsoft.Json.dll` from the build output, and `index.html` from the `web/` folder, into `BepInEx/plugins/NOTacMap/` in your game folder. All three go in that one folder next to each other. Don't copy the `web/` folder itself, or the page won't load.
 
 ## Configuration
 
-All settings are on screen. **FILTER** covers unit types, weapon categories, and overlays. **DISPLAY** covers text size, pilot names, dark mode, and colors. Both save to `settings.json` next to the plugin.
+All settings are on screen. **FILTER** covers unit types, weapon categories, overlays, and trails. **DISPLAY** covers text size, pilot names, dark mode, and colors. Both save to `settings.json` next to the plugin.
 
 ## About this project
 
