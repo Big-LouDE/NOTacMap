@@ -81,6 +81,11 @@
     color: var(--hud-green); letter-spacing: 0.05em;
     border-bottom: 1px solid var(--hud-dim); padding-bottom: 2px;
   }
+  .panel summary {
+    font-size: calc(10px * var(--text-scale)); text-transform: uppercase;
+    color: var(--hud-green); letter-spacing: 0.05em; cursor: pointer;
+    border-bottom: 1px solid var(--hud-dim); padding-bottom: 2px; margin-bottom: 4px;
+  }
   .panel .group { margin-bottom: 8px; }
   .panel .group:last-child { margin-bottom: 0; }
   .panel label { display: flex; align-items: center; gap: 6px; padding: 1px 0; cursor: pointer; }
@@ -168,7 +173,16 @@
       <h4>Overlays</h4>
       <label><input type="checkbox" data-group="overlays" data-key="runwayGuides" checked>Runway approach guides</label>
       <label><input type="checkbox" data-group="overlays" data-key="weaponRange" checked>Weapon range</label>
+      <label><input type="checkbox" data-group="overlays" data-key="grid" checked>Grid</label>
     </div>
+    <details class="group">
+      <summary>Trails</summary>
+      <label><input type="checkbox" data-group="trails" data-key="friendlyAircraft" checked>Friendly aircraft</label>
+      <label><input type="checkbox" data-group="trails" data-key="enemyAircraft" checked>Enemy aircraft</label>
+      <label><input type="checkbox" data-group="trails" data-key="friendlyMissiles" checked>Friendly missiles/bombs</label>
+      <label><input type="checkbox" data-group="trails" data-key="enemyMissiles" checked>Enemy missiles/bombs</label>
+      <label><input type="checkbox" data-group="trails" data-key="other" checked>Ground units and ships</label>
+    </details>
   </div>
   <div id="displayPanel" class="panel">
     <div class="group">
@@ -183,6 +197,7 @@
       <label><input type="checkbox" data-group="display" data-key="showPilotNames">Show pilot names</label>
       <label><input type="checkbox" data-group="display" data-key="realNames">Use real names instead of callsigns</label>
       <label><input type="checkbox" data-group="display" data-key="darkMode">Dark mode (night vision)</label>
+      <label><input type="checkbox" data-group="display" data-key="closeOnGameExit" checked>Close this tab when the game closes</label>
     </div>
     <div class="group">
       <h4>Colors</h4>
@@ -300,6 +315,17 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+// A page can't press F11 for you, and browsers only allow fullscreen from a
+// real click or key press, so it can't happen on its own at startup.
+// Double-clicking the map toggles it (F11 and Esc work as usual too).
+canvas.addEventListener('dblclick', () => {
+  if (document.fullscreenElement) {
+    document.exitFullscreen();
+  } else {
+    document.documentElement.requestFullscreen().catch(() => {});
+  }
+});
+
 let scale = 35; // meters per pixel; wheel to zoom
 canvas.addEventListener('wheel', e => {
   scale *= (e.deltaY > 0) ? 1.1 : 0.9;
@@ -361,8 +387,9 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { textScale: 1.25, showPilotNames: false, realNames: false, darkMode: false },
-  overlays: { runwayGuides: true, weaponRange: true },
+  display: { textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true },
+  overlays: { runwayGuides: true, weaponRange: true, grid: true },
+  trails: { friendlyAircraft: true, enemyAircraft: true, friendlyMissiles: true, enemyMissiles: true, other: true },
   // Every fixed (non-theme) color on the map, customizable. hudText is the
   // one exception: {r:-1,g:-1,b:-1} means "keep following the game's own
   // live HUD theme" (the normal default) - anything else means the user
@@ -500,8 +527,21 @@ function saveSettings() {
   }).catch(() => { /* best-effort - a failed save just means next reload uses the last-saved state */ });
 }
 
+// Bump when a default changes in a way that should reach people who already
+// have a settings.json. A saved file stores every value as if it were an
+// explicit choice, so a changed default would otherwise never show up for them.
+// Version 2: pilot names and real names now default to on.
+const SETTINGS_VERSION = 2;
+
 fetch('/settings').then(r => r.ok ? r.json() : null).catch(() => null).then(loaded => {
   mergeSettings(loaded);
+  if (loaded && (loaded.version || 1) < SETTINGS_VERSION) {
+    settings.display.showPilotNames = true;
+    settings.display.realNames = true;
+    settings.version = SETTINGS_VERSION;
+    saveSettings();
+  }
+  settings.version = SETTINGS_VERSION;
   syncFilterCheckboxes();
   syncDisplayControls();
   syncColorControls();
@@ -777,6 +817,155 @@ function myMissileColor() { return rgbStr(settings.colors.myMissile); }
 function teammateMissileColor() { return rgbStr(settings.colors.teammateMissile); }
 function lockColorFor(mine) { return mine ? rgbStr(settings.colors.lock) : rgbaStr(settings.colors.lock, 0.5); }
 function markColorFor(isPrimary) { return isPrimary ? rgbStr(settings.colors.mark) : rgbaStr(settings.colors.mark, 0.55); }
+
+// Unit trails: positions are recorded client-side from each snapshot, using
+// the server's own timestamp (snapshot.t) rather than arrival time, since
+// this tab is usually in the background and gets its events bunched up.
+// A point is only added once a unit has moved far enough, so parked units
+// never build up a trail. Missiles are fast and short-lived, so they get a
+// shorter trail sampled more finely.
+const trails = new Map(); // unit id -> { pts: [{x, z, t}], missile }
+const TRAIL_SECONDS = 30;
+const MISSILE_TRAIL_SECONDS = 10;
+const TRAIL_MIN_DIST = 25;
+const MISSILE_TRAIL_MIN_DIST = 10;
+
+function updateTrails(snap) {
+  const now = snap.t;
+  const seen = new Set();
+  for (const u of snap.units || []) {
+    seen.add(u.id);
+    const missile = !!(u.isMissile || u.isFriendlyMissile || u.isIncomingMissile);
+    let tr = trails.get(u.id);
+    if (!tr) {
+      tr = { pts: [], missile };
+      trails.set(u.id, tr);
+    }
+    const last = tr.pts[tr.pts.length - 1];
+    const minDist = missile ? MISSILE_TRAIL_MIN_DIST : TRAIL_MIN_DIST;
+    if (!last || Math.hypot(u.x - last.x, u.z - last.z) >= minDist) {
+      tr.pts.push({ x: u.x, z: u.z, t: now });
+    }
+    const keep = missile ? MISSILE_TRAIL_SECONDS : TRAIL_SECONDS;
+    while (tr.pts.length && now - tr.pts[0].t > keep) tr.pts.shift();
+  }
+  for (const [id, tr] of trails) {
+    if (!seen.has(id)) trails.delete(id);
+  }
+}
+
+// When the tracker drops a marked target, the server only reports "lost"
+// (id, no position). The page remembers the last position it was tracked
+// at and shows it as a fading dashed reticle labeled LOST - the last place
+// the game itself showed it, not where it is now. Unmarking a target
+// removes it from the list entirely, which clears this.
+const markedMemory = new Map(); // id -> { x, z, name, lostAt, foundWall }
+const LOST_GHOST_SECONDS = 20;
+const FOUND_ANIM_SECONDS = 0.9; // lock-on snap when a lost target is picked back up
+const FOUND_SPIN_SECONDS = 0.45; // spin-and-shrink part; the rest is the flash
+
+function updateMarked(snap) {
+  const present = new Set();
+  for (const mt of snap.markedTargets || []) {
+    present.add(mt.id);
+    const m = markedMemory.get(mt.id);
+    if (mt.name != null) {
+      // Has a position: either tracked right now, or lost but with the
+      // tracker's stale last-known spot (lostFor = seconds since it was last
+      // spotted, so the age is right even if the page was opened after).
+      const lostAt = mt.lost ? (m && m.lostAt !== null ? m.lostAt : snap.t - (mt.lostFor || 0)) : null;
+      const reacquired = !mt.lost && !!m && m.lostAt !== null;
+      markedMemory.set(mt.id, {
+        x: mt.x, z: mt.z, name: mt.name, lostAt,
+        // Wall clock, not snapshot time - the animation has to keep moving
+        // smoothly between snapshots, which only arrive a few times a second.
+        foundWall: reacquired ? performance.now() : (m ? m.foundWall : null)
+      });
+    } else if (m && m.lostAt === null) {
+      // Tracker has nothing at all anymore: keep the last position we had.
+      m.lostAt = snap.t;
+    }
+  }
+  for (const id of markedMemory.keys()) {
+    if (!present.has(id)) markedMemory.delete(id);
+  }
+}
+
+// Lost-lock cue for your own missiles against aircraft. A seeker that loses
+// its target (flares, notching, jamming) clears the missile's target itself,
+// so "had a lock, now doesn't, and it's not a kill" means the lock was lost.
+// First a searching ring at the target's last spot, then the line from the
+// missile snaps and fades. Locking the same target with another missile of
+// yours cancels the whole thing.
+const myLockMemory = new Map(); // missile id -> { shooter, mine, owner..., targetId, targetName, x, z, aircraft }
+const lockLosses = new Map(); // missile id -> { ...lock, startWall }
+const NOLOCK_RING_SECONDS = 4;
+const NOLOCK_TETHER_SECONDS = 3;
+
+// Works for human teammates too. A lost lock is cancelled by another missile
+// from the same shooter locking that target. AI-flown missiles have no
+// shooter identity and are skipped.
+function lockShooter(u) {
+  return u.isMyMissile ? 'me' : (u.ownerSteamId || u.ownerName || null);
+}
+
+function updateLockLoss(snap) {
+  const present = new Set();
+  const lockedNow = new Map(); // shooter -> Set of target ids they currently have a lock on
+  for (const u of snap.units || []) {
+    if (!u.isFriendlyMissile) continue;
+    const shooter = lockShooter(u);
+    if (!shooter) continue;
+    present.add(u.id);
+    if (u.hasTarget) {
+      if (!lockedNow.has(shooter)) lockedNow.set(shooter, new Set());
+      lockedNow.get(shooter).add(u.targetId);
+      myLockMemory.set(u.id, {
+        shooter, mine: !!u.isMyMissile, ownerName: u.ownerName, ownerSteamId: u.ownerSteamId,
+        targetId: u.targetId, targetName: u.targetName, x: u.targetX, z: u.targetZ, aircraft: u.targetIsAircraft
+      });
+    } else {
+      const prev = myLockMemory.get(u.id);
+      if (prev && prev.aircraft && !u.targetDestroyed && !lockLosses.has(u.id)) {
+        lockLosses.set(u.id, { ...prev, startWall: performance.now() });
+      }
+      myLockMemory.delete(u.id);
+    }
+  }
+  for (const id of [...myLockMemory.keys()]) {
+    if (!present.has(id)) myLockMemory.delete(id);
+  }
+  for (const [id, l] of lockLosses) {
+    const set = lockedNow.get(l.shooter);
+    if (set && set.has(l.targetId)) lockLosses.delete(id);
+  }
+}
+
+// Oldest third faintest, newest third brightest - three strokes per unit
+// instead of one per segment, which matters with a few hundred units.
+function drawTrail(pts, headX, headZ, color, toScreen) {
+  const n = pts.length;
+  if (n === 0) return;
+  const alphas = [0.15, 0.3, 0.55];
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  const at = k => (k < n ? toScreen(pts[k].x, pts[k].z) : toScreen(headX, headZ));
+  for (let b = 0; b < 3; b++) {
+    const s = Math.floor(n * b / 3);
+    const e = Math.floor(n * (b + 1) / 3) - 1;
+    if (e < s) continue;
+    ctx.globalAlpha = alphas[b];
+    ctx.beginPath();
+    const [x0, y0] = at(s);
+    ctx.moveTo(x0, y0);
+    for (let k = s + 1; k <= e + 1; k++) {
+      const [x, y] = at(k);
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
 
 function drawBackground(origin) {
   if (!mapInfo || !bgReady || !bgCanvas) return;
@@ -1121,6 +1310,80 @@ function tryDrawLabel(text, x, y) {
 // The icon itself stays at its real position; only this text box moves, so
 // several missiles converging from the same direction stack into a
 // readable list instead of piling into one illegible block.
+// Which lock gets drawn in full, which wait in the queue, and which missiles
+// should go without a text label. One place decides it so the missile icons
+// and the lock drawing always agree.
+//  1. Several missiles from the same shooter on the same target collapse to one.
+//  2. If different shooters lock the same target, only the soonest to hit stays.
+//  3. Per shooter (each pilot; all AI together), the lock closest to impact is
+//     "first" and gets the full line and label. Its missile is the only one of
+//     that shooter's locked missiles that keeps a text label.
+function buildLockPlan(units) {
+  const lockTargets = units.filter(u => u.isFriendlyMissile && u.hasTarget && passesWeaponFilter(u));
+
+  const groupedLocks = new Map();
+  lockTargets.forEach(u => {
+    // AI-flown missiles have no distinguishing name (ownerName is null for
+    // all of them), so a shared literal here would merge every AI missile at
+    // the same target into one entry. The missile's own id keeps an AI
+    // missile from grouping with another AI's.
+    const shooterKey = u.isMyMissile ? 'me' : (u.ownerName || ('ai-' + u.id));
+    const key = shooterKey + '|' + u.targetName;
+    if (!groupedLocks.has(key)) groupedLocks.set(key, u);
+  });
+
+  const oneLockPerTarget = new Map();
+  groupedLocks.forEach(missile => {
+    const dist = Math.hypot(missile.targetX - missile.x, missile.targetY - missile.y, missile.targetZ - missile.z);
+    const spd = missile.speedKmh;
+    const eta = (spd && spd > 5) ? dist / (spd / 3.6) : Infinity;
+    const existing = oneLockPerTarget.get(missile.targetName);
+    if (!existing || eta < existing.eta) {
+      oneLockPerTarget.set(missile.targetName, { missile, eta });
+    }
+  });
+
+  const lockGroup = m => (m.isMyMissile ? 'me' : (m.ownerSteamId || m.ownerName || 'ai'));
+  const lockGroups = new Map(); // shooter -> { first, count }
+  oneLockPerTarget.forEach(entry => {
+    const key = lockGroup(entry.missile);
+    const g = lockGroups.get(key);
+    if (!g) {
+      lockGroups.set(key, { first: entry, count: 1 });
+    } else {
+      g.count++;
+      if (entry.eta < g.first.eta) g.first = entry;
+    }
+  });
+
+  const labeledMissileIds = new Set();
+  lockGroups.forEach(g => labeledMissileIds.add(g.first.missile.id));
+  const unlabeledMissileIds = new Set();
+  lockTargets.forEach(u => {
+    if (!labeledMissileIds.has(u.id)) unlabeledMissileIds.add(u.id);
+  });
+
+  return { oneLockPerTarget, lockGroups, lockGroup, unlabeledMissileIds };
+}
+
+// Same idea for lock labels, but tries both directions around the preferred
+// spot (0, up one slot, down one slot, up two...) so a label lands close to
+// its target instead of drifting far below it.
+function findClearLabelY(x, y, w, h) {
+  const step = h + 2;
+  const offsets = [0];
+  for (let i = 1; i <= 8; i++) offsets.push(-i * step, i * step);
+  for (const dy of offsets) {
+    const box = { x, y: y + dy, w, h };
+    const collides = placedLabels.some(other =>
+      box.x < other.x + other.w && box.x + box.w > other.x &&
+      box.y < other.y + other.h && box.y + box.h > other.y
+    );
+    if (!collides) return y + dy;
+  }
+  return y;
+}
+
 function findClearBoxY(x, y, w, h) {
   for (let guard = 0; guard < 20; guard++) {
     const box = { x, y, w, h };
@@ -1193,7 +1456,7 @@ function draw() {
   }
 
   drawBackground(origin);
-  drawGrid(cx - origin.x / scale, cy + origin.z / scale);
+  if (settings.overlays.grid) drawGrid(cx - origin.x / scale, cy + origin.z / scale);
 
   // Grid ref always reflects your actual position, not wherever you've
   // panned the view to look at - it answers "where am I", not "what's on
@@ -1269,7 +1532,7 @@ function draw() {
 
   // Target-lock markers drawn in a separate pass so they sit on top of
   // everything else and don't get immediately covered by other icons.
-  const lockTargets = [];
+  const lockPlan = buildLockPlan(latest.units || []);
 
   // Names that will get a lock label drawn on them (below) - computed up
   // front so the generic-unit pass can skip that unit's own plain name
@@ -1282,6 +1545,38 @@ function draw() {
       .map(u => u.targetName)
   );
 
+  // Trails go under every icon, and follow the same filters the icons do,
+  // so a hidden unit type or filtered-out weapon doesn't leave a line behind.
+  const tf = settings.trails;
+  if (tf.friendlyAircraft || tf.enemyAircraft || tf.friendlyMissiles || tf.enemyMissiles || tf.other) {
+    sortedUnits.forEach(u => {
+      const tr = trails.get(u.id);
+      if (!tr || tr.pts.length === 0) return;
+      let color;
+      if (u.isFriendlyMissile) {
+        if (!tf.friendlyMissiles || !passesWeaponFilter(u)) return;
+        color = u.isMyMissile ? myMissileColor() : teammateMissileColor();
+      } else if (u.isMissile || u.isIncomingMissile) {
+        if (!tf.enemyMissiles) return;
+        color = u.isIncomingMissile ? '#ff2020' : unitColor(u);
+      } else {
+        if (!unitTypeVisible(classifyUnit(u))) return;
+        const allowed = u.baseType === 'aircraft' && u.faction === 'friendly' ? tf.friendlyAircraft
+          : u.baseType === 'aircraft' && u.faction === 'enemy' ? tf.enemyAircraft
+          : tf.other;
+        if (!allowed) return;
+        color = unitColor(u);
+      }
+      drawTrail(tr.pts, u.x, u.z, color, toScreen);
+    });
+  }
+
+  // The NO LOCK ring label sits where the target's own name would, so hide
+  // the plain one while the ring is showing.
+  lockLosses.forEach(l => {
+    if ((performance.now() - l.startWall) / 1000 < NOLOCK_RING_SECONDS) namesWithLockLabel.add(l.targetName);
+  });
+
   sortedUnits.forEach(u => {
     const [sx, sy] = toScreen(u.x, u.z);
 
@@ -1292,9 +1587,8 @@ function draw() {
       if (!passesWeaponFilter(u)) return;
 
       const mine = u.isMyMissile;
-      // Yours brightest/solid, a teammate's dimmer. Only where it's going
-      // (the lock, drawn below), never where it's been - no flight-path
-      // trail, keeps clutter down.
+      // Yours brightest/solid, a teammate's dimmer. Where it's going is the
+      // lock (drawn below); where it's been is the optional trail pass above.
       ctx.fillStyle = mine ? myMissileColor() : teammateMissileColor();
       drawMissileShape(ctx, sx, sy, mine ? 5 : 4, u.heading);
       ctx.fill();
@@ -1304,14 +1598,15 @@ function draw() {
       // just who's flying it - without it, the pilot name/callsign was the
       // only text there at all, giving nothing else to sanity-check it
       // against. Pilot name/callsign itself is opt-in (Display > Show pilot
-      // names, off by default) - when off, just the weapon name shows.
-      tryDrawLabel(
-        mine ? u.name.trim()
-          : settings.display.showPilotNames ? `${displayNameFor(u.ownerName, u.ownerSteamId)} (${u.name.trim()})` : u.name.trim(),
-        sx + 7, sy + 3
-      );
-      if (u.hasTarget) {
-        lockTargets.push(u);
+      // names, on by default) - when off, just the weapon name shows.
+      // With several missiles out, only the one belonging to the full lock
+      // label keeps a text label here; the others stay as bare icons.
+      if (!lockPlan.unlabeledMissileIds.has(u.id)) {
+        tryDrawLabel(
+          mine ? u.name.trim()
+            : settings.display.showPilotNames ? `${displayNameFor(u.ownerName, u.ownerSteamId)} (${u.name.trim()})` : u.name.trim(),
+          sx + 7, sy + 3
+        );
       }
       return;
     }
@@ -1371,41 +1666,45 @@ function draw() {
     }
   });
 
-  // Collapse multiple weapons from the same shooter onto the same target
-  // into one lock line/label - two of a teammate's missiles converging on
-  // one SAM site shouldn't draw two overlapping lines.
-  const groupedLocks = new Map();
-  lockTargets.forEach(u => {
-    // AI-flown missiles have no distinguishing name (ownerName is null for
-    // all of them), so falling back to a shared literal 'ai' here would
-    // merge every AI missile at the same target into one entry - two
-    // different bots locking the same target would wrongly look like one.
-    // Falling back to the missile's own unique id instead means an AI
-    // missile only ever groups with itself, never with another AI's.
-    const shooterKey = u.isMyMissile ? 'me' : (u.ownerName || ('ai-' + u.id));
-    const key = shooterKey + '|' + u.targetName;
-    if (!groupedLocks.has(key)) groupedLocks.set(key, u);
-  });
+  // Which locks show in full and which wait as small rings (a "+N" on the
+  // first one's label) is decided in buildLockPlan, so the missile icons
+  // above and this pass always agree.
+  const { oneLockPerTarget, lockGroups, lockGroup } = lockPlan;
 
-  // If several different shooters are locked onto the same target, drawing
-  // every one of their lines/labels on the same point is unreadable - keep
-  // only whichever is closest to actually hitting (lowest ETA), the same
-  // "soonest first" urgency already used for the incoming-missile blink.
-  const oneLockPerTarget = new Map();
-  groupedLocks.forEach(missile => {
-    const dist = Math.hypot(missile.targetX - missile.x, missile.targetY - missile.y, missile.targetZ - missile.z);
-    const spd = missile.speedKmh;
-    const eta = (spd && spd > 5) ? dist / (spd / 3.6) : Infinity;
-    const existing = oneLockPerTarget.get(missile.targetName);
-    if (!existing || eta < existing.eta) {
-      oneLockPerTarget.set(missile.targetName, { missile, eta });
-    }
-  });
-
+  // Every lock target reserves the space of its own icon first, so a label
+  // never gets drawn across a neighbouring target in a tight formation.
   oneLockPerTarget.forEach(({ missile }) => {
+    const [rx, ry] = toScreen(missile.targetX, missile.targetZ);
+    placedLabels.push({ x: rx - 9, y: ry - 9, w: 18, h: 18 });
+  });
+
+  // Queued ones first, then the full labels with the most urgent (lowest
+  // ETA) picking its spot before the rest.
+  const lockOrder = [...oneLockPerTarget.values()].sort((a, b) => {
+    const af = a === lockGroups.get(lockGroup(a.missile)).first ? 1 : 0;
+    const bf = b === lockGroups.get(lockGroup(b.missile)).first ? 1 : 0;
+    return af !== bf ? af - bf : a.eta - b.eta;
+  });
+
+  lockOrder.forEach(entry => {
+    const missile = entry.missile;
     const [tx, ty] = toScreen(missile.targetX, missile.targetZ);
     const [msx, msy] = toScreen(missile.x, missile.z);
     const mine = missile.isMyMissile;
+    const group = lockGroups.get(lockGroup(missile));
+    if (entry !== group.first) {
+      ctx.strokeStyle = lockColorFor(false);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(tx, ty, 9, 0, Math.PI * 2);
+      ctx.stroke();
+      // The target's own name label is suppressed while it's a lock target
+      // (see namesWithLockLabel), so a queued one gets a small name here.
+      ctx.fillStyle = lockColorFor(false);
+      setFont(9);
+      tryDrawLabel(missile.targetName.trim(), tx + 9, ty + 3);
+      return;
+    }
     // Same pink/purple hue for every lock (it's about the target being at
     // risk, not whose weapon it is); only mine vs. a teammate's varies in
     // brightness/dash, matching the same visual-hierarchy language as the
@@ -1430,7 +1729,7 @@ function draw() {
     // decoration" reasoning as the incoming-missile blink above.
     const pulse = 8 + Math.sin(performance.now() / 1000 * (urgent ? 10 : 6)) * (urgent ? 3 : 2);
     ctx.strokeStyle = lockColor;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
     ctx.arc(tx, ty, pulse, 0, Math.PI * 2);
     ctx.stroke();
@@ -1438,15 +1737,85 @@ function draw() {
     ctx.fillStyle = lockColor;
     setFont(10, true);
     const etaText = etaSeconds !== null ? ` (${etaSeconds.toFixed(0)}s)` : '';
+    const queuedText = group.count > 1 ? ` +${group.count - 1}` : '';
     const lockLabel = mine
-      ? `LOCK: ${missile.targetName.trim()}${etaText}`
+      ? `LOCK: ${missile.targetName.trim()}${etaText}${queuedText}`
       : settings.display.showPilotNames
-        ? `${displayNameFor(missile.ownerName, missile.ownerSteamId)} → ${missile.targetName.trim()}${etaText}`
-        : `${missile.targetName.trim()}${etaText}`;
-    ctx.fillText(lockLabel, tx + 12, ty + 3);
-    // Always shown (rare and important), but still claims its space.
-    placedLabels.push({ x: tx + 12, y: ty - 6, w: ctx.measureText(lockLabel).width, h: 12 });
+        ? `${displayNameFor(missile.ownerName, missile.ownerSteamId)} → ${missile.targetName.trim()}${etaText}${queuedText}`
+        : `${missile.targetName.trim()}${etaText}${queuedText}`;
+    // Always shown (rare and important), but steps up or down to the nearest
+    // free slot instead of landing on another label.
+    const textW = ctx.measureText(lockLabel).width;
+    const boxY = findClearLabelY(tx + 12, ty - 6, textW, 12);
+    if (boxY !== ty - 6) {
+      ctx.strokeStyle = lockColor;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(tx + 9, ty);
+      ctx.lineTo(tx + 12, boxY + 5);
+      ctx.stroke();
+    }
+    ctx.fillText(lockLabel, tx + 12, boxY + 9);
+    placedLabels.push({ x: tx + 12, y: boxY, w: textW, h: 12 });
   });
+
+  if (lockLosses.size > 0) {
+    const nowMs = performance.now();
+    const unitById = new Map((latest.units || []).map(u => [u.id, u]));
+    lockLosses.forEach((l, id) => {
+      const el = (nowMs - l.startWall) / 1000;
+      if (el > NOLOCK_RING_SECONDS + NOLOCK_TETHER_SECONDS) {
+        lockLosses.delete(id);
+        return;
+      }
+      const [tx, ty] = toScreen(l.x, l.z);
+      if (el < NOLOCK_RING_SECONDS) {
+        // Searching ring: slowly turning dashed circle where the lock was.
+        ctx.save();
+        ctx.translate(tx, ty);
+        ctx.rotate(nowMs / 1000 * Math.PI * 0.8);
+        // A teammate's is dimmer, same as their locks and missiles.
+        const ringColor = lockColorFor(l.mine);
+        ctx.strokeStyle = ringColor;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.arc(0, 0, 11 + Math.sin(nowMs / 300) * 1.5, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+        ctx.fillStyle = ringColor;
+        setFont(10, true);
+        const who = !l.mine && settings.display.showPilotNames ? `${displayNameFor(l.ownerName, l.ownerSteamId)}: ` : '';
+        const text = `${who}NO LOCK: ${l.targetName.trim()} (${Math.floor(el)}s)`;
+        ctx.fillText(text, tx + 15, ty + 3);
+        placedLabels.push({ x: tx + 15, y: ty - 6, w: ctx.measureText(text).width, h: 12 });
+      } else {
+        // Tether snaps: the line from the missile to the old lock spot breaks
+        // in the middle, the halves pull apart, and it all fades.
+        const missile = unitById.get(id);
+        if (!missile) return;
+        const p = (el - NOLOCK_RING_SECONDS) / NOLOCK_TETHER_SECONDS;
+        const [mx, my] = toScreen(missile.x, missile.z);
+        const gap = 0.1 + 0.4 * p;
+        const lerp = f => [mx + (tx - mx) * f, my + (ty - my) * f];
+        const [ax, ay] = lerp(0.5 - gap / 2);
+        const [bx, by] = lerp(0.5 + gap / 2);
+        ctx.globalAlpha = Math.max(0, 1 - p);
+        ctx.strokeStyle = 'rgb(170,170,170)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(mx, my); ctx.lineTo(ax, ay);
+        ctx.moveTo(bx, by); ctx.lineTo(tx, ty);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgb(200,200,200)';
+        setFont(10, true);
+        ctx.fillText('LOCK LOST', mx + 9, my - 16);
+        ctx.globalAlpha = 1;
+      }
+    });
+  }
 
   // Your own pre-fire target selection (WeaponManager.GetTargetList()) -
   // local-only by nature, so there's no teammate/AI version of this to
@@ -1455,11 +1824,68 @@ function draw() {
   // skipped if crowded) rather than always-shown like a live weapon lock -
   // this is more transient and lower-stakes than an actual weapon in flight.
   (latest.markedTargets || []).forEach(mt => {
+    if (mt.lost) {
+      const m = markedMemory.get(mt.id);
+      if (!m || m.lostAt === null) return;
+      const age = Math.max(0, latest.t - m.lostAt);
+      const [gx, gy] = toScreen(m.x, m.z);
+      // Fades to a faint floor rather than disappearing: it keeps searching
+      // until the target is picked up again or unmarked.
+      ctx.globalAlpha = Math.max(0.3, 1 - age / LOST_GHOST_SECONDS);
+      ctx.strokeStyle = markColorFor(true);
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([3, 3]);
+      // Slowly turning with a slight breathing size, like it's scanning for
+      // the target.
+      const nowMs = performance.now();
+      ctx.save();
+      ctx.translate(gx, gy);
+      ctx.rotate(nowMs / 1000 * (Math.PI / 3));
+      drawMarkReticle(ctx, 0, 0, 12 + Math.sin(nowMs / 400) * 1.5);
+      ctx.restore();
+      ctx.setLineDash([]);
+      ctx.fillStyle = markColorFor(true);
+      setFont(10, true);
+      const ageText = age < 60 ? `${Math.floor(age)}s` : `${Math.floor(age / 60)}m${String(Math.floor(age % 60)).padStart(2, '0')}s`;
+      tryDrawLabel(`LOST: ${m.name.trim()} (${ageText})`, gx + 14, gy + 3);
+      ctx.globalAlpha = 1;
+      return;
+    }
     const [tx, ty] = toScreen(mt.x, mt.z);
     const color = markColorFor(mt.isPrimary);
     ctx.strokeStyle = color;
     ctx.lineWidth = mt.isPrimary ? 1.5 : 1;
-    drawMarkReticle(ctx, tx, ty, mt.isPrimary ? 12 : 9);
+    let r = mt.isPrimary ? 12 : 9;
+    let angle = 0;
+    let flash = 0;
+    // Picked a lost target back up: the searching square spins fast and
+    // shrinks inward, snaps upright, then a bright flash fades out.
+    const mem = markedMemory.get(mt.id);
+    const sinceFound = mem && mem.foundWall ? (performance.now() - mem.foundWall) / 1000 : Infinity;
+    if (sinceFound < FOUND_ANIM_SECONDS) {
+      const p = Math.min(1, sinceFound / FOUND_SPIN_SECONDS);
+      const ease = 1 - Math.pow(1 - p, 3);
+      r *= 1 + (1 - ease) * 1.2;
+      angle = (1 - ease) * 3 * Math.PI;
+      if (sinceFound > FOUND_SPIN_SECONDS) {
+        flash = 1 - (sinceFound - FOUND_SPIN_SECONDS) / (FOUND_ANIM_SECONDS - FOUND_SPIN_SECONDS);
+      }
+    }
+    ctx.save();
+    ctx.translate(tx, ty);
+    ctx.rotate(angle);
+    drawMarkReticle(ctx, 0, 0, r);
+    ctx.restore();
+    if (flash > 0) {
+      ctx.globalAlpha = flash * 0.25;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(tx - r, ty - r, r * 2, r * 2);
+      ctx.globalAlpha = flash * 0.8;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      drawMarkReticle(ctx, tx, ty, r + 2);
+      ctx.globalAlpha = 1;
+    }
     ctx.fillStyle = color;
     setFont(10, mt.isPrimary);
     tryDrawLabel(mt.isPrimary ? `TGT: ${mt.name.trim()}` : mt.name.trim(), tx + 14, ty + 3);
@@ -1515,11 +1941,30 @@ function draw() {
 }
 scheduleFrame();
 
+// The page only knows the game is gone once the server stops answering. A
+// brief blip (or the game being busy loading a mission) reconnects within
+// a try or two, so only a few failures in a row, after having been
+// connected at least once, count as "the game closed". window.close() is
+// allowed for a tab opened straight from a link/launcher with nothing else
+// in its history (Chrome/Edge); where the browser refuses, the status line
+// just says so and the page keeps retrying in case the game comes back.
+let everConnected = false;
+let failedAttempts = 0;
+const CLOSE_AFTER_FAILURES = 3;
+
 function connect() {
   const source = new EventSource('/events');
-  source.onopen = () => { status.textContent = 'live'; status.classList.add('live'); };
+  source.onopen = () => {
+    everConnected = true;
+    failedAttempts = 0;
+    status.textContent = 'live';
+    status.classList.add('live');
+  };
   source.onmessage = e => {
     latest = JSON.parse(e.data);
+    updateTrails(latest);
+    updateMarked(latest);
+    updateLockLoss(latest);
     // Speed (player and missiles alike) comes straight from the server now -
     // real Rigidbody.velocity.magnitude, the same value the game's own
     // cockpit HUD reads (see FlightHud.cs's cockpitRB.velocity.magnitude).
@@ -1532,9 +1977,15 @@ function connect() {
 
   };
   source.onerror = () => {
-    status.textContent = 'disconnected, retrying...';
+    failedAttempts++;
     status.classList.remove('live');
     source.close();
+    if (everConnected && failedAttempts >= CLOSE_AFTER_FAILURES && settings.display.closeOnGameExit) {
+      status.textContent = 'game closed, you can close this tab';
+      window.close();
+    } else {
+      status.textContent = 'disconnected, retrying...';
+    }
     setTimeout(connect, 2000);
   };
 }
