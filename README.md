@@ -46,6 +46,10 @@ To build from source:
 
 All settings are on screen. **FILTER** covers unit types, weapon categories, and overlays. **DISPLAY** covers text size, pilot names, dark mode, and colors. Both save to `settings.json` next to the plugin.
 
+## About this project
+
+Claude helped out here and there while I was building this, mostly to make sense of how the game's code works.
+
 ## Credits / third-party components
 
 - [BepInEx](https://github.com/BepInEx/BepInEx) (LGPL-2.1): mod loader
