@@ -143,6 +143,7 @@
     font: calc(10px * var(--text-scale)) "Consolas", monospace; text-transform: uppercase; padding: 2px 6px; cursor: pointer;
   }
   #lanCopy:hover { color: var(--hud-green); border-color: var(--hud-green); }
+  #lanQr { display: block; margin-top: 6px; image-rendering: pixelated; max-width: 100%; }
 
   /* Panels never taller or wider than the screen, scrolling inside if needed. */
   .panel { box-sizing: border-box; max-width: calc(100vw - 28px); overflow: auto; }
@@ -256,6 +257,7 @@
         <input id="lanUrl" type="text" readonly>
         <button type="button" id="lanCopy">copy</button>
       </div>
+      <canvas id="lanQr" title="Scan with the phone camera"></canvas>
     </div>
     <div class="group">
       <h4>Colors</h4>
@@ -678,12 +680,267 @@ fetch('/settings').then(r => r.ok ? r.json() : null).catch(() => null).then(from
   applyDarkMode();
 });
 
+// QR code for the phone link. Byte mode, versions 1 to 10, error correction M,
+// which is plenty for an address plus a 32 character token (about 60 bytes).
+const QR = (() => {
+  const EC_PER_BLOCK = [0, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26]; // by version, level M
+  const NUM_BLOCKS = [0, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5];
+  const ALIGN_POS = [null, [], [6, 18], [6, 22], [6, 26], [6, 30], [6, 34], [6, 22, 38], [6, 24, 42], [6, 26, 46], [6, 28, 50]];
+
+  function gfMul(x, y) {
+    let z = 0;
+    for (let i = 7; i >= 0; i--) {
+      z = (z << 1) ^ ((z >>> 7) * 0x11D);
+      z ^= ((y >>> i) & 1) * x;
+    }
+    return z;
+  }
+  function rsGenerator(degree) {
+    const result = new Array(degree).fill(0);
+    result[degree - 1] = 1;
+    let root = 1;
+    for (let i = 0; i < degree; i++) {
+      for (let j = 0; j < degree; j++) {
+        result[j] = gfMul(result[j], root);
+        if (j + 1 < degree) result[j] ^= result[j + 1];
+      }
+      root = gfMul(root, 2);
+    }
+    return result;
+  }
+  function rsRemainder(data, generator) {
+    const result = new Array(generator.length).fill(0);
+    for (const b of data) {
+      const factor = b ^ result.shift();
+      result.push(0);
+      generator.forEach((coef, i) => { result[i] ^= gfMul(coef, factor); });
+    }
+    return result;
+  }
+
+  function rawCodewords(ver) {
+    let modules = (16 * ver + 128) * ver + 64;
+    if (ver >= 2) {
+      const numAlign = Math.floor(ver / 7) + 2;
+      modules -= (25 * numAlign - 10) * numAlign - 55;
+      if (ver >= 7) modules -= 36;
+    }
+    return Math.floor(modules / 8);
+  }
+  const dataCodewords = ver => rawCodewords(ver) - EC_PER_BLOCK[ver] * NUM_BLOCKS[ver];
+
+  function utf8(text) {
+    return Array.from(new TextEncoder().encode(text));
+  }
+
+  function buildCodewords(bytes, ver) {
+    const bits = [];
+    const push = (value, count) => { for (let i = count - 1; i >= 0; i--) bits.push((value >>> i) & 1); };
+    push(0x4, 4); // byte mode
+    push(bytes.length, ver < 10 ? 8 : 16);
+    bytes.forEach(b => push(b, 8));
+    const capacity = dataCodewords(ver) * 8;
+    push(0, Math.min(4, capacity - bits.length)); // terminator
+    while (bits.length % 8 !== 0) bits.push(0);
+    const data = [];
+    for (let i = 0; i < bits.length; i += 8) {
+      data.push(parseInt(bits.slice(i, i + 8).join(''), 2));
+    }
+    for (let pad = 0xEC; data.length < dataCodewords(ver); pad ^= 0xEC ^ 0x11) data.push(pad);
+
+    // split into blocks, add error correction, interleave
+    const numBlocks = NUM_BLOCKS[ver], ecLen = EC_PER_BLOCK[ver], raw = rawCodewords(ver);
+    const numShort = numBlocks - raw % numBlocks;
+    const shortLen = Math.floor(raw / numBlocks);
+    const generator = rsGenerator(ecLen);
+    const blocks = [];
+    let k = 0;
+    for (let i = 0; i < numBlocks; i++) {
+      const dat = data.slice(k, k + shortLen - ecLen + (i < numShort ? 0 : 1));
+      k += dat.length;
+      const ecc = rsRemainder(dat, generator);
+      if (i < numShort) dat.push(0); // keeps the columns aligned, skipped below
+      blocks.push(dat.concat(ecc));
+    }
+    const out = [];
+    for (let i = 0; i < blocks[0].length; i++) {
+      blocks.forEach((block, j) => {
+        if (i !== shortLen - ecLen || j >= numShort) out.push(block[i]);
+      });
+    }
+    return out;
+  }
+
+  const getBit = (x, i) => ((x >>> i) & 1) !== 0;
+
+  function encode(text) {
+    const bytes = utf8(text);
+    let ver = 1;
+    while (ver <= 10 && 4 + (ver < 10 ? 8 : 16) + 8 * bytes.length > dataCodewords(ver) * 8) ver++;
+    if (ver > 10) throw new Error('text too long for the QR code');
+    const codewords = buildCodewords(bytes, ver);
+
+    const size = ver * 4 + 17;
+    const modules = Array.from({ length: size }, () => new Array(size).fill(false));
+    const isFn = Array.from({ length: size }, () => new Array(size).fill(false));
+    const setFn = (x, y, dark) => {
+      if (x < 0 || y < 0 || x >= size || y >= size) return;
+      modules[y][x] = dark;
+      isFn[y][x] = true;
+    };
+
+    // timing patterns
+    for (let i = 0; i < size; i++) { setFn(6, i, i % 2 === 0); setFn(i, 6, i % 2 === 0); }
+    // finder patterns with their separators
+    const finder = (cx, cy) => {
+      for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+        const dist = Math.max(Math.abs(dx), Math.abs(dy));
+        setFn(cx + dx, cy + dy, dist !== 2 && dist !== 4);
+      }
+    };
+    finder(3, 3); finder(size - 4, 3); finder(3, size - 4);
+    // alignment patterns
+    const pos = ALIGN_POS[ver];
+    pos.forEach((px, i) => pos.forEach((py, j) => {
+      if ((i === 0 && j === 0) || (i === 0 && j === pos.length - 1) || (i === pos.length - 1 && j === 0)) return;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+        setFn(px + dx, py + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+      }
+    }));
+
+    const drawFormat = mask => {
+      const data = (0 << 3) | mask; // level M is 00
+      let rem = data;
+      for (let i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+      const bits = ((data << 10) | rem) ^ 0x5412;
+      for (let i = 0; i <= 5; i++) setFn(8, i, getBit(bits, i));
+      setFn(8, 7, getBit(bits, 6));
+      setFn(8, 8, getBit(bits, 7));
+      setFn(7, 8, getBit(bits, 8));
+      for (let i = 9; i < 15; i++) setFn(14 - i, 8, getBit(bits, i));
+      for (let i = 0; i < 8; i++) setFn(size - 1 - i, 8, getBit(bits, i));
+      for (let i = 8; i < 15; i++) setFn(8, size - 15 + i, getBit(bits, i));
+      setFn(8, size - 8, true); // the always-dark module
+    };
+    drawFormat(0); // reserves the format areas
+    if (ver >= 7) {
+      let rem = ver;
+      for (let i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >>> 11) * 0x1F25);
+      const bits = (ver << 12) | rem;
+      for (let i = 0; i < 18; i++) {
+        const a = size - 11 + i % 3, b = Math.floor(i / 3);
+        setFn(a, b, getBit(bits, i));
+        setFn(b, a, getBit(bits, i));
+      }
+    }
+
+    // data bits in the zigzag order
+    let bitIndex = 0;
+    for (let right = size - 1; right >= 1; right -= 2) {
+      if (right === 6) right = 5;
+      for (let vert = 0; vert < size; vert++) {
+        for (let j = 0; j < 2; j++) {
+          const x = right - j;
+          const upward = ((right + 1) & 2) === 0;
+          const y = upward ? size - 1 - vert : vert;
+          if (!isFn[y][x] && bitIndex < codewords.length * 8) {
+            modules[y][x] = getBit(codewords[bitIndex >>> 3], 7 - (bitIndex & 7));
+            bitIndex++;
+          }
+        }
+      }
+    }
+
+    const applyMask = mask => {
+      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+        let invert;
+        switch (mask) {
+          case 0: invert = (x + y) % 2 === 0; break;
+          case 1: invert = y % 2 === 0; break;
+          case 2: invert = x % 3 === 0; break;
+          case 3: invert = (x + y) % 3 === 0; break;
+          case 4: invert = (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0; break;
+          case 5: invert = x * y % 2 + x * y % 3 === 0; break;
+          case 6: invert = (x * y % 2 + x * y % 3) % 2 === 0; break;
+          default: invert = ((x + y) % 2 + x * y % 3) % 2 === 0; break;
+        }
+        if (!isFn[y][x] && invert) modules[y][x] = !modules[y][x];
+      }
+    };
+
+    // choose the mask with the lowest penalty (the usual four rules)
+    const penalty = () => {
+      let score = 0;
+      const line = get => {
+        let run = 1, dark = 0;
+        for (let i = 0; i < size; i++) {
+          const v = get(i);
+          if (v) dark++;
+          if (i > 0 && v === get(i - 1)) { run++; if (run === 5) score += 3; else if (run > 5) score++; } else run = 1;
+        }
+        return dark;
+      };
+      let darkTotal = 0;
+      for (let y = 0; y < size; y++) darkTotal += line(i => modules[y][i]);
+      for (let x = 0; x < size; x++) line(i => modules[i][x]);
+      for (let y = 0; y < size - 1; y++) for (let x = 0; x < size - 1; x++) {
+        const c = modules[y][x];
+        if (c === modules[y][x + 1] && c === modules[y + 1][x] && c === modules[y + 1][x + 1]) score += 3;
+      }
+      const pat = [true, false, true, true, true, false, true];
+      const finderLike = get => {
+        for (let i = 0; i + 7 <= size; i++) {
+          if (!pat.every((p, k) => get(i + k) === p)) continue;
+          const before = i - 4 >= 0 && [1, 2, 3, 4].every(k => !get(i - k));
+          const after = i + 11 <= size && [0, 1, 2, 3].every(k => !get(i + 7 + k));
+          if (before || after) score += 40;
+        }
+      };
+      for (let y = 0; y < size; y++) finderLike(i => modules[y][i]);
+      for (let x = 0; x < size; x++) finderLike(i => modules[i][x]);
+      const total = size * size;
+      score += (Math.ceil(Math.abs(darkTotal * 20 - total * 10) / total) - 1) * 10;
+      return score;
+    };
+    let best = 0, bestScore = Infinity;
+    for (let mask = 0; mask < 8; mask++) {
+      applyMask(mask);
+      drawFormat(mask);
+      const score = penalty();
+      if (score < bestScore) { best = mask; bestScore = score; }
+      applyMask(mask); // undo
+    }
+    applyMask(best);
+    drawFormat(best);
+    return { size, version: ver, mask: best, modules };
+  }
+
+  // Paints the code black on white, with the 4 module quiet zone scanners need.
+  function draw(canvas, text) {
+    const qr = encode(text);
+    const total = qr.size + 8;
+    const scale = Math.max(3, Math.floor(200 / total));
+    canvas.width = canvas.height = total * scale;
+    const c = canvas.getContext('2d');
+    c.fillStyle = '#fff';
+    c.fillRect(0, 0, canvas.width, canvas.height);
+    c.fillStyle = '#000';
+    for (let y = 0; y < qr.size; y++) for (let x = 0; x < qr.size; x++) {
+      if (qr.modules[y][x]) c.fillRect((x + 4) * scale, (y + 4) * scale, scale, scale);
+    }
+    return qr;
+  }
+  return { encode, draw };
+})();
+
 // The phone link, shown only on the PC itself and only if LAN access is on.
 if (!isRemoteViewer) {
   fetch('/lan').then(r => r.ok ? r.json() : null).then(info => {
     if (!info || !info.enabled) return;
     document.getElementById('lanUrl').value = info.url;
     document.getElementById('lanGroup').hidden = false;
+    const qrCanvas = document.getElementById('lanQr');
+    try { QR.draw(qrCanvas, info.url); } catch (e) { qrCanvas.hidden = true; }
   }).catch(() => {});
 }
 document.getElementById('lanCopy').addEventListener('click', () => {
