@@ -2,6 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NOTacMap</title>
 <style>
   :root {
@@ -32,8 +33,13 @@
     --grid-major: #5a2318;
     --grid-minor: #2e130d;
   }
-  html, body { margin: 0; background: #000; overflow: hidden; height: 100%; font-family: "Consolas", monospace; }
-  canvas { display: block; }
+  html, body {
+    margin: 0; background: #000; overflow: hidden; height: 100%; font-family: "Consolas", monospace;
+    overscroll-behavior: none; /* no pull-to-refresh or rubber banding while panning on a phone */
+  }
+  /* touch-action: none hands every touch to the page, so one finger pans and
+     two fingers pinch instead of the browser scrolling or zooming the page. */
+  canvas { display: block; touch-action: none; -webkit-user-select: none; user-select: none; }
   #status {
     position: absolute; top: 10px; left: 14px;
     color: var(--hud-dim); font-size: calc(11px * var(--text-scale)); letter-spacing: 0.08em;
@@ -125,6 +131,27 @@
   }
   #legend .row { display: flex; align-items: center; gap: 6px; }
   #legend svg { width: 14px; height: 14px; flex: none; stroke: currentColor; fill: none; }
+
+  /* Panels never taller or wider than the screen, scrolling inside if needed. */
+  .panel { box-sizing: border-box; max-width: calc(100vw - 28px); overflow: auto; }
+
+  /* Touch screens: bigger targets for fingers. */
+  @media (pointer: coarse) {
+    #controls button { padding: 9px 12px; }
+    .panel label { padding: 5px 0; }
+    .panel summary { padding: 6px 0; }
+    .panel select { padding: 4px 2px; }
+    .panel input[type=checkbox] { width: 18px; height: 18px; }
+    .color-reset { padding: 4px 8px; }
+  }
+  /* Narrow screens (phones): the legend would cover the map. */
+  @media (max-width: 700px) {
+    #legend { display: none; }
+    #controls { right: 8px; }
+    #status { left: 8px; }
+    #gridRef { right: 8px; }
+    #themeWarning { left: 8px; max-width: calc(100vw - 110px); }
+  }
 </style>
 </head>
 <body>
@@ -147,6 +174,7 @@
 <div id="themeWarning">Live theme not loaded yet - showing fallback palette. It will switch over by itself once you're in a mission.</div>
 <div id="controls">
   <button id="recenterBtn">&#8982; recenter on me</button>
+  <button id="fullscreenBtn" hidden>&#9974; fullscreen</button>
   <button id="displayBtn">&#9881; display</button>
   <button id="filterBtn">&#9776; filter</button>
   <div id="filterPanel" class="panel">
@@ -327,19 +355,28 @@ resize();
 
 // A page can't press F11 for you, and browsers only allow fullscreen from a
 // real click or key press, so it can't happen on its own at startup.
-// Double-clicking the map toggles it (F11 and Esc work as usual too).
-canvas.addEventListener('dblclick', () => {
+// Double-clicking the map toggles it with a mouse (F11 and Esc work as usual
+// too). Touch screens have no double-click, so there is a button as well,
+// shown only where the browser supports fullscreen (iPhone Safari does not).
+function toggleFullscreen() {
   if (document.fullscreenElement) {
     document.exitFullscreen();
   } else {
     document.documentElement.requestFullscreen().catch(() => {});
   }
-});
+}
+canvas.addEventListener('dblclick', toggleFullscreen);
+const fullscreenBtn = document.getElementById('fullscreenBtn');
+if (document.fullscreenEnabled) {
+  fullscreenBtn.hidden = false;
+  fullscreenBtn.addEventListener('click', toggleFullscreen);
+}
 
-let scale = 35; // meters per pixel; wheel to zoom
+const MIN_SCALE = 0.5, MAX_SCALE = 200;
+const clampScale = s => Math.min(Math.max(s, MIN_SCALE), MAX_SCALE);
+let scale = 35; // meters per pixel; wheel or pinch to zoom
 canvas.addEventListener('wheel', e => {
-  scale *= (e.deltaY > 0) ? 1.1 : 0.9;
-  scale = Math.min(Math.max(scale, 0.5), 200);
+  scale = clampScale(scale * ((e.deltaY > 0) ? 1.1 : 0.9));
 });
 
 // Free pan: null means "follow the player" (default); dragging sets an
@@ -349,27 +386,74 @@ function getViewOrigin() {
   return viewCenter || latest && latest.player || { x: 0, z: 0 };
 }
 
-let dragState = null; // {startClientX, startClientY, startOrigin}
-canvas.addEventListener('mousedown', e => {
-  dragState = { x: e.clientX, y: e.clientY, origin: getViewOrigin() };
+// Mouse, touch and pen all arrive as pointer events. One pointer pans, two
+// pinch-zoom. A gesture is (re)started whenever the number of pointers
+// changes, so lifting one finger of a pinch carries on as a pan.
+const pointers = new Map(); // pointerId -> { x, y } in client pixels
+let gesture = null;
+
+function startGesture() {
+  const pts = [...pointers.values()];
+  if (pts.length === 1) {
+    gesture = { type: 'pan', x: pts[0].x, y: pts[0].y, origin: getViewOrigin() };
+  } else if (pts.length >= 2) {
+    const [a, b] = pts;
+    const origin = getViewOrigin();
+    const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
+    gesture = {
+      type: 'pinch',
+      dist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+      scale,
+      // The world point under the midpoint when the pinch starts. It stays
+      // under the midpoint while zooming (the inverse of toScreen).
+      worldX: origin.x + (midX - canvas.width / 2) * scale,
+      worldZ: origin.z - (midY - canvas.height / 2) * scale
+    };
+  } else {
+    gesture = null;
+  }
+}
+
+canvas.addEventListener('pointerdown', e => {
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  startGesture();
   canvas.style.cursor = 'grabbing';
 });
-window.addEventListener('mousemove', e => {
-  if (!dragState) return;
-  const dx = e.clientX - dragState.x;
-  const dy = e.clientY - dragState.y;
-  // Derived from toScreen's formula so a drag of (dx,dy) screen pixels
-  // moves the map exactly (dx,dy) pixels under the cursor, not some
-  // scale-dependent fraction of that.
-  viewCenter = {
-    x: dragState.origin.x - dx * scale,
-    z: dragState.origin.z + dy * scale
-  };
+canvas.addEventListener('pointermove', e => {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (!gesture) return;
+  if (gesture.type === 'pan' && pointers.size === 1) {
+    const dx = e.clientX - gesture.x;
+    const dy = e.clientY - gesture.y;
+    // Derived from toScreen's formula so a drag of (dx,dy) screen pixels
+    // moves the map exactly (dx,dy) pixels under the pointer, not some
+    // scale-dependent fraction of that.
+    viewCenter = {
+      x: gesture.origin.x - dx * scale,
+      z: gesture.origin.z + dy * scale
+    };
+  } else if (gesture.type === 'pinch' && pointers.size >= 2) {
+    const [a, b] = [...pointers.values()];
+    const dist = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
+    scale = clampScale(gesture.scale * gesture.dist / dist);
+    const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
+    viewCenter = {
+      x: gesture.worldX - (midX - canvas.width / 2) * scale,
+      z: gesture.worldZ + (midY - canvas.height / 2) * scale
+    };
+  }
 });
-window.addEventListener('mouseup', () => {
-  dragState = null;
-  canvas.style.cursor = 'grab';
-});
+function endPointer(e) {
+  if (!pointers.delete(e.pointerId)) return;
+  startGesture();
+  if (pointers.size === 0) canvas.style.cursor = 'grab';
+}
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+// A long press on a touch screen would open a context menu mid-gesture.
+canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.style.cursor = 'grab';
 
 document.getElementById('recenterBtn').addEventListener('click', () => {
@@ -530,7 +614,17 @@ document.querySelectorAll('.color-row').forEach(row => {
   }
 });
 
+// On the PC running the game, settings live in settings.json next to the plugin.
+// Any other device (a phone or tablet over the LAN) can't write there, so it
+// keeps its own copy in the browser, seeded from the PC's settings on first use.
+const isRemoteViewer = !['localhost', '127.0.0.1', '[::1]', ''].includes(location.hostname);
+const LOCAL_SETTINGS_KEY = 'notacmap.settings';
+
 function saveSettings() {
+  if (isRemoteViewer) {
+    try { localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { /* storage blocked */ }
+    return;
+  }
   fetch('/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -544,7 +638,11 @@ function saveSettings() {
 // Version 2: pilot names and real names now default to on.
 const SETTINGS_VERSION = 2;
 
-fetch('/settings').then(r => r.ok ? r.json() : null).catch(() => null).then(loaded => {
+fetch('/settings').then(r => r.ok ? r.json() : null).catch(() => null).then(fromServer => {
+  let loaded = fromServer;
+  if (isRemoteViewer) {
+    try { loaded = JSON.parse(localStorage.getItem(LOCAL_SETTINGS_KEY)) || fromServer; } catch (e) { /* use the PC's */ }
+  }
   mergeSettings(loaded);
   if (loaded && (loaded.version || 1) < SETTINGS_VERSION) {
     settings.display.showPilotNames = true;
@@ -590,8 +688,22 @@ function togglePanel(panel, btn) {
   if (opening) {
     panel.classList.add('open');
     btn.classList.add('active');
+    fitPanelToScreen(panel);
   }
 }
+
+// A panel starts below the button stack, so its room is whatever is left
+// under that point. Taller than that and it scrolls inside instead of running
+// off the bottom of a phone screen.
+function fitPanelToScreen(panel) {
+  panel.style.maxHeight = '';
+  const room = window.innerHeight - panel.getBoundingClientRect().top - 8;
+  panel.style.maxHeight = Math.max(120, room) + 'px';
+}
+window.addEventListener('resize', () => {
+  const open = document.querySelector('.panel.open');
+  if (open) fitPanelToScreen(open);
+});
 document.getElementById('filterBtn').addEventListener('click', () => {
   togglePanel(document.getElementById('filterPanel'), document.getElementById('filterBtn'));
 });
