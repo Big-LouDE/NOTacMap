@@ -14,7 +14,7 @@ namespace NOTacMap
 	// and every browser's EventSource API understands them natively.
 	internal class MapServer
 	{
-		private readonly HttpListener listener;
+		private HttpListener listener;
 		private readonly List<HttpListenerResponse> clients = new List<HttpListenerResponse>();
 		private readonly object clientsLock = new object();
 		private readonly object writeLock = new object();
@@ -23,21 +23,31 @@ namespace NOTacMap
 
 		private const int MaxSseClients = 8;
 		private const int MaxSettingsBytes = 64 * 1024;
-		private readonly HashSet<string> allowedHosts;
+		private readonly int port;
+		private readonly string lanToken;
+		private string lanAddress; // null when LAN access is off, or if it couldn't start
+		private volatile RequestGuard guard;
+		private readonly HashSet<string> rejectedLogged = new HashSet<string>();
 
-		public MapServer(int port)
+		// lanAddress and lanToken are both null to keep the map on this PC only.
+		public MapServer(int port, string lanAddress, string lanToken)
 		{
-			listener = new HttpListener();
-			listener.Prefixes.Add($"http://localhost:{port}/");
-			listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+			this.port = port;
+			this.lanAddress = lanAddress;
+			this.lanToken = lanToken;
+			guard = new RequestGuard(port, lanAddress, lanToken);
+		}
 
-			// Only these Host values are served. Stops a web page from reaching
-			// us through DNS rebinding (its own domain pointed at 127.0.0.1).
-			allowedHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-			{
-				$"localhost:{port}",
-				$"127.0.0.1:{port}"
-			};
+		public bool LanActive
+		{
+			get { return lanAddress != null; }
+		}
+
+		// What a phone opens. Contains the secret, so it is only ever shown on
+		// this PC and never logged.
+		public string LanUrl
+		{
+			get { return lanAddress == null ? null : $"http://{lanAddress}:{port}/?t={lanToken}"; }
 		}
 
 		private int ClientCount
@@ -65,9 +75,34 @@ namespace NOTacMap
 		public void Start()
 		{
 			running = true;
-			listener.Start();
+			try
+			{
+				StartListener(lanAddress);
+			}
+			catch (Exception ex) when (lanAddress != null)
+			{
+				// Typically Windows refusing a listener on a network address
+				// without admin rights. The map must still work on this PC.
+				Plugin.Log?.LogWarning($"NOTacMap: couldn't listen on {lanAddress} for LAN access ({ex.Message}). LAN access is off, the map still works on this PC.");
+				try { listener.Close(); } catch { }
+				lanAddress = null;
+				guard = new RequestGuard(port, null, null);
+				StartListener(null);
+			}
 			acceptThread = new Thread(AcceptLoop) { IsBackground = true, Name = "NOTacMap-Accept" };
 			acceptThread.Start();
+		}
+
+		private void StartListener(string lan)
+		{
+			listener = new HttpListener();
+			listener.Prefixes.Add($"http://localhost:{port}/");
+			listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+			if (lan != null)
+			{
+				listener.Prefixes.Add($"http://{lan}:{port}/");
+			}
+			listener.Start();
 		}
 
 		public void Stop()
@@ -173,17 +208,24 @@ namespace NOTacMap
 				context.Response.Headers.Add("X-Frame-Options", "DENY");
 				context.Response.Headers.Add("Referrer-Policy", "no-referrer");
 
-				if (!IsOwnRequest(context.Request))
+				HttpListenerRequest request = context.Request;
+				string path = request.Url.AbsolutePath;
+				string method = request.HttpMethod;
+
+				GuardDecision decision = guard.Evaluate(request.Headers["Host"], request.Headers["Origin"],
+					request.RemoteEndPoint?.Address, method, path, request.Url.Query, request.Headers["Cookie"]);
+				if (decision.Status == 302)
 				{
-					Reject(context, 403);
+					context.Response.AddHeader("Set-Cookie", decision.SetCookie);
+					context.Response.StatusCode = 302;
+					context.Response.RedirectLocation = decision.RedirectTo;
+					context.Response.Close();
 					return;
 				}
-
-				string path = context.Request.Url.AbsolutePath;
-				string method = context.Request.HttpMethod;
-				if (method != "GET" && method != "HEAD" && !(method == "POST" && path == "/settings"))
+				if (decision.Status != 0)
 				{
-					Reject(context, 405);
+					LogRejected(request, decision.Status);
+					Reject(context, decision.Status, decision.Message);
 					return;
 				}
 
@@ -284,6 +326,20 @@ namespace NOTacMap
 					return;
 				}
 
+				if (path == "/lan")
+				{
+					string json = lanAddress == null
+						? "{\"enabled\":false}"
+						: "{\"enabled\":true,\"url\":\"" + LanUrl + "\"}";
+					byte[] bytes = Encoding.UTF8.GetBytes(json);
+					context.Response.ContentType = "application/json";
+					context.Response.Headers.Add("Cache-Control", "no-store");
+					context.Response.ContentLength64 = bytes.Length;
+					context.Response.OutputStream.Write(bytes, 0, bytes.Length);
+					context.Response.Close();
+					return;
+				}
+
 				if (path == "/settings")
 				{
 					// Opaque pass-through storage: the server keeps whatever JSON the client sends
@@ -361,38 +417,36 @@ namespace NOTacMap
 			}
 		}
 
-		// True only for requests meant for us: a Host we listen on, and no Origin
-		// header from some other site. Our own page sends no Origin on GETs and
-		// our own Origin on POSTs, so it always passes.
-		private bool IsOwnRequest(HttpListenerRequest request)
-		{
-			string host = request.Headers["Host"];
-			if (host == null || !allowedHosts.Contains(host))
-			{
-				return false;
-			}
-
-			string origin = request.Headers["Origin"];
-			if (origin != null)
-			{
-				string expectedPrefix = "http://";
-				if (!origin.StartsWith(expectedPrefix, StringComparison.OrdinalIgnoreCase)
-					|| !allowedHosts.Contains(origin.Substring(expectedPrefix.Length)))
-				{
-					return false;
-				}
-			}
-			return true;
-		}
-
-		private static void Reject(HttpListenerContext context, int statusCode)
+		private static void Reject(HttpListenerContext context, int statusCode, string message = null)
 		{
 			try
 			{
 				context.Response.StatusCode = statusCode;
+				if (message != null)
+				{
+					byte[] bytes = Encoding.UTF8.GetBytes(message);
+					context.Response.ContentType = "text/plain; charset=utf-8";
+					context.Response.ContentLength64 = bytes.Length;
+					context.Response.OutputStream.Write(bytes, 0, bytes.Length);
+				}
 				context.Response.Close();
 			}
 			catch { }
+		}
+
+		// Says once per device when something on the network is turned away, so a
+		// phone that opened the wrong link shows up in the log. Requests from this
+		// PC are not logged.
+		private void LogRejected(HttpListenerRequest request, int status)
+		{
+			IPAddress from = request.RemoteEndPoint?.Address;
+			if (from == null || IPAddress.IsLoopback(from)) return;
+			string key = from.ToString();
+			lock (rejectedLogged)
+			{
+				if (rejectedLogged.Count >= 32 || !rejectedLogged.Add(key)) return;
+			}
+			Plugin.Log?.LogInfo($"NOTacMap: turned away a request from {key} (status {status}).");
 		}
 
 		private static void ServeFile(HttpListenerContext context, string fileName, string contentType)

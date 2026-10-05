@@ -22,6 +22,9 @@ namespace NOTacMap
 		private ConfigEntry<int> port;
 		private ConfigEntry<float> updateInterval;
 		private ConfigEntry<bool> autoOpenBrowser;
+		private ConfigEntry<bool> allowLan;
+		private ConfigEntry<string> lanAddress;
+		private ConfigEntry<string> lanToken;
 		private MapServer server;
 		private float timer;
 		private float keepAliveTimer;
@@ -86,10 +89,44 @@ namespace NOTacMap
 			autoOpenBrowser = Config.Bind("Server", "AutoOpenBrowser", true,
 				"Automatically open the map page in your default browser each time the game starts. Turn off if you'd rather open it yourself (e.g. you keep it pinned in a specific browser/window already).");
 
-			server = new MapServer(port.Value);
+			allowLan = Config.Bind("Server", "AllowLan", false,
+				"Let other devices on your home network (a phone or tablet) open the map. Off by default. Anyone on your network who has the link shown in the DISPLAY panel can see the map, so only turn it on on a network you trust. Takes effect the next time the game starts.");
+			lanAddress = Config.Bind("Server", "LanAddress", "",
+				"The network address to listen on for LAN access. Leave empty to use your PC's private address automatically. Must be a private address such as 192.168.x.x.");
+			lanToken = Config.Bind("Server", "LanToken", "",
+				"The secret in the phone link. Created automatically the first time LAN access is turned on. Delete it to get a new one, which stops old links working.");
+
+			string lan = null;
+			string token = null;
+			if (allowLan.Value)
+			{
+				string problem;
+				lan = LanAddress.Resolve(lanAddress.Value, out problem);
+				if (lan == null)
+				{
+					Log.LogWarning($"NOTacMap: LAN access is on in the config but can't be used: {problem}. The map is only available on this PC.");
+				}
+				else
+				{
+					if (string.IsNullOrEmpty(lanToken.Value))
+					{
+						lanToken.Value = NewToken();
+						Config.Save();
+					}
+					token = lanToken.Value;
+				}
+			}
+
+			server = new MapServer(port.Value, lan, token);
 			server.Start();
 			string url = $"http://localhost:{port.Value}/";
-			Log.LogInfo($"NOTacMap listening at {url} - open that on your second monitor.");
+			Log.LogInfo($"NOTacMap listening at {url}, open that on your second monitor.");
+			if (server.LanActive)
+			{
+				// The link itself holds the secret, so it isn't logged. The page
+				// shows it under DISPLAY, on this PC only.
+				Log.LogInfo($"NOTacMap LAN access is on. Other devices on this network can open the map with the link shown in the DISPLAY panel.");
+			}
 
 			if (autoOpenBrowser.Value)
 			{
@@ -105,6 +142,19 @@ namespace NOTacMap
 					Log.LogWarning($"NOTacMap: couldn't auto-open the browser ({ex.Message}). Open {url} manually.");
 				}
 			}
+		}
+
+		// 128 random bits as hex.
+		private static string NewToken()
+		{
+			var bytes = new byte[16];
+			using (var rng = new System.Security.Cryptography.RNGCryptoServiceProvider())
+			{
+				rng.GetBytes(bytes);
+			}
+			var sb = new System.Text.StringBuilder(32);
+			foreach (byte b in bytes) sb.Append(b.ToString("x2"));
+			return sb.ToString();
 		}
 
 		private void Update()
