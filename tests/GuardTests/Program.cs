@@ -76,7 +76,7 @@ internal static class Program
         var first = Ask(lan, LH, null, Phone, query: "?t=" + TOKEN);
         Check("token link redirects", first.Status == 302 && first.RedirectTo == "/");
         Check("token link sets cookie", first.SetCookie != null && first.SetCookie.StartsWith("notacmap_t=" + TOKEN)
-            && first.SetCookie.Contains("HttpOnly") && first.SetCookie.Contains("SameSite=Strict"));
+            && first.SetCookie.Contains("HttpOnly") && first.SetCookie.Contains("SameSite=Lax") && !first.SetCookie.Contains("SameSite=Strict"));
         Check("token link keeps other params", Ask(lan, LH, null, Phone, query: "a=1&t=" + TOKEN + "&b=2").RedirectTo == "/?a=1&b=2");
         Check("token via url-encoded value", Ask(lan, LH, null, Phone, query: "t=%30123456789abcdef0123456789abcdef").Status == 302);
         Check("token link on a path", Ask(lan, LH, null, Phone, path: "/index.html", query: "t=" + TOKEN).RedirectTo == "/index.html");

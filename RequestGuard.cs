@@ -116,14 +116,17 @@ namespace NOTacMap
 			if (given != null && TokenMatches(given) && path != "/events")
 			{
 				// Move the token out of the address bar into a cookie. Never
-				// redirect to a path that could point at another site.
+				// redirect to a path that could point at another site. The cookie is
+				// Lax, not Strict: a Strict cookie is not sent on the redirect after a
+				// link opened from another app (a QR scanner, a chat), which left the
+				// phone on the refusal page even with the right secret.
 				string target = path.StartsWith("//", StringComparison.Ordinal) || path.Contains("\\") ? "/" : path;
 				return new GuardDecision
 				{
 					Status = 302,
 					RedirectTo = remaining.Length > 0 ? target + "?" + remaining : target,
 					SetCookie = CookieName + "=" + Encoding.UTF8.GetString(token)
-						+ "; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000"
+						+ "; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000"
 				};
 			}
 
