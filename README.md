@@ -22,6 +22,7 @@ A live tactical map for [Nuclear Option](https://store.steampowered.com/app/2168
 - FILTER and DISPLAY (top right) control what's shown, how it looks, and the colors
 - The background map comes from the game's own terrain texture, so any map works
 - Pan, zoom, and a button to recenter on you
+- Optional LAN mode to open the map on a phone or tablet on your home network. Off by default, touch works
 - Light on frame rate: redraws slowly when idle, speeds up when you pan or zoom, and sleeps while the tab is hidden
 
 ## Possible add-ons
@@ -45,6 +46,18 @@ To build from source:
 1. Requires the .NET 8 SDK and a local copy of Nuclear Option with BepInEx 5 installed.
 2. `dotnet build NOTacMap.csproj -c Release` (pass `-p:GameDir=<path>` if your game isn't in the default Steam folder).
 3. Copy `NOTacMap.dll` and `Newtonsoft.Json.dll` from the build output, and `index.html` from the `web/` folder, into `BepInEx/plugins/NOTacMap/` in your game folder. All three go in that one folder next to each other. Don't copy the `web/` folder itself, or the page won't load.
+
+## Phone or tablet
+
+Off by default. To open the map on another device on your home network:
+
+1. Set `Server > AllowLan` to `true` in `BepInEx/config/com.bigloude.notacmap.cfg` and start the game.
+2. Open DISPLAY in the map page on your PC. A "Phone / tablet" link appears there. Open that link on the other device once, it remembers you afterwards.
+3. If Windows asks about the firewall, allow it on private networks only.
+
+Only devices on a private home address (192.168.x.x, 10.x.x.x, 172.16 to 31.x.x) are accepted, and they need the secret in the link. Anyone who has the link can see your map, and the connection isn't encrypted, so use it at home and not on public wifi. Delete `LanToken` from the config to get a new link and cut off old ones. Saving settings only works from the PC, so a phone keeps its own display settings.
+
+If Windows won't let the game listen on the network, the plugin says so in the log and the map keeps working on the PC. The page can't keep a phone screen awake over plain HTTP, so set a longer screen timeout on the phone.
 
 ## Configuration
 
