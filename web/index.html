@@ -22,7 +22,7 @@
   }
   /* Night mode (?theme=dark): red-tinted HUD/UI text to preserve night
      vision, matching real-world cockpit convention. Deliberately doesn't
-     touch --map-bg - that's driven live from the game's own ThemeManager
+     touch --map-bg, that's driven live from the game's own ThemeManager
      (see the /theme fetch below) and represents the actual terrain tint the
      real game applies, which stays as-is regardless of this page's own
      night-mode preference. */
@@ -51,10 +51,10 @@
     display: none; max-width: 60%;
   }
   /* recenter/filter/display stack in a flex column instead of hardcoded
-     top offsets - a fixed-pixel stack would start overlapping once text
+     top offsets, a fixed-pixel stack would start overlapping once text
      scale grows the buttons taller. Panels are direct children of
      #controls (not nested per-button), positioned at top: 100% of the
-     WHOLE stack's own height - since only one is ever open at a time
+     WHOLE stack's own height, since only one is ever open at a time
      (see togglePanel), this always drops the open one below every button,
      never overlapping a sibling button the way anchoring to just one
      button's own row would once that panel grows taller than the gap. */
@@ -121,7 +121,7 @@
     position: absolute; top: 34px; left: 14px;
     display: flex; flex-direction: column; gap: 3px;
     color: var(--hud-dim); font-size: calc(10px * var(--text-scale)); letter-spacing: 0.03em;
-    pointer-events: none; /* purely informational - hands-off, never intercepts clicks/drags on the map underneath */
+    pointer-events: none; /* purely informational, hands-off, never intercepts clicks/drags on the map underneath */
   }
   #legend .row { display: flex; align-items: center; gap: 6px; }
   #legend svg { width: 14px; height: 14px; flex: none; stroke: currentColor; fill: none; }
@@ -144,7 +144,7 @@
   <div class="row"><svg viewBox="0 0 16 16"><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/></svg>Pilot (ejected, hidden by default)</div>
 </div>
 <div id="gridRef"></div>
-<div id="themeWarning">Live theme not loaded yet - showing fallback palette. Fly a mission, then reload.</div>
+<div id="themeWarning">Live theme not loaded yet - showing fallback palette. It will switch over by itself once you're in a mission.</div>
 <div id="controls">
   <button id="recenterBtn">&#8982; recenter on me</button>
   <button id="displayBtn">&#9881; display</button>
@@ -194,10 +194,20 @@
           <option value="1.5">X-Large</option>
         </select>
       </label>
+      <label>Map redraw rate (idle)
+        <select id="fpsSelect">
+          <option value="5">5 fps (lightest)</option>
+          <option value="8" selected>8 fps</option>
+          <option value="12">12 fps</option>
+          <option value="20">20 fps</option>
+          <option value="30">30 fps (smoothest)</option>
+        </select>
+      </label>
       <label><input type="checkbox" data-group="display" data-key="showPilotNames">Show pilot names</label>
       <label><input type="checkbox" data-group="display" data-key="realNames">Use real names instead of callsigns</label>
       <label><input type="checkbox" data-group="display" data-key="darkMode">Dark mode (night vision)</label>
       <label><input type="checkbox" data-group="display" data-key="closeOnGameExit" checked>Close this tab when the game closes</label>
+      <label><input type="checkbox" data-group="display" data-key="sleepWhenHidden" checked>Pause the feed while this tab is hidden (saves FPS)</label>
     </div>
     <div class="group">
       <h4>Colors</h4>
@@ -300,7 +310,7 @@ const canvas = document.getElementById('map');
 // willReadFrequently hints the browser to back this canvas with a CPU/
 // software surface instead of a GPU one. We don't use any GPU-accelerated
 // effects here (no filters/shadows/gradients on the canvas), so there's
-// nothing lost - and it frees up GPU time for the game, which is the whole
+// nothing lost, and it frees up GPU time for the game, which is the whole
 // point of this page in the first place.
 const ctx = canvas.getContext('2d', { willReadFrequently: true });
 const status = document.getElementById('status');
@@ -366,10 +376,9 @@ document.getElementById('recenterBtn').addEventListener('click', () => {
   viewCenter = null;
 });
 
-// Real names/callsigns and dark mode used to be URL-only (?names=,
-// ?theme=) - both are now real settings (display.realNames,
-// display.darkMode) in the DISPLAY panel, persisted the same as everything
-// else, so there's nothing left to configure via the URL at all.
+// Real names/callsigns and dark mode are settings (display.realNames,
+// display.darkMode) in the DISPLAY panel, saved like everything else. There
+// are no URL options.
 function applyDarkMode() {
   if (settings.display.darkMode) {
     document.documentElement.setAttribute('data-theme', 'dark');
@@ -387,12 +396,12 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true },
+  display: { textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true },
   overlays: { runwayGuides: true, weaponRange: true, grid: true },
   trails: { friendlyAircraft: true, enemyAircraft: true, friendlyMissiles: true, enemyMissiles: true, other: true },
   // Every fixed (non-theme) color on the map, customizable. hudText is the
   // one exception: {r:-1,g:-1,b:-1} means "keep following the game's own
-  // live HUD theme" (the normal default) - anything else means the user
+  // live HUD theme" (the normal default), anything else means the user
   // explicitly opted into overriding that. Every other color always uses
   // its stored value; there's no live-theme relationship to preserve there.
   colors: {
@@ -420,7 +429,7 @@ function mergeSettings(loaded) {
 
 function syncFilterCheckboxes() {
   // .panel (not just #filterPanel) so this same generic wiring also covers
-  // checkboxes placed in #displayPanel, like "Show pilot names" - one
+  // checkboxes placed in #displayPanel, like "Show pilot names", one
   // data-group/data-key pattern for every settings checkbox regardless of
   // which dropdown it visually lives in.
   document.querySelectorAll('.panel input[type=checkbox][data-group]').forEach(cb => {
@@ -442,10 +451,10 @@ function rgbaStr(c, a) { return `rgba(${c.r},${c.g},${c.b},${a})`; }
 // preserve: out of the box, the HUD text should keep matching the game's
 // own live ThemeManager colors (see the /theme fetch further down), not a
 // fixed value. {r:-1,...} is the sentinel for "haven't opted into a custom
-// one" - only then do we touch the CSS vars the theme fetch also writes to.
+// one", only then do we touch the CSS vars the theme fetch also writes to.
 function applyHudTextColor() {
   const c = settings.colors.hudText;
-  if (c.r < 0) return; // following live theme - leave --hud-green/--hud-dim alone
+  if (c.r < 0) return; // following live theme, leave --hud-green/--hud-dim alone
   document.documentElement.style.setProperty('--hud-green', rgbStr(c));
   document.documentElement.style.setProperty('--hud-dim', rgbaStr(c, 0.55));
 }
@@ -453,12 +462,14 @@ function applyHudTextColor() {
 function syncDisplayControls() {
   const sel = document.getElementById('textScaleSelect');
   if (sel) sel.value = String(settings.display.textScale);
+  const fpsSel = document.getElementById('fpsSelect');
+  if (fpsSel) fpsSel.value = String(settings.display.fps);
   applyTextScale();
 }
 
 function updateSwatch(row, c) {
   const swatch = row.querySelector('.color-swatch');
-  // hudText's sentinel (-1) means "following the live theme" - show
+  // hudText's sentinel (-1) means "following the live theme", show
   // whatever --hud-green is currently computed as, not an invalid color.
   swatch.style.background = c.r < 0
     ? getComputedStyle(document.documentElement).getPropertyValue('--hud-green').trim() || '#3fdb5e'
@@ -511,7 +522,7 @@ document.querySelectorAll('.color-row').forEach(row => {
   if (key === 'hudText') {
     row.querySelector('#hudTextCustomToggle').addEventListener('change', e => {
       settings.colors.hudText = e.target.checked
-        ? { r: 63, g: 219, b: 94 } // starting point when first enabling - matches the CSS fallback green
+        ? { r: 63, g: 219, b: 94 } // starting point when first enabling, matches the CSS fallback green
         : { r: -1, g: -1, b: -1 };
       syncColorRow(row);
       applyColorChange('hudText');
@@ -524,7 +535,7 @@ function saveSettings() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings)
-  }).catch(() => { /* best-effort - a failed save just means next reload uses the last-saved state */ });
+  }).catch(() => { /* best-effort, a failed save just means next reload uses the last-saved state */ });
 }
 
 // Bump when a default changes in a way that should reach people who already
@@ -564,7 +575,12 @@ document.getElementById('textScaleSelect').addEventListener('change', e => {
   saveSettings();
 });
 
-// Only one dropdown open at a time - both panels are absolutely positioned
+document.getElementById('fpsSelect').addEventListener('change', e => {
+  settings.display.fps = parseInt(e.target.value, 10);
+  saveSettings();
+});
+
+// Only one dropdown open at a time, both panels are absolutely positioned
 // under their own button, but the two buttons sit close together in the
 // stack, so an open panel would otherwise cover the next button down.
 function togglePanel(panel, btn) {
@@ -583,22 +599,27 @@ document.getElementById('displayBtn').addEventListener('click', () => {
   togglePanel(document.getElementById('displayPanel'), document.getElementById('displayBtn'));
 });
 
-// Every ctx.font assignment on the canvas goes through here so the Display
-// > Text Size control actually reaches every label, not just some of them.
+// Every ctx.font assignment on the canvas goes through here, so the Text Size
+// setting reaches every label. Assigning ctx.font makes the browser re-parse
+// the string even for the same value, and labels call this once per unit, so
+// it only assigns when the font changes. It compares against ctx.font itself,
+// not a cached copy, so save()/restore(), a canvas resize or a direct
+// assignment elsewhere can't leave it on a stale font.
 function setFont(px, bold) {
   const scaled = Math.max(1, Math.round(px * settings.display.textScale));
-  ctx.font = (bold ? 'bold ' : '') + scaled + 'px Consolas, monospace';
+  const font = (bold ? 'bold ' : '') + scaled + 'px Consolas, monospace';
+  if (ctx.font !== font) ctx.font = font;
 }
 
 // classifyUnit() can return 'generic' for the rare unit that matches no
-// keyword and no baseType (see classifyUnit below) - it renders with the
+// keyword and no baseType (see classifyUnit below), it renders with the
 // same chevron as 'plane', so it's gated by the same checkbox rather than
 // being its own ungoverned category.
 function unitTypeVisible(category) {
   return settings.unitTypes[category === 'generic' ? 'plane' : category];
 }
 
-// Your own missile always shows regardless of the filter - there's no
+// Your own missile always shows regardless of the filter, there's no
 // checkbox that can hide your own weapon, only teammates'/AI's.
 function passesWeaponFilter(u) {
   if (u.isMyMissile) return true;
@@ -616,11 +637,11 @@ const CALLSIGN_POOL = [
   'Phantom', 'Cyclone', 'Havoc', 'Juggler', 'Nomad', 'Outlaw', 'Renegade',
   'Saber', 'Talon', 'Vandal', 'Warlock', 'Zephyr', 'Banshee', 'Cobra',
   'Diesel', 'Echo', 'Fang', 'Grim', 'Hex', 'Jackal', 'Kraken', 'Lynx',
-  'Herr der Krallen' // easter egg - shoutout to a friend of the programmer, drops in the pool same odds as everyone else
+  'Herr der Krallen' // easter egg, shoutout to a friend of the programmer, drops in the pool same odds as everyone else
 ];
 let availableCallsigns = [...CALLSIGN_POOL];
 // Keyed by ownerSteamId (a real Steam ID, never changes), NOT by the
-// display-name string - GetDisplayName() can change format (e.g. gains or
+// display-name string, GetDisplayName() can change format (e.g. gains or
 // loses a "[3] " player-index prefix) across a respawn depending on that
 // player's own settings, and keying on the name string made a respawn
 // look like "a new player" and hand out a fresh random callsign each time.
@@ -629,7 +650,7 @@ const callsignByStableKey = new Map();
 function callsignFor(stableKey) {
   if (callsignByStableKey.has(stableKey)) return callsignByStableKey.get(stableKey);
   if (availableCallsigns.length === 0) {
-    availableCallsigns = [...CALLSIGN_POOL]; // pool exhausted - rare; just recycle
+    availableCallsigns = [...CALLSIGN_POOL]; // pool exhausted, rare; just recycle
   }
   const idx = Math.floor(Math.random() * availableCallsigns.length);
   const callsign = availableCallsigns.splice(idx, 1)[0];
@@ -637,9 +658,8 @@ function callsignFor(stableKey) {
   return callsign;
 }
 
-// null ownerName means AI-flown - callers show an "AI" tag instead of a
-// name. Falls back to ownerName itself as the callsign key on an older
-// server build that hasn't sent ownerSteamId yet, rather than crashing.
+// A null ownerName means AI-flown, shown as an "AI" tag instead of a name.
+// Falls back to ownerName as the callsign key when ownerSteamId is missing.
 function displayNameFor(ownerName, ownerSteamId) {
   if (!ownerName) return 'AI';
   return settings.display.realNames ? ownerName : callsignFor(ownerSteamId || ownerName);
@@ -648,7 +668,7 @@ function displayNameFor(ownerName, ownerSteamId) {
 // Human teammates, AI/structures, and enemies each get their own
 // customizable color (Display > Colors), regardless of the game's own
 // theme (which uses blue only for "friendly" without distinguishing player
-// from AI) - that distinction doesn't exist in-game, only here.
+// from AI), that distinction doesn't exist in-game, only here.
 
 function unitColor(u) {
   if (u.faction === 'enemy') return rgbStr(settings.colors.enemy);
@@ -666,7 +686,7 @@ const factionColor = {
 // --- Unit-type shape classification ---
 // Keyword lists built from the wiki's own Aircraft/Ground Vehicles pages
 // (vanilla helicopters confirmed via the Helipad's exact spawn list) plus
-// each installed Aryx/other mod's real GitHub description - never guessed.
+// each installed Aryx/other mod's real GitHub description, never guessed.
 // "MBT" (not "Tank") avoids the exact false-positive the C# side already
 // caught once ("Storage Tank" is a fuel building, not armor).
 const HELICOPTER_KEYWORDS = ['Ibis', 'Chicane', 'Tarantula', 'Knockout'];
@@ -727,28 +747,19 @@ function gridRefFor(x, z) {
   return `${rowLetter}${rowMinor}${majorCol}${minorCol}`;
 }
 
-// --- Background map image: read live from the game, no manual calibration ---
-// The plugin captures whatever map is actually loaded (Heartland, Ignus
-// Archipelago, or any future map) straight from the game's own
-// MapSettings.TerrainColorMap, using the exact same centered-on-origin
-// mapping the game itself uses in MapSettings.GetTerrainColorAtCoordinate():
-// world position normalized by MapSize, centered on world origin. Since
-// that's a fixed formula (not something that varies per map), there's
-// nothing left to calibrate by hand - it Just Works for whichever map you're
-// actually on.
+// --- Background map image ---
+// The plugin captures the loaded map from the game's MapSettings.TerrainColorMap.
+// World position is normalized by MapSize and centered on the world origin, the
+// same mapping MapSettings.GetTerrainColorAtCoordinate() uses, so there is no
+// per-map calibration.
 const bgImage = new Image();
 let bgReady = false;
-let bgCanvas = null; // processed copy of bgImage - flat ocean/void recolored to black, see below
+let bgCanvas = null; // processed copy of bgImage, flat ocean/void recolored to black, see below
 bgImage.onload = () => {
-  // On a naval/archipelago map, the captured terrain texture renders open
-  // ocean as a single flat color (often a tan/orange, not blue - whatever
-  // the game's own TerrainColorMap uses for "no terrain here") which reads
-  // badly as a HUD backdrop. Recolor it to black instead of hardcoding a
-  // color to strip: the four corners of the texture are always open ocean
-  // on any map with land somewhere in the middle (never the case that
-  // land reaches all four corners), so sampling them tells us exactly
-  // which color to treat as "background" for THIS map, with no per-map
-  // special-casing needed.
+  // On a naval or archipelago map the captured texture draws open ocean as one
+  // flat color (often tan or orange), which looks bad as a backdrop. Recolor it
+  // to black. The four corners are open ocean on any map with land in the middle,
+  // so sampling them gives the background color for this map.
   const off = document.createElement('canvas');
   off.width = bgImage.naturalWidth;
   off.height = bgImage.naturalHeight;
@@ -793,7 +804,7 @@ function loadMapImage() {
         bgImage.src = '/mapimage.png?' + Date.now(); // cache-bust when the map changes
       }
     })
-    .catch(() => { /* not captured yet - no mission loaded, or map has no TerrainColorMap */ });
+    .catch(() => { /* not captured yet, no mission loaded, or map has no TerrainColorMap */ });
 }
 loadMapImage();
 setInterval(loadMapImage, 5000); // notice a map change between missions
@@ -801,7 +812,7 @@ setInterval(loadMapImage, 5000); // notice a map change between missions
 function pixelToWorld(px, py) {
   // Unity's GetPixel/ReadPixels use a bottom-left origin; EncodeToPNG flips
   // that back to standard top-down for the file, so pixel row 0 (top of the
-  // displayed image) is the NORTH/max-Z edge, not the south edge - hence the
+  // displayed image) is the NORTH/max-Z edge, not the south edge, hence the
   // (0.5 - py/height) rather than (py/height - 0.5) on the Z axis.
   return {
     x: mapInfo.mapSizeX * (px / bgImage.naturalWidth - 0.5),
@@ -856,7 +867,7 @@ function updateTrails(snap) {
 
 // When the tracker drops a marked target, the server only reports "lost"
 // (id, no position). The page remembers the last position it was tracked
-// at and shows it as a fading dashed reticle labeled LOST - the last place
+// at and shows it as a fading dashed reticle labeled LOST, the last place
 // the game itself showed it, not where it is now. Unmarking a target
 // removes it from the list entirely, which clears this.
 const markedMemory = new Map(); // id -> { x, z, name, lostAt, foundWall }
@@ -877,7 +888,7 @@ function updateMarked(snap) {
       const reacquired = !mt.lost && !!m && m.lostAt !== null;
       markedMemory.set(mt.id, {
         x: mt.x, z: mt.z, name: mt.name, lostAt,
-        // Wall clock, not snapshot time - the animation has to keep moving
+        // Wall clock, not snapshot time, the animation has to keep moving
         // smoothly between snapshots, which only arrive a few times a second.
         foundWall: reacquired ? performance.now() : (m ? m.foundWall : null)
       });
@@ -941,7 +952,7 @@ function updateLockLoss(snap) {
   }
 }
 
-// Oldest third faintest, newest third brightest - three strokes per unit
+// Oldest third faintest, newest third brightest, three strokes per unit
 // instead of one per segment, which matters with a few hundred units.
 function drawTrail(pts, headX, headZ, color, toScreen) {
   const n = pts.length;
@@ -1056,7 +1067,7 @@ function drawDiamond(ctx, x, y, r) {
   ctx.closePath();
 }
 
-// Circle with a rotor cross poking past its rim - reads as "rotorcraft" at a
+// Circle with a rotor cross poking past its rim, reads as "rotorcraft" at a
 // glance without needing to be a literal helicopter silhouette at this scale.
 function drawHeliSymbol(ctx, x, y, r) {
   ctx.beginPath();
@@ -1073,7 +1084,7 @@ function drawRadarSymbol(ctx, x, y, r) {
   ctx.moveTo(x, y); ctx.lineTo(x, y - r * 0.5);
 }
 
-// Four spokes through the center - a starburst reading as "air defense
+// Four spokes through the center, a starburst reading as "air defense
 // threat", distinct from every other glyph here.
 function drawStarburst(ctx, x, y, r) {
   ctx.beginPath();
@@ -1085,7 +1096,7 @@ function drawStarburst(ctx, x, y, r) {
   }
 }
 
-// Static installations (fuel depots, hangars, factories) - a plain dot,
+// Static installations (fuel depots, hangars, factories), a plain dot,
 // deliberately not chevron/square/diamond so a building never reads as an
 // unclassified plane or vehicle again.
 function drawCircle(ctx, x, y, r) {
@@ -1093,11 +1104,10 @@ function drawCircle(ctx, x, y, r) {
   ctx.arc(x, y, r, 0, Math.PI * 2);
 }
 
-// Four corner brackets, like a camera/targeting reticle - your own pre-fire
-// target selection. Deliberately not the pink lock ring used for an actual
-// weapon in flight (a different, earlier state: "about to engage" vs.
-// "already fired").
-// A downed/ejected pilot - hidden by default (see DEFAULT_SETTINGS), since
+// Four corner brackets, like a targeting reticle: your own pre-fire target
+// selection. Different from the pink lock ring, which is for a weapon
+// already in flight.
+// A downed/ejected pilot, hidden by default (see DEFAULT_SETTINGS), since
 // it's usually just clutter, but a plain X reads as "not an active threat"
 // for the rare times you toggle it on to go find one to rescue.
 function drawXMark(ctx, x, y, r) {
@@ -1121,15 +1131,12 @@ function formatRangeM(m) {
   return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : Math.round(m) + 'm';
 }
 
-// The selected weapon's max range around your own aircraft. A full circle
-// with nothing marked (weaponRange.maxRange is just the static
-// TargetRequirements baseline then) - narrows to a cone toward your heading
-// once a target is marked and the server starts sending the live
-// Missile.CalcRange() figure instead, since a shot that has to turn hard
-// off-axis won't reach that same straight-line distance. The cone's half-
-// angle is the weapon's own TargetRequirements.minAlignment - real per-
-// weapon data, not a fixed guess, so different weapons draw different
-// widths on purpose.
+// The selected weapon's max range around your aircraft. A full circle while
+// nothing is marked (maxRange is the static TargetRequirements value), and a
+// cone toward your heading once a target is marked and the server sends the
+// live Missile.CalcRange() figure, since an off-axis shot won't reach the same
+// distance. The half-angle is the weapon's own TargetRequirements.minAlignment,
+// so different weapons draw different widths.
 function drawWeaponRangeRing(ctx, x, y, headingDeg, wr) {
   const radiusPx = wr.maxRange / scale;
   if (!(radiusPx > 2)) return;
@@ -1174,13 +1181,10 @@ function drawWeaponRangeRing(ctx, x, y, headingDeg, wr) {
   }
 }
 
-// Thin elongated "needle" - deliberately unlike every other glyph here
-// (short/wide chevron, symmetric diamond) so a missile in flight is never
-// mistaken for a plane or ground unit at a glance. Self-contained rotation
-// (like drawChevron) since every missile draw site needs it: unlike a
-// tank's noisy AI steering, a missile's heading is real ground-truth
-// "where is this actually going" - worth rotating to, same reasoning that
-// keeps the plane chevron rotating.
+// Thin elongated needle, unlike the other glyphs, so a missile in flight isn't
+// mistaken for a plane or ground unit. Rotates itself (like drawChevron): a
+// missile's heading is its real direction of travel, unlike a tank's noisy
+// steering.
 function drawMissileShape(ctx, x, y, r, headingDeg) {
   ctx.save();
   ctx.translate(x, y);
@@ -1196,11 +1200,10 @@ function drawMissileShape(ctx, x, y, r, headingDeg) {
 
 // A short radial line from center outward, using the exact same local
 // "nose at (0,-r)" convention as drawChevron/drawMissileShape before
-// rotation - guarantees it points the same real-world direction as every
+// rotation, guarantees it points the same real-world direction as every
 // other rotating glyph. Only used for the player's own heli icon: the
-// circle+rotor-cross glyph has no inherent point to convey heading the
-// way a chevron does, so this adds that back without needing to fake a
-// directional shape for something that's genuinely round.
+// circle+rotor-cross glyph has no point to show heading the way a chevron
+// does, so this adds one without faking a directional shape.
 function drawHeadingTick(ctx, x, y, r, headingDeg) {
   ctx.save();
   ctx.translate(x, y);
@@ -1212,16 +1215,12 @@ function drawHeadingTick(ctx, x, y, r, headingDeg) {
   ctx.restore();
 }
 
-// Draws the icon for a classified unit (not a missile - those keep their
-// own dedicated chevron treatment above) and applies fillStyle from
-// unitColor(u) beforehand, same as every other icon on this map. Only the
-// chevron shape (plane, and the rare unclassified 'generic' fallback that
-// reuses it) actually rotates to heading - it's the one glyph where
-// "which way is the nose pointing" reads as real information. Every other
-// shape is either rotationally symmetric enough that a turn is invisible
-// (square, diamond, cross) or has a heading that's often noisy/meaningless
-// (a parked SAM site, a building), so rotating those would just add
-// jitter without conveying anything.
+// Draws the icon for a classified unit (not a missile, which has its own glyph
+// above); fillStyle is set from unitColor(u) beforehand. Only the chevron
+// (planes, and the generic fallback) rotates to heading, since it's the one
+// shape where the nose direction means something. The others are symmetric or
+// have a meaningless heading (a parked SAM site, a building), so rotating them
+// would only add jitter.
 function drawUnitIcon(ctx, category, x, y, r, headingDeg) {
   const rotates = category === 'plane' || category === 'generic';
   ctx.save();
@@ -1285,13 +1284,25 @@ function drawUnitIcon(ctx, category, x, y, r, headingDeg) {
 
 let placedLabels = []; // reset every frame; {x,y,w,h} boxes already claimed
 
-// Draws text only if it doesn't overlap a label already placed this frame
-// (airbases are drawn before units, so they win ties - reasonable default
-// since there are usually far fewer of them). Returns false if skipped, so
-// callers can leave dense clusters showing icons-only rather than an
-// unreadable pile of overlapping names.
+// Widths are cached per font and text: the same names are measured every
+// frame, and measureText is one of the slower canvas calls.
+const textWidthCache = new Map();
+function measureCached(text) {
+  const key = ctx.font + '|' + text;
+  let w = textWidthCache.get(key);
+  if (w === undefined) {
+    if (textWidthCache.size > 5000) textWidthCache.clear();
+    w = ctx.measureText(text).width;
+    textWidthCache.set(key, w);
+  }
+  return w;
+}
+
+// Draws text only if it doesn't overlap a label already placed this frame.
+// Airbases are drawn before units, so they win ties. Returns false if skipped,
+// so callers can leave dense clusters showing icons only.
 function tryDrawLabel(text, x, y) {
-  const w = ctx.measureText(text).width;
+  const w = measureCached(text);
   const box = { x, y: y - 9, w, h: 12 };
   for (const other of placedLabels) {
     if (box.x < other.x + other.w && box.x + box.w > other.x &&
@@ -1304,12 +1315,10 @@ function tryDrawLabel(text, x, y) {
   return true;
 }
 
-// For boxes that must never be hidden (an incoming-missile warning - every
-// live threat has to stay visible, dropping one would be actively
-// dangerous): finds the nearest clear vertical slot instead of declining.
-// The icon itself stays at its real position; only this text box moves, so
-// several missiles converging from the same direction stack into a
-// readable list instead of piling into one illegible block.
+// For boxes that must never be hidden, such as an incoming-missile warning:
+// finds the nearest clear vertical slot instead of declining. The icon stays at
+// its real position and only the text box moves, so missiles arriving from the
+// same direction stack into a readable list.
 // Which lock gets drawn in full, which wait in the queue, and which missiles
 // should go without a text label. One place decides it so the missile icons
 // and the lock drawing always agree.
@@ -1397,22 +1406,44 @@ function findClearBoxY(x, y, w, h) {
   return y;
 }
 
-// Capped well below the display's native refresh rate: the underlying game
-// data only updates 5x/sec from the server anyway, so redrawing the full
-// canvas (background image blit, grid, every icon) at 60fps+ was pure waste
-// - and this page's canvas is GPU-accelerated too, so that waste was a
-// second renderer competing with the game itself for the same GPU, on top
-// of whatever the game's own frame time was. 30fps is still smooth for
-// panning/zooming and the missile-warning blink; nothing here needs more.
-const FRAME_INTERVAL_MS = 1000 / 30;
+// The game sends 5 updates a second, so redrawing faster than that mostly
+// repeats the same picture, and on the game's own PC a fast redraw costs game
+// frame rate. So the page draws slowly by default and speeds up when needed:
+//   idle:         the DISPLAY rate (default 8)
+//   animating:    at least 15 (warning blink, LOST spin, lock snap/ring)
+//   interacting:  30 for a moment after a pan, zoom, click or key press
+// The 4ms slack stops a 20fps target from landing on every third frame of a
+// 60Hz screen, which would round it down to 15.
 let lastFrameTime = 0;
+let boostUntil = 0;
+let incomingMissileActive = false; // refreshed whenever a snapshot arrives
+
+const boostRendering = () => { boostUntil = performance.now() + 1500; };
+['pointerdown', 'wheel', 'keydown', 'touchstart', 'touchmove'].forEach(type =>
+  window.addEventListener(type, boostRendering, { passive: true }));
+window.addEventListener('pointermove', e => { if (e.buttons) boostRendering(); }, { passive: true });
+
+function animationActive() {
+  if (incomingMissileActive || lockLosses.size > 0) return true;
+  const now = performance.now();
+  for (const m of markedMemory.values()) {
+    if (m.lostAt !== null) return true; // the LOST marker spins the whole time
+    if (m.foundWall && now - m.foundWall < FOUND_ANIM_SECONDS * 1000) return true;
+  }
+  return false;
+}
 
 function scheduleFrame() {
   requestAnimationFrame(renderFrame);
 }
 
 function renderFrame(now) {
-  if (now && now - lastFrameTime < FRAME_INTERVAL_MS) {
+  const idleFps = settings.display.fps || 8;
+  const fps = performance.now() < boostUntil ? 30
+    : animationActive() ? Math.max(idleFps, 15)
+    : idleFps;
+  const intervalMs = 1000 / fps - 4;
+  if (now && now - lastFrameTime < intervalMs) {
     scheduleFrame();
     return;
   }
@@ -1436,7 +1467,7 @@ function draw() {
     return;
   }
 
-  // Tiny, purely informational status line - confirms the flight-wide feed
+  // Tiny, purely informational status line, confirms the flight-wide feed
   // is alive without having to hunt for individual weapon icons. No
   // interaction, no separate UI element, just extends the existing "live"
   // text since that's already exactly this kind of minimal indicator.
@@ -1449,17 +1480,24 @@ function draw() {
 
   const cx = canvas.width / 2;
   const cy = canvas.height / 2;
-  const origin = getViewOrigin(); // wherever the view is centered - you, or a manual pan
+  const origin = getViewOrigin(); // wherever the view is centered, you, or a manual pan
 
   function toScreen(x, z) {
     return [cx + (x - origin.x) / scale, cy - (z - origin.z) / scale];
+  }
+
+  // Claim the stat block's space first, so every label drawn afterwards
+  // (airbases, units, locks) steers around it instead of being covered.
+  if (latest.player) {
+    const [psx, psy] = toScreen(latest.player.x, latest.player.z);
+    placedLabels.push(playerStatBlock(psx, psy).rect);
   }
 
   drawBackground(origin);
   if (settings.overlays.grid) drawGrid(cx - origin.x / scale, cy + origin.z / scale);
 
   // Grid ref always reflects your actual position, not wherever you've
-  // panned the view to look at - it answers "where am I", not "what's on
+  // panned the view to look at, it answers "where am I", not "what's on
   // screen right now".
   gridRefEl.textContent = latest.player ? gridRefFor(latest.player.x, latest.player.z) : '';
 
@@ -1474,23 +1512,36 @@ function draw() {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Priority-aware decluttering: closer/higher-threat entries get first pick
-  // of label space instead of whoever happens to come first in the server's
-  // array order. Distance is measured from your real position (latest.player),
-  // not the panned view center - "closest to me", not "closest to what I'm
-  // currently looking at". Missiles with a live engagement (incoming, or a
-  // friendly one with a lock) are scaled to rank far ahead of ordinary units
-  // at a comparable distance, since a closing threat matters more than a
-  // merely-nearby building.
+  // Label priority: closer and higher-threat entries get label space first,
+  // instead of server array order. Distance is from your real position
+  // (latest.player), not the panned view center. Missiles with a live engagement
+  // (incoming, or a friendly one with a lock) rank far ahead of ordinary units,
+  // since a closing threat matters more than a nearby building.
   const priorityOrigin = latest.player || origin;
   function labelSortKey(u) {
     const dist = Math.hypot(u.x - priorityOrigin.x, u.z - priorityOrigin.z);
     return (u.isIncomingMissile || (u.isFriendlyMissile && u.hasTarget)) ? dist * 0.001 : dist;
   }
-  const sortedAirbases = [...(latest.airbases || [])].sort((a, b) => labelSortKey(a) - labelSortKey(b));
-  const sortedUnits = [...(latest.units || [])].sort((a, b) => labelSortKey(a) - labelSortKey(b));
+  // Keys computed once per entry: sorting with labelSortKey as the comparator
+  // recomputed a hypot on every comparison, hundreds of times per unit on a
+  // busy server.
+  const sortByLabelPriority = list => list
+    .map(e => ({ e, k: labelSortKey(e) }))
+    .sort((a, b) => a.k - b.k)
+    .map(x => x.e);
+  const sortedAirbases = sortByLabelPriority(latest.airbases || []);
+  const sortedUnits = sortByLabelPriority(latest.units || []);
 
-  // Extended runway centerlines - real threshold positions (Runway.Start/
+  // A busy server sends hundreds of units, nearly all outside the window at
+  // any one time. Anything beyond these edges is skipped before any drawing,
+  // font setup or label measuring. Generous on the right/bottom because a
+  // label extends right of its icon, and a trail can reach back from its head.
+  const viewW = canvas.width, viewH = canvas.height;
+  // Extra room on the left: a unit just past that edge can still have its
+  // label (up to ~190px long) reaching into view.
+  const offScreen = (sx, sy, pad) => sx < -pad - 190 || sx > viewW + pad || sy < -pad || sy > viewH + pad;
+
+  // Extended runway centerlines, real threshold positions (Runway.Start/
   // End from the game's own Airbase data, not a guessed heading), extended
   // 5km past each end so they're visible as a line-up reference well
   // before you're actually on final. Drawn under the airbase icon/label so
@@ -1534,7 +1585,7 @@ function draw() {
   // everything else and don't get immediately covered by other icons.
   const lockPlan = buildLockPlan(latest.units || []);
 
-  // Names that will get a lock label drawn on them (below) - computed up
+  // Names that will get a lock label drawn on them (below), computed up
   // front so the generic-unit pass can skip that unit's own plain name
   // label and avoid drawing directly on top of it. Only counts locks that
   // will actually render (respects the weapon filter), so a unit whose
@@ -1551,7 +1602,11 @@ function draw() {
   if (tf.friendlyAircraft || tf.enemyAircraft || tf.friendlyMissiles || tf.enemyMissiles || tf.other) {
     sortedUnits.forEach(u => {
       const tr = trails.get(u.id);
-      if (!tr || tr.pts.length === 0) return;
+      // A single point means it hasn't moved (every structure on the map), so
+      // there is nothing to draw.
+      if (!tr || tr.pts.length < 2) return;
+      const [hx, hy] = toScreen(u.x, u.z);
+      if (offScreen(hx, hy, 400)) return;
       let color;
       if (u.isFriendlyMissile) {
         if (!tf.friendlyMissiles || !passesWeaponFilter(u)) return;
@@ -1579,10 +1634,13 @@ function draw() {
 
   sortedUnits.forEach(u => {
     const [sx, sy] = toScreen(u.x, u.z);
+    // Incoming missiles are never skipped, they're a live threat. Everything
+    // else off the edge is, since it would draw nothing visible anyway.
+    if (!u.isIncomingMissile && offScreen(sx, sy, 60)) return;
 
     if (u.isFriendlyMissile) {
       // Every friendly missile is exactly as visible to you as any other
-      // friendly unit via the game's own networking - no separate privacy
+      // friendly unit via the game's own networking, no separate privacy
       // system needed, just show all of them (subject to the weapon filter).
       if (!passesWeaponFilter(u)) return;
 
@@ -1594,12 +1652,9 @@ function draw() {
       ctx.fill();
       setFont(mine ? 10 : 9);
       ctx.fillStyle = mine ? col('--hud-dim') : teammateMissileColor();
-      // A teammate's label includes the weapon's own designation too, not
-      // just who's flying it - without it, the pilot name/callsign was the
-      // only text there at all, giving nothing else to sanity-check it
-      // against. Pilot name/callsign itself is opt-in (Display > Show pilot
-      // names, on by default) - when off, just the weapon name shows.
-      // With several missiles out, only the one belonging to the full lock
+      // A teammate's label shows the weapon name as well as the pilot. The pilot
+      // name/callsign is optional (DISPLAY > Show pilot names); when off, only the
+      // weapon name shows. With several missiles out, only the one in the full lock
       // label keeps a text label here; the others stay as bare icons.
       if (!lockPlan.unlabeledMissileIds.has(u.id)) {
         tryDrawLabel(
@@ -1616,12 +1671,12 @@ function draw() {
       let etaSeconds = null;
       if (spd && spd > 5 && latest.player) {
         // Distance to latest.player (your real position), not origin (the
-        // view's center) - same pan-awareness fix as the player icon itself.
+        // view's center), same pan-awareness fix as the player icon itself.
         const dist = Math.hypot(u.x - latest.player.x, u.y - latest.player.y, u.z - latest.player.z);
         etaSeconds = dist / (spd / 3.6);
       }
-      // Faster blink once genuinely urgent (< 10s out), so the pulse is an
-      // actual urgency signal rather than a constant fixed-rate animation.
+      // Blinks faster once it is urgent (under 10s out), so the rate means
+      // something.
       const urgent = etaSeconds !== null && etaSeconds < 10;
       const t = (Math.sin(performance.now() / 1000 * (urgent ? 20 : 12)) + 1) / 2;
       ctx.fillStyle = t > 0.5 ? '#ff2020' : '#ffe020';
@@ -1636,7 +1691,7 @@ function draw() {
       const label2 = `${spdText}  ETA ${etaText}`;
       const boxW = Math.max(ctx.measureText(label1).width, ctx.measureText(label2).width) + 8;
       const boxH = 26;
-      // Every incoming missile is a live threat - never hidden, but if two
+      // Every incoming missile is a live threat, never hidden, but if two
       // are close enough that their boxes would overlap, stack this one
       // below the others instead of drawing on top (the icon stays at its
       // real position; only the text box moves).
@@ -1657,7 +1712,7 @@ function draw() {
     drawUnitIcon(ctx, category, sx, sy, 6, u.heading);
     // Label matches its icon's faction color (not a flat dim theme color)
     // so a red enemy contact reads as red everywhere, not just its icon.
-    // Skipped entirely if this unit is an active lock target - the lock
+    // Skipped entirely if this unit is an active lock target, the lock
     // label (drawn below, in its own pass) already shows its name right
     // at the same spot, so drawing both just overlaps into illegible text.
     if (!namesWithLockLabel.has(u.name)) {
@@ -1725,8 +1780,7 @@ function draw() {
     const etaSeconds = (spd && spd > 5) ? dist / (spd / 3.6) : null;
     const urgent = etaSeconds !== null && etaSeconds < 10;
 
-    // Pulses faster once genuinely urgent, same "actual signal, not just
-    // decoration" reasoning as the incoming-missile blink above.
+    // Pulses faster once it is urgent, like the incoming-missile blink above.
     const pulse = 8 + Math.sin(performance.now() / 1000 * (urgent ? 10 : 6)) * (urgent ? 3 : 2);
     ctx.strokeStyle = lockColor;
     ctx.lineWidth = 2.5;
@@ -1892,11 +1946,9 @@ function draw() {
   });
 
   if (latest.player) {
-    // latest.player.x/z (your real position), NOT origin.x/z (the view's
-    // center) - toScreen(origin...) is mathematically always screen-center
-    // by construction, which pinned your icon there even while panning
-    // away to look elsewhere. Only correct when the view was forced to
-    // always follow you; broke as soon as free panning existed.
+    // Use latest.player.x/z (your real position), not origin.x/z (the view
+    // center). toScreen(origin) is always the screen center, which would pin
+    // your icon there while panning.
     const [sx, sy] = toScreen(latest.player.x, latest.player.z);
 
     if (settings.overlays.weaponRange && latest.weaponRange) {
@@ -1909,9 +1961,8 @@ function draw() {
     ctx.fillStyle = '#ffffff';
     // A plane's chevron already shows heading via its shape, so it stays
     // as-is. A helicopter's real glyph (circle+rotor-cross) has no point
-    // to rotate - show the honest heli shape instead of a misleading
-    // plane chevron, with a short tick line added back for heading, since
-    // that's the one thing the plain chevron gave you for free.
+    // to rotate, so draw the heli shape instead of a plane chevron, plus a
+    // short tick line for heading.
     if (classifyUnit({ type: latest.player.type, baseType: 'aircraft' }) === 'helicopter') {
       drawUnitIcon(ctx, 'helicopter', sx, sy, 8, 0);
       ctx.strokeStyle = '#ffffff';
@@ -1922,38 +1973,97 @@ function draw() {
       ctx.fill();
     }
 
-    // Stat block sits below-right and gets a solid backing rect, since
-    // nearby unit name labels (drawn at +8,+3 from their own icons) were
-    // overlapping it illegibly at default zoom.
-    setFont(11);
-    const lines = [
-      `SPD ${Math.round(latest.player.speedKmh)}km/h`,
-      `ALT ${Math.round(latest.player.y)}m`, // latest.player, not origin - origin.y is undefined while panned (view center is {x,z} only)
-      `HDG ${Math.round(latest.player.heading)}°`
-    ];
-    const boxX = sx + 14, boxY = sy + 12;
-    const boxW = Math.max(...lines.map(l => ctx.measureText(l).width)) + 8;
+    // Stat block sits below-right with a solid backing rect. Its space was
+    // already claimed in placedLabels at the top of draw(), so other labels
+    // stayed clear of it, and it starts below your own name label.
+    const stats = playerStatBlock(sx, sy);
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(boxX - 4, boxY - 12, boxW, lines.length * 13 + 6);
+    ctx.fillRect(stats.rect.x, stats.rect.y, stats.rect.w, stats.rect.h);
+    setFont(11);
     ctx.fillStyle = col('--hud-green');
-    lines.forEach((line, i) => ctx.fillText(line, boxX, boxY + i * 13));
+    stats.lines.forEach((line, i) => ctx.fillText(line, stats.textX, stats.textY + i * 13));
   }
+}
+
+// SPD/ALT/HDG block under your icon. Shared between the early space
+// reservation in draw() and the actual drawing, so they can't drift apart.
+function playerStatBlock(sx, sy) {
+  const prevFont = ctx.font;
+  setFont(11);
+  const lines = [
+    `SPD ${Math.round(latest.player.speedKmh)}km/h`,
+    `ALT ${Math.round(latest.player.y)}m`, // latest.player, not origin, origin.y is undefined while panned (view center is {x,z} only)
+    `HDG ${Math.round(latest.player.heading)}°`
+  ];
+  const textW = Math.max(...lines.map(l => ctx.measureText(l).width));
+  ctx.font = prevFont;
+  // Your own name label sits at sy+3 and grows with the text scale, so the
+  // block starts a scale-aware gap below it instead of a fixed offset.
+  const top = sy + 4 + Math.round(10 * settings.display.textScale);
+  return {
+    lines,
+    textX: sx + 14,
+    textY: top + 12,
+    rect: { x: sx + 10, y: top, w: textW + 8, h: lines.length * 13 + 6 }
+  };
 }
 scheduleFrame();
 
-// The page only knows the game is gone once the server stops answering. A
-// brief blip (or the game being busy loading a mission) reconnects within
-// a try or two, so only a few failures in a row, after having been
-// connected at least once, count as "the game closed". window.close() is
-// allowed for a tab opened straight from a link/launcher with nothing else
-// in its history (Chrome/Edge); where the browser refuses, the status line
-// just says so and the page keeps retrying in case the game comes back.
+// The page only knows the game is gone once the server stops answering. A short
+// blip (or a mission loading) reconnects within a try or two, so only a few
+// failures in a row, after having connected at least once, count as "the game
+// closed". window.close() works for a tab opened from a link or launcher with
+// nothing else in its history (Chrome/Edge). Where the browser refuses, the
+// status line says so and the page keeps retrying.
 let everConnected = false;
 let failedAttempts = 0;
 const CLOSE_AFTER_FAILURES = 3;
 
+// A hidden tab (minimized, or fully covered) draws nothing, but the stream
+// keeps arriving and the plugin keeps building snapshots for it. After a
+// short grace period (so a quick alt-tab doesn't thrash) the page hangs up,
+// and with no connection the plugin does no work. It reconnects as soon as
+// the tab is visible again.
+const SLEEP_AFTER_HIDDEN_MS = 10000;
+let source = null;
+let reconnectTimer = null;
+let sleepTimer = null;
+let asleep = false;
+
+function goToSleep() {
+  asleep = true;
+  clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+  if (source) { source.close(); source = null; }
+  status.classList.remove('live');
+  status.textContent = 'asleep (tab hidden)';
+}
+
+function wakeUp() {
+  asleep = false;
+  failedAttempts = 0;
+  status.textContent = 'reconnecting...';
+  connect();
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    if (settings.display.sleepWhenHidden && !asleep) {
+      clearTimeout(sleepTimer);
+      sleepTimer = setTimeout(goToSleep, SLEEP_AFTER_HIDDEN_MS);
+    }
+  } else {
+    clearTimeout(sleepTimer);
+    if (asleep) wakeUp();
+  }
+});
+
 function connect() {
-  const source = new EventSource('/events');
+  clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+  if (source) source.close();
+  const thisSource = new EventSource('/events');
+  source = thisSource;
   source.onopen = () => {
     everConnected = true;
     failedAttempts = 0;
@@ -1962,31 +2072,29 @@ function connect() {
   };
   source.onmessage = e => {
     latest = JSON.parse(e.data);
+    incomingMissileActive = (latest.units || []).some(u => u.isIncomingMissile);
     updateTrails(latest);
     updateMarked(latest);
     updateLockLoss(latest);
-    // Speed (player and missiles alike) comes straight from the server now -
-    // real Rigidbody.velocity.magnitude, the same value the game's own
-    // cockpit HUD reads (see FlightHud.cs's cockpitRB.velocity.magnitude).
-    // No client-side estimation needed, which also sidesteps the earlier
-    // "glitchy" issue entirely: this tab runs backgrounded on a second
-    // monitor, and browsers throttle/bunch timer and event processing for
-    // background tabs, so a position-delta-over-arrival-time estimate was
-    // vulnerable to bursty message delivery. A value read directly off the
-    // physics engine each snapshot has no such problem.
+    // Speed comes straight from the server (Rigidbody.velocity.magnitude, the
+    // same value the cockpit HUD reads), not from position deltas. A
+    // background tab gets its events in bursts, which would make a delta
+    // based estimate jumpy.
 
   };
   source.onerror = () => {
+    // Ignore errors from a connection we already replaced or put to sleep.
+    if (asleep || source !== thisSource) return;
     failedAttempts++;
     status.classList.remove('live');
-    source.close();
+    thisSource.close();
     if (everConnected && failedAttempts >= CLOSE_AFTER_FAILURES && settings.display.closeOnGameExit) {
       status.textContent = 'game closed, you can close this tab';
       window.close();
     } else {
       status.textContent = 'disconnected, retrying...';
     }
-    setTimeout(connect, 2000);
+    reconnectTimer = setTimeout(connect, 2000);
   };
 }
 connect();
@@ -1999,15 +2107,20 @@ function parseRgb(v) {
   return null;
 }
 
-fetch('/theme').then(r => r.ok ? r.json() : Promise.reject())
+// The game only hands over its theme once a mission is running, so a page
+// opened at the main menu keeps asking until it's there, then applies the
+// colors in place instead of needing a manual reload.
+const THEME_RETRY_MS = 3000;
+
+function loadTheme() {
+  fetch('/theme').then(r => r.ok ? r.json() : Promise.reject())
   .then(theme => {
+    document.getElementById('themeWarning').style.display = 'none';
     for (const [k, v] of Object.entries(theme)) {
       if (k === 'map-bg') {
-        // The in-game color blends over the 3D cockpit scene; a flat 2D
-        // canvas has nothing behind it, so cap opacity here rather than
-        // trust the source alpha verbatim (also compensates for older
-        // plugin builds that hadn't captured alpha yet and sent it opaque
-        // hex instead of rgba).
+        // The in-game color blends over the 3D cockpit scene, and a flat 2D
+        // canvas has nothing behind it. Cap the opacity here instead of
+        // trusting the source alpha (an opaque hex color also lands here).
         const rgb = parseRgb(v);
         if (rgb) {
           document.documentElement.style.setProperty('--map-bg', `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.14)`);
@@ -2017,8 +2130,14 @@ fetch('/theme').then(r => r.ok ? r.json() : Promise.reject())
       document.documentElement.style.setProperty('--' + k, v);
     }
     applyHudTextColor(); // re-assert a custom override in case it lost this race
+    syncColorControls(); // swatches that follow the theme need the new value
   })
-  .catch(() => { document.getElementById('themeWarning').style.display = 'block'; });
+  .catch(() => {
+    document.getElementById('themeWarning').style.display = 'block';
+    setTimeout(loadTheme, THEME_RETRY_MS);
+  });
+}
+loadTheme();
 </script>
 </body>
 </html>
