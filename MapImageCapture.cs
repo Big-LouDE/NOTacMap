@@ -2,13 +2,11 @@ using UnityEngine;
 
 namespace NOTacMap
 {
-	// Captures whatever map is actually loaded (Heartland, Ignus Archipelago,
-	// or any future map) straight from the game's own MapSettings component,
-	// instead of us maintaining a separate downloaded image + manual
-	// calibration per map. MapSettings.GetTerrainColorAtCoordinate() shows
-	// the game already uses a simple centered mapping (world position ->
-	// normalized by MapSize, centered on origin) to sample this same
-	// texture, so once we have MapSize there's nothing left to calibrate.
+	// Captures the loaded map (Heartland, Ignus Archipelago or any future map) from
+	// the game's own MapSettings component, so there is no separate image or
+	// calibration to maintain per map. MapSettings.GetTerrainColorAtCoordinate()
+	// samples this texture with a centered mapping (world position normalized by
+	// MapSize), so MapSize is all that is needed.
 	internal static class MapImageCapture
 	{
 		internal static byte[] Png;

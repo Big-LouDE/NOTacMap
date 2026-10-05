@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.Globalization;
 using System.Threading;
 using BepInEx;
@@ -16,7 +15,7 @@ namespace NOTacMap
 	{
 		public const string PluginGuid = "com.bigloude.notacmap";
 		public const string PluginName = "NOTacMap";
-		public const string PluginVersion = "1.1.0";
+		public const string PluginVersion = "1.1.1";
 
 		internal static ManualLogSource Log;
 
@@ -25,6 +24,7 @@ namespace NOTacMap
 		private ConfigEntry<bool> autoOpenBrowser;
 		private MapServer server;
 		private float timer;
+		private float keepAliveTimer;
 		private float mapCheckTimer;
 		private bool themeDumped;
 		private volatile bool broadcastInFlight;
@@ -42,12 +42,10 @@ namespace NOTacMap
 			themeDumped = true;
 			ColorTheme t = ThemeManager.Active.ColorTheme;
 
-			// MapBackground in particular is a near-saturated color (e.g. pure
-			// green) at LOW alpha - in-game it's alpha-blended over the 3D
-			// cockpit scene, which is what actually makes it read as dark.
-			// Keep alpha and let CSS rgba() recreate that wash over our own
-			// black canvas backdrop, instead of flattening it to opaque and
-			// getting a neon-green screen.
+			// MapBackground is a saturated color (e.g. pure green) at low alpha. In
+			// game it is blended over the 3D cockpit scene, which is what makes it
+			// look dark. Keep the alpha so CSS rgba() recreates that wash over the
+			// black canvas. Flattened to opaque it would be neon green.
 			string Rgba(Color c)
 			{
 				string hex = Hex(c); // RRGGBBAA
@@ -97,16 +95,13 @@ namespace NOTacMap
 			{
 				try
 				{
-					// UseShellExecute=true hands this to the OS exactly like
-					// double-clicking the link - opens whatever the user's
-					// actual default browser is, no assumption about which one.
-					Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+					// Unity's built-in call for opening the default browser, so we don't
+					// start a process ourselves.
+					Application.OpenURL(url);
 				}
 				catch (Exception ex)
 				{
-					// Never worth failing plugin startup over - worst case the
-					// user just opens the URL themselves, same as before this
-					// existed.
+					// Not worth failing startup over, the user can open the URL themselves.
 					Log.LogWarning($"NOTacMap: couldn't auto-open the browser ({ex.Message}). Open {url} manually.");
 				}
 			}
@@ -135,12 +130,19 @@ namespace NOTacMap
 				return;
 			}
 
-			// Skip this tick rather than queue another broadcast on top of one
-			// still in flight - if the browser were ever persistently (not
-			// just occasionally) slow to drain its socket, queuing regardless
-			// would pile up worker threads faster than they could drain.
-			// Simply dropping a stale tick's snapshot is harmless; the next
-			// one 200ms later carries fresher data anyway.
+			// Prunes closed tabs even when there's nothing to send (main menu,
+			// loading). On a worker thread for the same reason as the broadcast.
+			keepAliveTimer += updateInterval.Value;
+			if (keepAliveTimer >= 5f)
+			{
+				keepAliveTimer = 0f;
+				ThreadPool.QueueUserWorkItem(_ => server.Ping());
+			}
+
+			// Skip this tick if another broadcast is still in flight. If the browser were
+			// persistently slow to drain its socket, queuing anyway would pile up worker
+			// threads. Dropping a stale snapshot is harmless, the next one follows a
+			// moment later.
 			if (broadcastInFlight)
 			{
 				return;
@@ -149,10 +151,7 @@ namespace NOTacMap
 			var buildStopwatch = System.Diagnostics.Stopwatch.StartNew();
 			MapSnapshot snapshot = SnapshotBuilder.Build();
 			buildStopwatch.Stop();
-			// Logged whenever it's slow enough to plausibly matter for frame
-			// time, so if the game is still stalling after moving
-			// serialization + the network write off the main thread, we have
-			// real numbers instead of guessing a third time.
+			// Logged when it is slow enough to matter for frame time.
 			if (buildStopwatch.ElapsedMilliseconds > 3)
 			{
 				Log.LogWarning($"NOTacMap: Build() took {buildStopwatch.ElapsedMilliseconds}ms on the main thread ({snapshot?.units.Count ?? 0} units, {snapshot?.airbases.Count ?? 0} airbases)");
@@ -161,15 +160,10 @@ namespace NOTacMap
 			if (snapshot != null)
 			{
 				broadcastInFlight = true;
-				// Both the JSON serialization (previously also on the main
-				// thread - plain-data CPU work, doesn't need Unity API access
-				// once the snapshot object exists) and the network write
-				// (genuine blocking I/O - this tab runs backgrounded on a
-				// second monitor, which browsers throttle, so it can be slow
-				// to drain its socket) now happen on a thread pool worker.
-				// Doing either synchronously in Update() was stalling the
-				// whole game (reported: 120fps -> 30-40fps while the map
-				// page was open).
+				// Serialization and the socket write don't need the Unity API, and the
+				// write can block (a background browser tab drains its socket slowly),
+				// so both run on a thread pool worker. Done inside Update() they would
+				// stall the game.
 				ThreadPool.QueueUserWorkItem(_ =>
 				{
 					try

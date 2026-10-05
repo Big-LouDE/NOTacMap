@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Newtonsoft.Json;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -14,28 +15,40 @@ namespace NOTacMap
 		public uint id;
 		public string name;
 		public string type;
-		public string baseType; // "aircraft" | "groundvehicle" | "building" | "ship" | "other" - a plain C# type check, never wrong, used as a fallback shape when the name isn't in the known-types list
+		public string baseType; // "aircraft" | "groundvehicle" | "building" | "ship" | "other", a plain C# type check, never wrong, used as a fallback shape when the name isn't in the known-types list
 		public string faction; // "friendly" | "enemy" | "neutral" | "spectator"
-		public bool isPlayer; // human-piloted aircraft, vs. an AI/structure on the same faction
-		public bool isIncomingMissile; // locked onto the local player's own aircraft right now
-		public bool isMissile; // any missile or bomb, any faction - lets the client tell enemy ones apart for trail filtering
-		public bool isMyMissile; // a missile the local player personally launched
-		public bool isFriendlyMissile; // any friendly-faction missile, mine or a teammate's
-		public string ownerName; // isFriendlyMissile only: pilot's real display name, null if AI-flown or unowned
-		public string ownerSteamId; // isFriendlyMissile only: stable key for the client's callsign assignment - GetDisplayName() can change format (e.g. a "[3] " player-index prefix) across a respawn depending on THAT player's own settings, which would otherwise look like a "new" name and get a fresh random callsign
-		public bool hasTarget; // isFriendlyMissile only: it has a live lock
-		public bool targetIsAircraft; // hasTarget only: air-to-air vs air-to-ground, for client-side filtering
+		// Flags and the target block are left out of the JSON while they're at
+		// their default (false/0/null). Most of the several hundred units on a
+		// busy server are static structures with none of these set, and the page
+		// reads a missing flag as false. The target position is sent only with
+		// a lock (ShouldSerialize below), so a real 0 can never go missing.
+		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isPlayer; // human-piloted aircraft, vs. an AI/structure on the same faction
+		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isIncomingMissile; // locked onto the local player's own aircraft right now
+		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isMissile; // any missile or bomb, any faction, lets the client tell enemy ones apart for trail filtering
+		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isMyMissile; // a missile the local player personally launched
+		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isFriendlyMissile; // any friendly-faction missile, mine or a teammate's
+		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string ownerName; // isFriendlyMissile only: pilot's real display name, null if AI-flown or unowned
+		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string ownerSteamId; // isFriendlyMissile only: stable key for the client's callsign assignment, GetDisplayName() can change format (e.g. a "[3] " player-index prefix) across a respawn depending on THAT player's own settings, which would otherwise look like a "new" name and get a fresh random callsign
+		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool hasTarget; // isFriendlyMissile only: it has a live lock
+		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool targetIsAircraft; // hasTarget only: air-to-air vs air-to-ground, for client-side filtering
 		public float targetX;
 		public float targetY;
 		public float targetZ;
-		public string targetName;
-		public uint targetId; // hasTarget only: lets the page match locks to a specific target instead of by name
-		public bool targetDestroyed; // missile's target is dead/gone - a kill, not a lost lock
+		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string targetName;
+		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public uint targetId; // hasTarget only: lets the page match locks to a specific target instead of by name
+		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool targetDestroyed; // missile's target is dead/gone, a kill, not a lost lock
 		public float speedKmh; // real Rigidbody.velocity.magnitude, not a derived estimate
 		public float x;
 		public float y;
 		public float z;
-		public float heading; // transform.eulerAngles.y - which way the icon should point on the map
+		public float heading; // transform.eulerAngles.y, which way the icon should point on the map
+
+		// Newtonsoft calls these by name: the target block only goes out for a
+		// unit that actually has a lock (targetId/targetName are covered by the
+		// default/null handling, 0 and null both mean "none").
+		public bool ShouldSerializetargetX() { return hasTarget; }
+		public bool ShouldSerializetargetY() { return hasTarget; }
+		public bool ShouldSerializetargetZ() { return hasTarget; }
 	}
 
 	internal class AirbaseSnapshot
@@ -66,9 +79,9 @@ namespace NOTacMap
 
 	internal class MarkedTargetSnapshot
 	{
-		// Your own pre-fire target selection (Aircraft.weaponManager.GetTargetList())
-		// - a plain local List<Unit> on WeaponManager, never networked, so this is
-		// only ever your own; there's no way to read a teammate's or an AI's.
+		// Your own pre-fire target selection (Aircraft.weaponManager.GetTargetList()).
+		// That is a plain local List<Unit> on WeaponManager, never networked, so it
+		// is only ever your own; there's no way to read a teammate's or an AI's.
 		public uint id; // so the client can remember where each one was last tracked
 		public bool lost; // still in the marked list, but not currently spotted. With a position and name it's the last-known spot (stale); with neither, the tracker has nothing at all
 		public float lostFor; // seconds since it was last spotted, for the stale case
@@ -76,7 +89,7 @@ namespace NOTacMap
 		public float y;
 		public float z;
 		public string name;
-		public bool isPrimary; // targetList[0] - what actually fires first
+		public bool isPrimary; // targetList[0], what actually fires first
 	}
 
 	internal class WeaponRangeSnapshot
@@ -84,10 +97,10 @@ namespace NOTacMap
 		// Your currently selected weapon station (WeaponManager.currentWeaponStation).
 		// maxRange is the static baseline (TargetRequirements.maxRange) until a
 		// target is marked, at which point it's replaced by a live figure from
-		// the weapon's own Missile.CalcRange() - the exact call the cockpit's
+		// the weapon's own Missile.CalcRange(), the exact call the cockpit's
 		// own HUD uses, factoring current speed/altitude and the target's.
 		public float maxRange;
-		public float minAlignment; // degrees off nose - TargetRequirements.minAlignment, real per-weapon value
+		public float minAlignment; // degrees off nose, TargetRequirements.minAlignment, real per-weapon value
 		public bool armed; // false = static circle, true = live cone toward a marked target
 	}
 
@@ -95,7 +108,7 @@ namespace NOTacMap
 	{
 		public bool inAircraft;
 		public string type; // same unitName used for other units' classification, so the client can tell a heli apart from a plane for its own icon too
-		public float speedKmh; // real Rigidbody.velocity.magnitude - see FlightHud.cs's own cockpitRB.velocity.magnitude
+		public float speedKmh; // real Rigidbody.velocity.magnitude, see FlightHud.cs's own cockpitRB.velocity.magnitude
 		public float x;
 		public float y;
 		public float z;
@@ -104,13 +117,9 @@ namespace NOTacMap
 
 	internal class MapSnapshot
 	{
-		// Server-side timestamp (seconds, monotonic since game start). The
-		// browser tab runs in the background on a second monitor, and
-		// background tabs get their event/timer processing throttled and
-		// bunched by the browser - client-side arrival time (performance.now()
-		// at the moment a message happens to get processed) is not a
-		// trustworthy stand-in for the real time between two snapshots. Speed
-		// calculations must use deltas between two of these instead.
+		// Server-side timestamp (seconds since game start). A background browser tab
+		// gets its events batched and throttled, so the arrival time on the client is
+		// not a reliable measure of the time between two snapshots. Use deltas of this.
 		public double t;
 		public PlayerSnapshot player;
 		public List<UnitSnapshot> units = new List<UnitSnapshot>();
@@ -122,23 +131,23 @@ namespace NOTacMap
 
 	internal static class SnapshotBuilder
 	{
-		// Weapon.CalcRange() runs an actual iterative drag/ballistics sim - the
+		private static float Round1(float value)
+		{
+			return Mathf.Round(value * 10f) / 10f;
+		}
+
+		// Weapon.CalcRange() runs an actual iterative drag/ballistics sim, the
 		// cockpit HUD (HUDMissileState) only calls it once a second and holds
 		// the last result in between, so we do the same instead of recomputing
 		// it every 0.2s snapshot tick for no benefit.
 		private static float lastWeaponRangeCalcTime;
 		private static float lastLiveMaxRange;
-		// One-time data collection for a future plane/heli and tank/APC shape
-		// split: the C# side only has Aircraft and GroundVehicle as base types
-		// (no Helicopter/Tank/APC subclasses, no category field on either),
-		// so telling them apart needs real observed unit names to build a
-		// name-based classifier from - guessing now risks getting it wrong
-		// (already caught "Storage Tank" being a fuel building, not armor).
-		// Logs each distinct unit type exactly once per game session, with
-		// enough data (C# base type, TypeIdentity, RoleIdentity) to classify
-		// properly in one pass rather than needing a second data-gathering
-		// session later. Read BepInEx/LogOutput.log for "NOTacMap unit-type
-		// catalog" lines after a play session to build the real list.
+		// One-time data collection for splitting plane/heli and tank/APC shapes. The C#
+		// side only has Aircraft and GroundVehicle as base types (no Helicopter, Tank
+		// or APC subclasses), so telling them apart needs real unit names. Logs each
+		// distinct unit type once per game session, with its C# base type, TypeIdentity
+		// and RoleIdentity. Look for "NOTacMap unit-type catalog" lines in
+		// BepInEx/LogOutput.log after a play session.
 		private static readonly HashSet<string> loggedTypeNames = new HashSet<string>();
 
 		private static void LogUnitTypeOnce(Unit unit)
@@ -171,12 +180,10 @@ namespace NOTacMap
 			}
 		}
 
-		// Returns null when there's nothing sensible to report yet
-		// (main menu, hangar, loading screen, etc). Returns the plain
-		// MapSnapshot object rather than a JSON string on purpose: this only
-		// collects data (which needs Unity API access, so it must run on the
-		// main thread), while the actual JSON serialization is pure CPU work
-		// on plain data and can - and should - happen off the main thread.
+		// Returns null when there is nothing sensible to report yet (main menu, hangar,
+		// loading screen). Returns the plain MapSnapshot, not a JSON string: building it
+		// needs the Unity API and runs on the main thread, while the JSON serialization
+		// is plain CPU work and runs off it.
 		public static MapSnapshot Build()
 		{
 			if (DynamicMap.i == null)
@@ -230,7 +237,7 @@ namespace NOTacMap
 						// A tracker entry can be stale: TrackingInfo.Observed() is only
 						// true if the unit was spotted in the last few seconds, and after
 						// that GetPosition() just returns a frozen last-known position. So
-						// "has an entry" isn't enough to call it tracked - that frozen
+						// "has an entry" isn't enough to call it tracked, that frozen
 						// point is where it was last seen, and it's flagged as lost.
 						bool observed = target.NetworkHQ == playerAircraft.NetworkHQ
 							|| (playerAircraft.NetworkHQ.trackingDatabase.TryGetValue(target.persistentID, out TrackingInfo info) && info.Observed());
@@ -312,12 +319,11 @@ namespace NOTacMap
 			{
 				var seen = new HashSet<PersistentID>();
 
-				// Missiles the local player's own RWR has already promoted from
-				// "unknown" to "known" (in range + line-of-sight, or seeker-mode/
-				// network-share gated) - see MissileWarning.Update(). This is the
-				// same fairness gate the real cockpit RWR uses, so we piggyback
-				// on it instead of scanning Missile.targetID directly, which
-				// would leak a launch before the player's RWR would ever warn them.
+				// Missiles the local player's own RWR has already promoted from "unknown" to
+				// "known" (in range and line of sight, or gated by seeker mode / network
+				// share), see MissileWarning.Update(). This is the cockpit RWR's own fairness
+				// gate. Scanning Missile.targetID directly would reveal a launch before the
+				// player's RWR warns them.
 				var incomingMissileIds = new HashSet<PersistentID>();
 				if (playerAircraft != null)
 				{
@@ -371,11 +377,13 @@ namespace NOTacMap
 						faction = FactionString(unit.NetworkHQ),
 						isPlayer = unit is Aircraft occupiedAircraft && occupiedAircraft.Player != null,
 						isIncomingMissile = incomingMissileIds.Contains(id),
-						speedKmh = unit.rb != null ? unit.rb.velocity.magnitude * 3.6f : 0f,
-						x = pos.x,
-						y = pos.y,
-						z = pos.z,
-						heading = unit.transform.eulerAngles.y
+						// Rounded to a tenth: at map scale a tenth of a metre is
+						// invisible, but it keeps every number short in the JSON.
+						speedKmh = Round1(unit.rb != null ? unit.rb.velocity.magnitude * 3.6f : 0f),
+						x = Round1(pos.x),
+						y = Round1(pos.y),
+						z = Round1(pos.z),
+						heading = Round1(unit.transform.eulerAngles.y)
 					};
 
 					if (unit is Missile missile)
@@ -412,7 +420,7 @@ namespace NOTacMap
 							&& (!missile.targetID.TryGetUnit(out Unit goneTarget) || goneTarget == null || goneTarget.disabled))
 						{
 							// Still pointed at a unit that's destroyed (or gone). Lets the page
-							// tell a kill apart from a seeker that dropped its lock - that one
+							// tell a kill apart from a seeker that dropped its lock, that one
 							// clears targetID itself (Missile.SetTarget(null)).
 							snap.targetDestroyed = true;
 						}
@@ -433,7 +441,7 @@ namespace NOTacMap
 				{
 					// Not necessarily present in trackingDatabase/factionUnits
 					// (an enemy-launched missile locked onto you isn't "your"
-					// unit) - add it explicitly so it doesn't go missing.
+					// unit), add it explicitly so it doesn't go missing.
 					AddUnit(id);
 				}
 
