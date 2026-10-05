@@ -58,6 +58,12 @@ internal static class Program
         // ---- phone, no token
         Check("phone no token", Ask(lan, LH, null, Phone).Status == 401);
         Check("phone 401 has a message", Ask(lan, LH, null, Phone).Message != null);
+        Check("401 reason: no secret", Ask(lan, LH, null, Phone).Reason == "no secret in the request");
+        Check("401 reason: wrong token", Ask(lan, LH, null, Phone, query: "t=nope").Reason == "wrong secret");
+        Check("401 reason: wrong cookie", Ask(lan, LH, null, Phone, cookie: "notacmap_t=nope").Reason == "wrong secret");
+        Check("401 reason never contains the token", !(Ask(lan, LH, null, Phone, query: "t=" + TOKEN + "x").Reason ?? "").Contains(TOKEN));
+        Check("403 reasons are filled in", Ask(lan, "evil.com", null, Pc).Reason != null && Ask(off, LH, null, Phone).Reason != null
+            && Ask(lan, LH, "http://" + LH, Phone, "POST", "/settings", cookie: "notacmap_t=" + TOKEN).Reason != null);
         Check("phone wrong token", Ask(lan, LH, null, Phone, query: "t=nope").Status == 401);
         Check("phone empty token", Ask(lan, LH, null, Phone, query: "t=").Status == 401);
         Check("phone token prefix only", Ask(lan, LH, null, Phone, query: "t=" + TOKEN.Substring(0, 31)).Status == 401);

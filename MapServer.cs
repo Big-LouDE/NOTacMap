@@ -224,7 +224,7 @@ namespace NOTacMap
 				}
 				if (decision.Status != 0)
 				{
-					LogRejected(request, decision.Status);
+					LogRejected(request, decision);
 					Reject(context, decision.Status, decision.Message);
 					return;
 				}
@@ -434,19 +434,19 @@ namespace NOTacMap
 			catch { }
 		}
 
-		// Says once per device when something on the network is turned away, so a
-		// phone that opened the wrong link shows up in the log. Requests from this
+		// Says once per device and reason when something on the network is turned
+		// away, so a phone that opened the wrong link shows up in the log. Requests from this
 		// PC are not logged.
-		private void LogRejected(HttpListenerRequest request, int status)
+		private void LogRejected(HttpListenerRequest request, GuardDecision decision)
 		{
 			IPAddress from = request.RemoteEndPoint?.Address;
 			if (from == null || IPAddress.IsLoopback(from)) return;
-			string key = from.ToString();
+			string key = from + "|" + decision.Reason;
 			lock (rejectedLogged)
 			{
 				if (rejectedLogged.Count >= 32 || !rejectedLogged.Add(key)) return;
 			}
-			Plugin.Log?.LogInfo($"NOTacMap: turned away a request from {key} (status {status}).");
+			Plugin.Log?.LogInfo($"NOTacMap: turned away a request from {from} (status {decision.Status}: {decision.Reason}).");
 		}
 
 		private static void ServeFile(HttpListenerContext context, string fileName, string contentType)

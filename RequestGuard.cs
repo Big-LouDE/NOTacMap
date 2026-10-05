@@ -15,12 +15,13 @@ namespace NOTacMap
 		public int Status;
 		public string SetCookie;
 		public string RedirectTo;
-		public string Message;
+		public string Message; // shown to the person who was turned away
+		public string Reason;  // for the log, never contains the secret
 
 		public static GuardDecision Allow() { return new GuardDecision(); }
-		public static GuardDecision Reject(int status, string message = null)
+		public static GuardDecision Reject(int status, string reason, string message = null)
 		{
-			return new GuardDecision { Status = status, Message = message };
+			return new GuardDecision { Status = status, Reason = reason, Message = message };
 		}
 	}
 
@@ -59,7 +60,7 @@ namespace NOTacMap
 			// our addresses).
 			if (host == null || !allowedHosts.Contains(host))
 			{
-				return GuardDecision.Reject(403);
+				return GuardDecision.Reject(403, "address in the request is not one of ours");
 			}
 
 			// A request from another site carries its own Origin. Our own page
@@ -70,14 +71,14 @@ namespace NOTacMap
 				if (!origin.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
 					|| !allowedHosts.Contains(origin.Substring(prefix.Length)))
 				{
-					return GuardDecision.Reject(403);
+					return GuardDecision.Reject(403, "request comes from another site");
 				}
 			}
 
 			bool settingsPost = method == "POST" && path == "/settings";
 			if (method != "GET" && method != "HEAD" && !settingsPost)
 			{
-				return GuardDecision.Reject(405);
+				return GuardDecision.Reject(405, "method not allowed");
 			}
 
 			remote = Normalize(remote);
@@ -91,18 +92,18 @@ namespace NOTacMap
 			// not this PC is refused.
 			if (token == null)
 			{
-				return remote == null ? GuardDecision.Allow() : GuardDecision.Reject(403);
+				return remote == null ? GuardDecision.Allow() : GuardDecision.Reject(403, "LAN access is off");
 			}
 
 			// From here on it is another device.
 			if (!LanAddress.IsPrivate(remote))
 			{
-				return GuardDecision.Reject(403);
+				return GuardDecision.Reject(403, "not a private network address");
 			}
 			// Saving settings and the phone link are for this PC only.
 			if (settingsPost || path == "/lan")
 			{
-				return GuardDecision.Reject(403);
+				return GuardDecision.Reject(403, "this page is for the game PC only");
 			}
 
 			string cookie = ReadCookie(cookieHeader, CookieName);
@@ -126,7 +127,9 @@ namespace NOTacMap
 				};
 			}
 
-			return GuardDecision.Reject(401, "Open the phone link shown in the DISPLAY panel on the game PC.");
+			// Wrong secret and no secret are told apart in the log only.
+			string reason = (cookie != null || given != null) ? "wrong secret" : "no secret in the request";
+			return GuardDecision.Reject(401, reason, "Open the phone link shown in the DISPLAY panel on the game PC.");
 		}
 
 		private static IPAddress Normalize(IPAddress a)
