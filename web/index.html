@@ -132,6 +132,18 @@
   #legend .row { display: flex; align-items: center; gap: 6px; }
   #legend svg { width: 14px; height: 14px; flex: none; stroke: currentColor; fill: none; }
 
+  #lanGroup .note { white-space: normal; max-width: 260px; margin-bottom: 4px; }
+  .lan-row { display: flex; gap: 4px; align-items: center; }
+  #lanUrl {
+    flex: 1 1 auto; min-width: 0; background: #000; color: var(--hud-dim);
+    border: 1px solid var(--hud-dim); font: calc(10px * var(--text-scale)) "Consolas", monospace; padding: 2px 4px;
+  }
+  #lanCopy {
+    flex: none; background: transparent; border: 1px solid var(--hud-dim); color: var(--hud-dim);
+    font: calc(10px * var(--text-scale)) "Consolas", monospace; text-transform: uppercase; padding: 2px 6px; cursor: pointer;
+  }
+  #lanCopy:hover { color: var(--hud-green); border-color: var(--hud-green); }
+
   /* Panels never taller or wider than the screen, scrolling inside if needed. */
   .panel { box-sizing: border-box; max-width: calc(100vw - 28px); overflow: auto; }
 
@@ -236,6 +248,14 @@
       <label><input type="checkbox" data-group="display" data-key="darkMode">Dark mode (night vision)</label>
       <label><input type="checkbox" data-group="display" data-key="closeOnGameExit" checked>Close this tab when the game closes</label>
       <label><input type="checkbox" data-group="display" data-key="sleepWhenHidden" checked>Pause the feed while this tab is hidden (saves FPS)</label>
+    </div>
+    <div class="group" id="lanGroup" hidden>
+      <h4>Phone / tablet</h4>
+      <div class="note">Open this link on a device on the same network. Anyone who has it can see your map.</div>
+      <div class="lan-row">
+        <input id="lanUrl" type="text" readonly>
+        <button type="button" id="lanCopy">copy</button>
+      </div>
     </div>
     <div class="group">
       <h4>Colors</h4>
@@ -656,6 +676,29 @@ fetch('/settings').then(r => r.ok ? r.json() : null).catch(() => null).then(from
   syncColorControls();
   applyHudTextColor();
   applyDarkMode();
+});
+
+// The phone link, shown only on the PC itself and only if LAN access is on.
+if (!isRemoteViewer) {
+  fetch('/lan').then(r => r.ok ? r.json() : null).then(info => {
+    if (!info || !info.enabled) return;
+    document.getElementById('lanUrl').value = info.url;
+    document.getElementById('lanGroup').hidden = false;
+  }).catch(() => {});
+}
+document.getElementById('lanCopy').addEventListener('click', () => {
+  const input = document.getElementById('lanUrl');
+  const button = document.getElementById('lanCopy');
+  input.select();
+  input.setSelectionRange(0, input.value.length);
+  let copied = false;
+  try { copied = document.execCommand('copy'); } catch (e) { /* fall through */ }
+  if (!copied && navigator.clipboard) {
+    navigator.clipboard.writeText(input.value).catch(() => {});
+    copied = true;
+  }
+  button.textContent = copied ? 'copied' : 'select it';
+  setTimeout(() => { button.textContent = 'copy'; }, 1500);
 });
 
 document.querySelectorAll('.panel input[type=checkbox][data-group]').forEach(cb => {
