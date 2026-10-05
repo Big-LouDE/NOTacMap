@@ -69,7 +69,7 @@
     display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
   }
   #controls button {
-    background: transparent; border: 1px solid var(--hud-dim); color: var(--hud-dim);
+    background: rgba(0, 10, 0, 0.6); border: 1px solid var(--hud-dim); color: var(--hud-dim);
     font-size: calc(10px * var(--text-scale)); font-family: "Consolas", monospace;
     text-transform: uppercase; letter-spacing: 0.05em;
     padding: 4px 8px; cursor: pointer; white-space: nowrap;
@@ -107,28 +107,32 @@
   }
   .color-label { flex: 1 1 auto; min-width: 90px; }
   .color-swatch {
-    width: 14px; height: 14px; flex: none; border: 1px solid var(--hud-dim);
-    background: #000;
+    width: 34px; height: 18px; flex: none; border: 1px solid var(--hud-dim);
+    background: #000; padding: 0; cursor: pointer;
   }
-  .color-row input[type=number] {
-    width: 52px; flex: none; background: #000; color: var(--hud-dim);
-    border: 1px solid var(--hud-dim); font: calc(10px * var(--text-scale)) "Consolas", monospace;
-    padding: 1px 2px;
-  }
-  .color-row input[type=number]:disabled { opacity: 0.4; }
+  .color-swatch:hover { border-color: var(--hud-green); }
   .color-reset {
     flex: none; background: transparent; border: 1px solid var(--hud-dim); color: var(--hud-dim);
     cursor: pointer; font-size: calc(11px * var(--text-scale)); line-height: 1; padding: 1px 4px;
   }
   .color-reset:hover { color: var(--hud-green); border-color: var(--hud-green); }
-  .hud-text-custom { flex: none; display: flex; align-items: center; gap: 3px; cursor: pointer; }
-  .hud-text-custom input { cursor: pointer; }
   #legend {
     position: absolute; top: 34px; left: 14px;
     display: flex; flex-direction: column; gap: 3px;
     color: var(--hud-dim); font-size: calc(10px * var(--text-scale)); letter-spacing: 0.03em;
-    pointer-events: none; /* purely informational, hands-off, never intercepts clicks/drags on the map underneath */
+    cursor: pointer; user-select: none; -webkit-user-select: none;
   }
+  .legend-head {
+    text-transform: uppercase; letter-spacing: 0.08em; border: 1px solid var(--hud-dim);
+    padding: 1px 6px; width: fit-content; background: rgba(0, 10, 0, 0.6);
+  }
+  .legend-head::after { content: " +"; }
+  #legend.open .legend-head::after { content: " -"; }
+  .legend-rows {
+    display: none; flex-direction: column; gap: 3px; margin-top: 3px; padding: 4px 6px;
+    background: rgba(0, 10, 0, 0.6); color: var(--hud-green); width: fit-content;
+  }
+  #legend.open .legend-rows { display: flex; }
   #legend .row { display: flex; align-items: center; gap: 6px; }
   #legend svg { width: 14px; height: 14px; flex: none; stroke: currentColor; fill: none; }
 
@@ -145,6 +149,46 @@
   #lanCopy:hover { color: var(--hud-green); border-color: var(--hud-green); }
   #lanQr { display: block; margin-top: 6px; image-rendering: pixelated; max-width: 100%; }
 
+  /* Dark outline behind the page's own text (status, grid reference, legend). The map's
+     canvas text gets the same outline in drawText(). */
+  :root[data-outline] #status, :root[data-outline] #legend, :root[data-outline] #themeWarning {
+    text-shadow: 0 0 2px #000, 0 0 2px #000, 0 0 3px #000;
+  }
+  :root[data-outline] #gridRef { text-shadow: 0 0 2px #000, 0 0 2px #000, 0 0 4px rgba(63,219,94,0.5); }
+
+  /* Color picker: a honeycomb of colors like the usual web color pickers. */
+  #cpBackdrop {
+    position: fixed; inset: 0; z-index: 100; background: rgba(0, 0, 0, 0.55);
+    display: flex; align-items: center; justify-content: center;
+  }
+  #cpBackdrop[hidden] { display: none; }
+  #colorPicker {
+    box-sizing: border-box; background: #060d06; border: 1px solid var(--hud-dim);
+    color: var(--hud-dim); padding: 10px; width: 330px; max-width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px); overflow: auto;
+    font: calc(11px * var(--text-scale)) "Consolas", monospace;
+  }
+  .cp-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; color: var(--hud-green); text-transform: uppercase; letter-spacing: 0.05em; }
+  #cpClose, #cpReset {
+    background: transparent; border: 1px solid var(--hud-dim); color: var(--hud-dim); cursor: pointer;
+    font: inherit; padding: 2px 8px; text-transform: uppercase;
+  }
+  #cpClose:hover, #cpReset:hover { color: var(--hud-green); border-color: var(--hud-green); }
+  #cpHoney { display: block; width: 100%; height: auto; touch-action: manipulation; }
+  #cpHoney polygon { stroke: #060d06; stroke-width: 1.2; cursor: pointer; }
+  #cpHoney polygon:hover { stroke: #fff; stroke-width: 2; }
+  #cpHoney polygon.selected { stroke: #fff; stroke-width: 3; }
+  #cpGrays { display: flex; gap: 3px; margin: 8px 0 6px; }
+  #cpGrays button { flex: 1 1 0; height: 26px; border: 1px solid #060d06; padding: 0; cursor: pointer; }
+  #cpGrays button.selected { outline: 2px solid #fff; outline-offset: 0; }
+  .cp-rgb { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  .cp-tag { width: 34px; color: var(--hud-green); }
+  .cp-rgb input {
+    min-width: 0; flex: 1 1 0; background: #000; color: var(--hud-green); border: 1px solid var(--hud-dim);
+    font: inherit; padding: 4px 4px;
+  }
+  .cp-preview { flex: none; width: 40px; height: 24px; border: 1px solid var(--hud-dim); }
+
   /* Panels never taller or wider than the screen, scrolling inside if needed. */
   .panel { box-sizing: border-box; max-width: calc(100vw - 28px); overflow: auto; }
 
@@ -157,9 +201,19 @@
     .panel input[type=checkbox] { width: 18px; height: 18px; }
     .color-reset { padding: 4px 8px; }
   }
-  /* Narrow screens (phones): the legend would cover the map. */
+  /* Short screens (a phone held sideways): the buttons go in a row so the panels get
+     the height, and the color picker puts the numbers beside the honeycomb. */
+  @media (max-height: 520px) {
+    #controls { flex-direction: row; flex-wrap: wrap; justify-content: flex-end; align-items: center; max-width: calc(100vw - 28px); }
+    #colorPicker { width: min(660px, calc(100vw - 20px)); max-height: calc(100vh - 12px); }
+    .cp-body { display: flex; gap: 14px; align-items: flex-start; }
+    .cp-left { flex: 0 0 auto; width: min(300px, calc((100vh - 110px) * 1.12)); }
+    .cp-right { flex: 1 1 auto; min-width: 190px; }
+  }
+  #legend .legend-rows { max-height: calc(100vh - 90px); overflow: auto; }
+
+  /* Narrow screens (phones). */
   @media (max-width: 700px) {
-    #legend { display: none; }
     #controls { right: 8px; }
     #status { left: 8px; }
     #gridRef { right: 8px; }
@@ -169,7 +223,9 @@
 </head>
 <body>
 <div id="status">connecting...</div>
-<div id="legend">
+<div id="legend" title="Tap to open or close">
+  <div class="legend-head" id="legendHead">legend</div>
+  <div class="legend-rows">
   <div class="row"><svg viewBox="0 0 16 16"><polygon points="8,2 13,12 8,9 3,12" fill="currentColor" stroke="none"/></svg>Plane</div>
   <div class="row"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="3.5"/><line x1="8" y1="1" x2="8" y2="15"/><line x1="1" y1="8" x2="15" y2="8"/></svg>Helicopter</div>
   <div class="row"><svg viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" fill="currentColor" stroke="none"/></svg>Tank</div>
@@ -184,7 +240,9 @@
   <div class="row"><svg viewBox="0 0 16 16"><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/></svg>Pilot (ejected, hidden by default)</div>
 </div>
 <div id="gridRef"></div>
-<div id="themeWarning">Live theme not loaded yet - showing fallback palette. It will switch over by itself once you're in a mission.</div>
+<div id="themeWarning">Live theme not loaded yet - showing fallback palette. It will switch over by itself once you're in a mission.
+  </div>
+</div>
 <div id="controls">
   <button id="recenterBtn">&#8982; recenter on me</button>
   <button id="fullscreenBtn" hidden>&#9974; fullscreen</button>
@@ -244,6 +302,7 @@
           <option value="30">30 fps (smoothest)</option>
         </select>
       </label>
+      <label><input type="checkbox" data-group="display" data-key="textOutline">Dark outline on text (easier to read on the map)</label>
       <label><input type="checkbox" data-group="display" data-key="showPilotNames">Show pilot names</label>
       <label><input type="checkbox" data-group="display" data-key="realNames">Use real names instead of callsigns</label>
       <label><input type="checkbox" data-group="display" data-key="darkMode">Dark mode (night vision)</label>
@@ -263,92 +322,85 @@
       <h4>Colors</h4>
       <div class="color-row" data-color-key="friend">
         <span class="color-label">Friendly (you)</span>
-        <span class="color-swatch"></span>
-        <input type="number" min="0" max="255" class="c-r">
-        <input type="number" min="0" max="255" class="c-g">
-        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-swatch" title="Pick a color"></button>
         <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
       </div>
       <div class="color-row" data-color-key="npc">
         <span class="color-label">AI / structures</span>
-        <span class="color-swatch"></span>
-        <input type="number" min="0" max="255" class="c-r">
-        <input type="number" min="0" max="255" class="c-g">
-        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-swatch" title="Pick a color"></button>
         <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
       </div>
       <div class="color-row" data-color-key="enemy">
         <span class="color-label">Enemy</span>
-        <span class="color-swatch"></span>
-        <input type="number" min="0" max="255" class="c-r">
-        <input type="number" min="0" max="255" class="c-g">
-        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-swatch" title="Pick a color"></button>
         <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
       </div>
       <div class="color-row" data-color-key="myMissile">
         <span class="color-label">Your missile</span>
-        <span class="color-swatch"></span>
-        <input type="number" min="0" max="255" class="c-r">
-        <input type="number" min="0" max="255" class="c-g">
-        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-swatch" title="Pick a color"></button>
         <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
       </div>
       <div class="color-row" data-color-key="teammateMissile">
         <span class="color-label">Teammate missile</span>
-        <span class="color-swatch"></span>
-        <input type="number" min="0" max="255" class="c-r">
-        <input type="number" min="0" max="255" class="c-g">
-        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-swatch" title="Pick a color"></button>
         <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
       </div>
       <div class="color-row" data-color-key="lock">
         <span class="color-label">Lock indicator</span>
-        <span class="color-swatch"></span>
-        <input type="number" min="0" max="255" class="c-r">
-        <input type="number" min="0" max="255" class="c-g">
-        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-swatch" title="Pick a color"></button>
         <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
       </div>
       <div class="color-row" data-color-key="mark">
         <span class="color-label">Marked target</span>
-        <span class="color-swatch"></span>
-        <input type="number" min="0" max="255" class="c-r">
-        <input type="number" min="0" max="255" class="c-g">
-        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-swatch" title="Pick a color"></button>
         <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
       </div>
       <div class="color-row" data-color-key="runwayGuide">
         <span class="color-label">Runway guide</span>
-        <span class="color-swatch"></span>
-        <input type="number" min="0" max="255" class="c-r">
-        <input type="number" min="0" max="255" class="c-g">
-        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-swatch" title="Pick a color"></button>
         <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
       </div>
       <div class="color-row" data-color-key="weaponRange">
         <span class="color-label">Weapon range (static)</span>
-        <span class="color-swatch"></span>
-        <input type="number" min="0" max="255" class="c-r">
-        <input type="number" min="0" max="255" class="c-g">
-        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-swatch" title="Pick a color"></button>
         <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
       </div>
       <div class="color-row" data-color-key="weaponRangeArmed">
         <span class="color-label">Weapon range (armed)</span>
-        <span class="color-swatch"></span>
-        <input type="number" min="0" max="255" class="c-r">
-        <input type="number" min="0" max="255" class="c-g">
-        <input type="number" min="0" max="255" class="c-b">
+        <button type="button" class="color-swatch" title="Pick a color"></button>
         <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
       </div>
       <div class="color-row" data-color-key="hudText">
         <span class="color-label">HUD text</span>
-        <label class="hud-text-custom"><input type="checkbox" id="hudTextCustomToggle">custom</label>
-        <span class="color-swatch"></span>
-        <input type="number" min="0" max="255" class="c-r" disabled>
-        <input type="number" min="0" max="255" class="c-g" disabled>
-        <input type="number" min="0" max="255" class="c-b" disabled>
-        <button type="button" class="color-reset" title="Reset to default (follow live theme)">&#8634;</button>
+        <button type="button" class="color-swatch" title="Pick a color"></button>
+        <button type="button" class="color-reset" title="Reset to default (follow the game theme)">&#8634;</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="cpBackdrop" hidden>
+  <div id="colorPicker" role="dialog" aria-label="Pick a color">
+    <div class="cp-head"><span id="cpTitle">Color</span><button type="button" id="cpClose" title="Close">&#10005;</button></div>
+    <div class="cp-body">
+      <div class="cp-left">
+        <svg id="cpHoney" role="group" aria-label="Colors"></svg>
+        <div id="cpGrays" aria-label="Grays"></div>
+      </div>
+      <div class="cp-right">
+        <div class="cp-rgb">
+          <span class="cp-tag">RGB</span>
+          <input type="number" min="0" max="255" id="cpR" aria-label="Red">
+          <input type="number" min="0" max="255" id="cpG" aria-label="Green">
+          <input type="number" min="0" max="255" id="cpB" aria-label="Blue">
+        </div>
+        <div class="cp-rgb">
+          <span class="cp-tag">HEX</span>
+          <input type="text" id="cpHex" maxlength="7" spellcheck="false" aria-label="Hex color">
+        </div>
+        <div class="cp-rgb">
+          <span class="cp-preview" id="cpPreview" title="Current color"></span>
+          <button type="button" id="cpReset" title="Back to the default">reset</button>
+        </div>
       </div>
     </div>
   </div>
@@ -502,7 +554,7 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true },
+  display: { textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null },
   overlays: { runwayGuides: true, weaponRange: true, grid: true },
   trails: { friendlyAircraft: true, enemyAircraft: true, friendlyMissiles: true, enemyMissiles: true, other: true },
   // Every fixed (non-theme) color on the map, customizable. hudText is the
@@ -573,29 +625,18 @@ function syncDisplayControls() {
   applyTextScale();
 }
 
+function themeHudGreen() {
+  return getComputedStyle(document.documentElement).getPropertyValue('--hud-green').trim() || '#3fdb5e';
+}
+
+// hudText's sentinel (-1) means "following the live theme", so the swatch
+// shows whatever --hud-green is right now, not an invalid color.
 function updateSwatch(row, c) {
-  const swatch = row.querySelector('.color-swatch');
-  // hudText's sentinel (-1) means "following the live theme", show
-  // whatever --hud-green is currently computed as, not an invalid color.
-  swatch.style.background = c.r < 0
-    ? getComputedStyle(document.documentElement).getPropertyValue('--hud-green').trim() || '#3fdb5e'
-    : rgbStr(c);
+  row.querySelector('.color-swatch').style.background = c.r < 0 ? themeHudGreen() : rgbStr(c);
 }
 
 function syncColorRow(row) {
-  const key = row.dataset.colorKey;
-  const c = settings.colors[key];
-  const isHudText = key === 'hudText';
-  const custom = !isHudText || c.r >= 0;
-  const [rIn, gIn, bIn] = ['.c-r', '.c-g', '.c-b'].map(sel => row.querySelector(sel));
-  rIn.value = custom ? c.r : '';
-  gIn.value = custom ? c.g : '';
-  bIn.value = custom ? c.b : '';
-  rIn.disabled = gIn.disabled = bIn.disabled = isHudText && !custom;
-  if (isHudText) {
-    row.querySelector('#hudTextCustomToggle').checked = custom;
-  }
-  updateSwatch(row, c);
+  updateSwatch(row, settings.colors[row.dataset.colorKey]);
 }
 
 function syncColorControls() {
@@ -607,34 +648,178 @@ function applyColorChange(key) {
   saveSettings();
 }
 
-document.querySelectorAll('.color-row').forEach(row => {
+function resetColor(row) {
   const key = row.dataset.colorKey;
-  const rIn = row.querySelector('.c-r'), gIn = row.querySelector('.c-g'), bIn = row.querySelector('.c-b');
+  settings.colors[key] = { ...DEFAULT_SETTINGS.colors[key] };
+  syncColorRow(row);
+  applyColorChange(key);
+}
 
-  function commit() {
-    const clamp = v => Math.max(0, Math.min(255, Math.round(Number(v)) || 0));
-    settings.colors[key] = { r: clamp(rIn.value), g: clamp(gIn.value), b: clamp(bIn.value) };
-    updateSwatch(row, settings.colors[key]);
-    applyColorChange(key);
+// The colors as a honeycomb (white in the middle, hues around it, darker
+// toward the rim), plus a row of grays and RGB/hex boxes for any exact color.
+function hsvToRgb(h, s, v) {
+  const c = v * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = v - c;
+  let rgb;
+  if (h < 60) rgb = [c, x, 0]; else if (h < 120) rgb = [x, c, 0]; else if (h < 180) rgb = [0, c, x];
+  else if (h < 240) rgb = [0, x, c]; else if (h < 300) rgb = [x, 0, c]; else rgb = [c, 0, x];
+  return rgb.map(t => Math.round((t + m) * 255));
+}
+
+const colorPicker = (() => {
+  const SIZE = 13, SQ3 = Math.sqrt(3), RADIUS = 6;
+  const backdrop = document.getElementById('cpBackdrop');
+  const honey = document.getElementById('cpHoney');
+  const grays = document.getElementById('cpGrays');
+  const inR = document.getElementById('cpR'), inG = document.getElementById('cpG'), inB = document.getElementById('cpB');
+  const inHex = document.getElementById('cpHex');
+  const preview = document.getElementById('cpPreview');
+  const swatches = []; // { el, r, g, b } for the honeycomb and the grays
+  let activeRow = null;
+
+  const hex = c => '#' + [c.r, c.g, c.b].map(v => v.toString(16).padStart(2, '0')).join('');
+  const clamp = v => Math.max(0, Math.min(255, Math.round(Number(v)) || 0));
+
+  function honeyColor(q, r) {
+    const ring = Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r));
+    if (ring === 0) return [255, 255, 255];
+    const x = q + r / 2, y = r * SQ3 / 2;
+    const hue = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    const sat = Math.min(ring, 3) / 3;               // pastel in the middle, full color at ring 3
+    const val = ring <= 3 ? 1 : 1 - (ring - 3) * 0.24; // then darker out to the rim
+    return hsvToRgb(hue, sat, val);
   }
-  [rIn, gIn, bIn].forEach(input => input.addEventListener('change', commit));
 
-  row.querySelector('.color-reset').addEventListener('click', () => {
-    settings.colors[key] = { ...DEFAULT_SETTINGS.colors[key] };
-    syncColorRow(row);
-    applyColorChange(key);
+  // build the honeycomb once
+  const NS = 'http://www.w3.org/2000/svg';
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (let r = -RADIUS; r <= RADIUS; r++) {
+    for (let q = -RADIUS; q <= RADIUS; q++) {
+      if (Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)) > RADIUS) continue;
+      const cx = SIZE * SQ3 * (q + r / 2), cy = SIZE * 1.5 * r;
+      const [rr, gg, bb] = honeyColor(q, r);
+      const poly = document.createElementNS(NS, 'polygon');
+      const pts = [];
+      for (let i = 0; i < 6; i++) {
+        const ang = Math.PI / 180 * (60 * i - 30);
+        pts.push((cx + SIZE * Math.cos(ang)).toFixed(1) + ',' + (cy + SIZE * Math.sin(ang)).toFixed(1));
+      }
+      poly.setAttribute('points', pts.join(' '));
+      poly.setAttribute('fill', `rgb(${rr},${gg},${bb})`);
+      poly.setAttribute('aria-label', hex({ r: rr, g: gg, b: bb }));
+      poly.addEventListener('click', () => choose(rr, gg, bb));
+      honey.appendChild(poly);
+      swatches.push({ el: poly, r: rr, g: gg, b: bb });
+      minX = Math.min(minX, cx - SIZE * SQ3 / 2); maxX = Math.max(maxX, cx + SIZE * SQ3 / 2);
+      minY = Math.min(minY, cy - SIZE); maxY = Math.max(maxY, cy + SIZE);
+    }
+  }
+  honey.setAttribute('viewBox', `${minX - 2} ${minY - 2} ${maxX - minX + 4} ${maxY - minY + 4}`);
+
+  [0, 32, 64, 96, 128, 160, 192, 224, 255].forEach(v => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.style.background = `rgb(${v},${v},${v})`;
+    b.setAttribute('aria-label', hex({ r: v, g: v, b: v }));
+    b.addEventListener('click', () => choose(v, v, v));
+    grays.appendChild(b);
+    swatches.push({ el: b, r: v, g: v, b: v });
   });
 
-  if (key === 'hudText') {
-    row.querySelector('#hudTextCustomToggle').addEventListener('change', e => {
-      settings.colors.hudText = e.target.checked
-        ? { r: 63, g: 219, b: 94 } // starting point when first enabling, matches the CSS fallback green
-        : { r: -1, g: -1, b: -1 };
-      syncColorRow(row);
-      applyColorChange('hudText');
-    });
+  function currentColor() {
+    const c = settings.colors[activeRow.dataset.colorKey];
+    if (c.r >= 0) return c;
+    const t = parseRgb(themeHudGreen()) || [63, 219, 94];
+    return { r: t[0], g: t[1], b: t[2] };
   }
+
+  function refresh(keepFields) {
+    const c = currentColor();
+    if (!keepFields) {
+      inR.value = c.r; inG.value = c.g; inB.value = c.b;
+      inHex.value = hex(c);
+    }
+    preview.style.background = rgbStr(c);
+    swatches.forEach(sw => sw.el.classList.toggle('selected', sw.r === c.r && sw.g === c.g && sw.b === c.b));
+  }
+
+  function choose(r, g, b, keepFields) {
+    const key = activeRow.dataset.colorKey;
+    settings.colors[key] = { r: clamp(r), g: clamp(g), b: clamp(b) };
+    updateSwatch(activeRow, settings.colors[key]);
+    applyColorChange(key);
+    refresh(keepFields);
+  }
+
+  function open(row) {
+    activeRow = row;
+    document.getElementById('cpTitle').textContent = row.querySelector('.color-label').textContent;
+    backdrop.hidden = false;
+    refresh();
+  }
+  function close() {
+    backdrop.hidden = true;
+    activeRow = null;
+  }
+
+  // typing in the boxes changes the color as you go
+  [inR, inG, inB].forEach(input => {
+    input.addEventListener('input', () => {
+      if (input.value === '') return;
+      choose(inR.value, inG.value, inB.value, true);
+      inHex.value = hex(settings.colors[activeRow.dataset.colorKey]);
+    });
+    input.addEventListener('change', () => refresh());
+  });
+  inHex.addEventListener('input', () => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(inHex.value.trim());
+    if (!m) return;
+    const n = parseInt(m[1], 16);
+    choose(n >> 16, (n >> 8) & 255, n & 255, true);
+    inR.value = settings.colors[activeRow.dataset.colorKey].r;
+    inG.value = settings.colors[activeRow.dataset.colorKey].g;
+    inB.value = settings.colors[activeRow.dataset.colorKey].b;
+  });
+  inHex.addEventListener('change', () => refresh());
+
+  document.getElementById('cpReset').addEventListener('click', () => {
+    resetColor(activeRow);
+    refresh();
+  });
+  document.getElementById('cpClose').addEventListener('click', close);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !backdrop.hidden) close(); });
+
+  return { open, close, isOpen: () => !backdrop.hidden };
+})();
+
+document.querySelectorAll('.color-row').forEach(row => {
+  row.querySelector('.color-swatch').addEventListener('click', () => colorPicker.open(row));
+  row.querySelector('.color-reset').addEventListener('click', () => resetColor(row));
 });
+
+// The legend is one tappable block. Open or closed is remembered per device;
+// until it has been tapped it is open on a wide mouse screen and closed on a touch screen.
+const legendEl = document.getElementById('legend');
+function legendIsOpen() {
+  const saved = settings.display.legendOpen;
+  if (saved !== null && saved !== undefined) return !!saved;
+  return window.innerWidth >= 700 && !matchMedia('(pointer: coarse)').matches;
+}
+function applyLegendState() {
+  legendEl.classList.toggle('open', legendIsOpen());
+}
+legendEl.addEventListener('click', () => {
+  settings.display.legendOpen = !legendIsOpen();
+  applyLegendState();
+  saveSettings();
+});
+window.addEventListener('resize', applyLegendState);
+
+// A dark outline behind text keeps it readable on any terrain. Page text gets it
+// from CSS (the data-outline attribute), canvas text from drawText().
+function applyTextOutline() {
+  document.documentElement.toggleAttribute('data-outline', !!settings.display.textOutline);
+}
 
 // On the PC running the game, settings live in settings.json next to the plugin.
 // Any other device (a phone or tablet over the LAN) can't write there, so it
@@ -678,6 +863,8 @@ fetch('/settings').then(r => r.ok ? r.json() : null).catch(() => null).then(from
   syncColorControls();
   applyHudTextColor();
   applyDarkMode();
+  applyTextOutline();
+  applyLegendState();
 });
 
 // QR code for the phone link. Byte mode, versions 1 to 10, error correction M,
@@ -966,6 +1153,7 @@ document.querySelectorAll('.panel input[type=checkbox][data-group]').forEach(cb 
 });
 
 document.querySelector('[data-group="display"][data-key="darkMode"]').addEventListener('change', applyDarkMode);
+document.querySelector('[data-group="display"][data-key="textOutline"]').addEventListener('change', applyTextOutline);
 
 document.getElementById('textScaleSelect').addEventListener('change', e => {
   settings.display.textScale = parseFloat(e.target.value);
@@ -1710,6 +1898,21 @@ function measureCached(text) {
   return w;
 }
 
+// Fills text, with a dark outline behind it when that setting is on.
+function drawText(text, x, y) {
+  if (settings.display.textOutline) {
+    const strokeStyle = ctx.strokeStyle, lineWidth = ctx.lineWidth, lineJoin = ctx.lineJoin;
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.strokeText(text, x, y);
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth = lineWidth;
+    ctx.lineJoin = lineJoin;
+  }
+  ctx.fillText(text, x, y);
+}
+
 // Draws text only if it doesn't overlap a label already placed this frame.
 // Airbases are drawn before units, so they win ties. Returns false if skipped,
 // so callers can leave dense clusters showing icons only.
@@ -1723,7 +1926,7 @@ function tryDrawLabel(text, x, y) {
     }
   }
   placedLabels.push(box);
-  ctx.fillText(text, x, y);
+  drawText(text, x, y);
   return true;
 }
 
@@ -2221,7 +2424,7 @@ function draw() {
       ctx.lineTo(tx + 12, boxY + 5);
       ctx.stroke();
     }
-    ctx.fillText(lockLabel, tx + 12, boxY + 9);
+    drawText(lockLabel, tx + 12, boxY + 9);
     placedLabels.push({ x: tx + 12, y: boxY, w: textW, h: 12 });
   });
 
@@ -2253,7 +2456,7 @@ function draw() {
         setFont(10, true);
         const who = !l.mine && settings.display.showPilotNames ? `${displayNameFor(l.ownerName, l.ownerSteamId)}: ` : '';
         const text = `${who}NO LOCK: ${l.targetName.trim()} (${Math.floor(el)}s)`;
-        ctx.fillText(text, tx + 15, ty + 3);
+        drawText(text, tx + 15, ty + 3);
         placedLabels.push({ x: tx + 15, y: ty - 6, w: ctx.measureText(text).width, h: 12 });
       } else {
         // Tether snaps: the line from the missile to the old lock spot breaks
@@ -2277,7 +2480,7 @@ function draw() {
         ctx.setLineDash([]);
         ctx.fillStyle = 'rgb(200,200,200)';
         setFont(10, true);
-        ctx.fillText('LOCK LOST', mx + 9, my - 16);
+        drawText('LOCK LOST', mx + 9, my - 16);
         ctx.globalAlpha = 1;
       }
     });

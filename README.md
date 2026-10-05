@@ -18,7 +18,8 @@ A live tactical map for [Nuclear Option](https://store.steampowered.com/app/2168
 - Weapon range ring: a circle at your weapon's base range that turns into a cone along your heading once you mark a target. The range matches the cockpit HUD
 - Runway approach lines extending past each runway end
 - Fading trails behind moving units, with a Trails folder in FILTER to pick which kinds. The grid can be switched off too
-- Every map color is editable under DISPLAY
+- Every map color is editable under DISPLAY, from a honeycomb palette or with RGB and hex values
+- Tap the legend to open or close it. A dark outline on text keeps labels readable over the terrain (switch it off in DISPLAY)
 - FILTER and DISPLAY (top right) control what's shown, how it looks, and the colors
 - The background map comes from the game's own terrain texture, so any map works
 - Pan, zoom, and a button to recenter on you
