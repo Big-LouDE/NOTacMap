@@ -18,11 +18,11 @@ A live tactical map for [Nuclear Option](https://store.steampowered.com/app/2168
 - Weapon range ring: a circle at your weapon's base range that turns into a cone along your heading once you mark a target. The range matches the cockpit HUD
 - Runway approach lines extending past each runway end
 - Fading trails behind moving units, with a Trails folder in FILTER to pick which kinds. The grid can be switched off too
-- Ejected pilots are hidden by default
 - Every map color is editable under DISPLAY
-- FILTER and DISPLAY (top right) control what's shown, text size, pilot names, dark mode, and colors. Saved to a `settings.json` next to the plugin
+- FILTER and DISPLAY (top right) control what's shown, how it looks, and the colors
 - The background map comes from the game's own terrain texture, so any map works
 - Pan, zoom, and a button to recenter on you
+- Light on frame rate: redraws slowly when idle, speeds up when you pan or zoom, and sleeps while the tab is hidden
 
 ## Possible add-ons
 
@@ -30,7 +30,7 @@ Sharing marked targets between teammates who both have the mod. The game doesn't
 
 ## How it works
 
-The plugin (`NOTacMap.dll`) runs inside the game and starts a local HTTP server (`http://localhost:8123/` by default). It only reads data your client already has, and never asks the game server for anything extra or sends networked commands. Marked targets and locks only show what the game's own tracker knows. The page (`web/index.html`) is a single HTML/JS file that connects over Server-Sent Events and draws on a canvas.
+The plugin (`NOTacMap.dll`) runs inside the game and starts a local HTTP server (`http://localhost:8123/` by default). It only reads data your client already has, and never asks the game server for anything extra or sends networked commands. Marked targets and locks only show what the game's own tracker knows. Other websites can't read it or change your settings. The page (`web/index.html`) is a single HTML/JS file that connects over Server-Sent Events and draws on a canvas.
 
 ## Installation
 
@@ -43,12 +43,12 @@ Either way, the map page opens in your default browser when the game starts. Dra
 To build from source:
 
 1. Requires the .NET 8 SDK and a local copy of Nuclear Option with BepInEx 5 installed.
-2. `dotnet build NOTacMap.csproj -c Release` (pass `-p:GameDir=<path>` if your game isn't at the default path in the `.csproj`).
+2. `dotnet build NOTacMap.csproj -c Release` (pass `-p:GameDir=<path>` if your game isn't in the default Steam folder).
 3. Copy `NOTacMap.dll` and `Newtonsoft.Json.dll` from the build output, and `index.html` from the `web/` folder, into `BepInEx/plugins/NOTacMap/` in your game folder. All three go in that one folder next to each other. Don't copy the `web/` folder itself, or the page won't load.
 
 ## Configuration
 
-All settings are on screen. **FILTER** covers unit types, weapon categories, overlays, and trails. **DISPLAY** covers text size, pilot names, dark mode, and colors. Both save to `settings.json` next to the plugin.
+All settings are on screen. **FILTER** covers unit types, weapon categories, overlays, and trails. **DISPLAY** covers text size, redraw rate, pilot names, dark mode, and colors. Both save to `settings.json` next to the plugin.
 
 ## About this project
 
@@ -60,7 +60,7 @@ Claude helped out here and there while I was building this, mostly to make sense
 - [Newtonsoft.Json](https://github.com/JamesNK/Newtonsoft.Json) (MIT): JSON serialization
 - [Mirage](https://github.com/MirageNet/Mirage) (MIT): referenced read-only against the game's own networking types, not redistributed
 
-No in-game assets, textures, or models are bundled or redistributed. The background map image is captured from the game's own `MapSettings.TerrainColorMap` at runtime on the user's machine, each time the plugin loads. It's never stored in this repository or shipped in a release.
+No in-game assets are bundled. The background map is captured from the game's own terrain texture on your machine each time the plugin loads, and is never stored.
 
 ## License
 

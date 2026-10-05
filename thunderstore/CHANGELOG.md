@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.1
+
+Better
+- Big drop in how much the map costs your FPS. It redraws 8 times a second while nothing happens (changeable under DISPLAY) and goes faster while you pan, zoom or something animates
+- Units off screen are no longer drawn, and standing structures no longer get trails
+- Each update from the game is roughly 25 to 60% smaller, depending on the map
+- Sleep and wake: a tab that has been hidden for 10 seconds stops asking for updates, and wakes up again when you come back. Can be turned off under DISPLAY
+- The theme loads by itself once you're in a mission, no manual reload
+- Your name label and the speed/altitude block no longer overlap
+
+Security
+- Other websites can't read the map or overwrite your saved settings anymore
+- Settings saves are limited to 64 KB of valid JSON, and only 8 tabs can connect at once
+
 ## 1.1.0
 
 New
