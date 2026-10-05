@@ -142,11 +142,42 @@
     flex: 1 1 auto; min-width: 0; background: #000; color: var(--hud-dim);
     border: 1px solid var(--hud-dim); font: calc(10px * var(--text-scale)) "Consolas", monospace; padding: 2px 4px;
   }
-  #lanCopy {
+  #lanCopy, .mini-btn {
     flex: none; background: transparent; border: 1px solid var(--hud-dim); color: var(--hud-dim);
     font: calc(10px * var(--text-scale)) "Consolas", monospace; text-transform: uppercase; padding: 2px 6px; cursor: pointer;
   }
-  #lanCopy:hover { color: var(--hud-green); border-color: var(--hud-green); }
+  #lanCopy:hover, .mini-btn:hover { color: var(--hud-green); border-color: var(--hud-green); }
+  #lanGroup .mini-btn { margin-top: 6px; }
+
+  /* Start screen: shown on the game PC when LAN access is on, before the map starts. */
+  #startScreen {
+    position: fixed; inset: 0; z-index: 200; background: #030803; overflow: auto;
+    display: flex; align-items: flex-start; justify-content: center;
+    color: var(--hud-dim); font: calc(13px * var(--text-scale)) "Consolas", monospace;
+  }
+  #startScreen[hidden] { display: none; }
+  .start-card { box-sizing: border-box; width: min(560px, 100%); padding: 24px 16px; margin: auto 0; }
+  .start-card h2 { margin: 0 0 12px; color: var(--hud-green); font-size: 1.3em; font-weight: normal; text-transform: uppercase; letter-spacing: 0.06em; }
+  .start-card ol { margin: 6px 0 12px; padding-left: 22px; line-height: 1.5; }
+  .start-card summary { cursor: pointer; color: var(--hud-green); text-transform: uppercase; letter-spacing: 0.05em; }
+  .start-choices { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 10px; }
+  .start-choices button, .start-actions button {
+    background: rgba(0, 10, 0, 0.6); border: 1px solid var(--hud-dim); color: var(--hud-green);
+    font: inherit; padding: 12px 14px; text-align: left; cursor: pointer;
+  }
+  .start-choices button:hover, .start-actions button:hover { border-color: var(--hud-green); }
+  .start-choices b { display: block; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .start-choices span { color: var(--hud-dim); }
+  .start-remember { display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 8px; }
+  .start-remember input { accent-color: var(--hud-green); width: 18px; height: 18px; }
+  .start-note { color: var(--hud-dim); font-size: 0.85em; margin-top: 6px; }
+  .start-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .start-actions button { padding: 8px 12px; }
+  #startQr { display: block; margin: 8px 0; image-rendering: pixelated; max-width: 100%; height: auto; }
+  #startUrl {
+    flex: 1 1 auto; min-width: 0; background: #000; color: var(--hud-dim);
+    border: 1px solid var(--hud-dim); font: inherit; padding: 6px 6px;
+  }
   #lanQr { display: block; margin-top: 6px; image-rendering: pixelated; max-width: 100%; }
 
   /* Dark outline behind the page's own text (status, grid reference, legend). The map's
@@ -211,6 +242,17 @@
     .cp-right { flex: 1 1 auto; min-width: 190px; }
   }
   #legend .legend-rows { max-height: calc(100vh - 90px); overflow: auto; }
+  /* The start screen on a short screen: the code beside the text, the two choices side by side. */
+  @media (max-height: 520px) {
+    .start-card { width: min(800px, 100%); padding: 10px 16px; }
+    .start-card h2 { margin-bottom: 6px; }
+    .start-choices { flex-direction: row; }
+    .start-choices button { flex: 1 1 0; }
+    #startDeviceView:not([hidden]) { display: grid; grid-template-columns: auto 1fr; column-gap: 18px; align-items: start; }
+    #startDeviceView h2 { grid-column: 1 / -1; }
+    #startDeviceView canvas { grid-column: 1; grid-row: 2 / span 4; margin: 0; }
+    #startDeviceView > :not(h2):not(canvas) { grid-column: 2; }
+  }
 
   /* Narrow screens (phones). */
   @media (max-width: 700px) {
@@ -318,6 +360,14 @@
         <button type="button" id="lanCopy">copy</button>
       </div>
       <canvas id="lanQr" title="Scan with the phone camera"></canvas>
+      <label>When this page opens
+        <select id="startModeSelect">
+          <option value="ask">Ask me</option>
+          <option value="here">Show the map here</option>
+          <option value="device">Show the phone link</option>
+        </select>
+      </label>
+      <button type="button" id="lanShowScreen" class="mini-btn">Show the phone screen now</button>
     </div>
     <div class="group">
       <h4>Colors</h4>
@@ -375,6 +425,43 @@
         <span class="color-label">HUD text</span>
         <button type="button" class="color-swatch" title="Pick a color"></button>
         <button type="button" class="color-reset" title="Reset to default (follow the game theme)">&#8634;</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="startScreen" hidden>
+  <div class="start-card">
+    <div id="startChoose">
+      <h2>Where do you want to see the map?</h2>
+      <details id="startHelp">
+        <summary>How this works</summary>
+        <ol>
+          <li>The game serves the map as a web page. You can look at it on this PC, or on another device (phone, tablet, another computer).</li>
+          <li>For another device, it has to be on the same wifi as this PC. Scan the QR code with its camera, or type the link into its browser.</li>
+          <li>If you pick another device, this tab only shows the QR code and the link. It draws no map, so it costs the game no frame rate.</li>
+          <li>Anyone who has the link can see your map, so keep it to yourself.</li>
+        </ol>
+      </details>
+      <div class="start-choices">
+        <button type="button" id="startHere"><b>On this PC</b><span>Show the map in this browser tab.</span></button>
+        <button type="button" id="startDevice"><b>On another device</b><span>Phone, tablet or another computer on the same wifi. You get a QR code and a link.</span></button>
+      </div>
+      <label class="start-remember"><input type="checkbox" id="startRemember">Remember my choice</label>
+      <div class="start-note">You can change this later: DISPLAY, then Phone / tablet.</div>
+    </div>
+    <div id="startDeviceView" hidden>
+      <h2>Open the map on your other device</h2>
+      <ol>
+        <li>Put it on the same wifi as this PC.</li>
+        <li>Scan this code with its camera, or type the link into its browser.</li>
+        <li>This tab draws nothing for now. The map starts when the device connects.</li>
+      </ol>
+      <canvas id="startQr" title="Scan with the phone camera"></canvas>
+      <div class="lan-row"><input id="startUrl" type="text" readonly><button type="button" id="startCopy" class="mini-btn">copy</button></div>
+      <div class="start-note">Anyone who has this link can see your map. Keep it to yourself.</div>
+      <div class="start-actions">
+        <button type="button" id="startShowHere">Show the map here too</button>
+        <button type="button" id="startBack">Change my choice</button>
       </div>
     </div>
   </div>
@@ -571,7 +658,7 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true },
+  display: { textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false },
   overlays: { runwayGuides: true, weaponRange: true, grid: true },
   trails: { friendlyAircraft: true, enemyAircraft: true, friendlyMissiles: true, enemyMissiles: true, other: true },
   // Every fixed (non-theme) color on the map, customizable. hudText is the
@@ -639,6 +726,8 @@ function syncDisplayControls() {
   if (sel) sel.value = String(settings.display.textScale);
   const fpsSel = document.getElementById('fpsSelect');
   if (fpsSel) fpsSel.value = String(settings.display.fps);
+  const startSel = document.getElementById('startModeSelect');
+  if (startSel) startSel.value = settings.display.startMode;
   applyTextScale();
 }
 
@@ -866,7 +955,7 @@ function saveSettings() {
 // Version 2: pilot names and real names now default to on.
 const SETTINGS_VERSION = 2;
 
-fetch('/settings').then(r => r.ok ? r.json() : null).catch(() => null).then(fromServer => {
+const settingsReady = fetch('/settings').then(r => r.ok ? r.json() : null).catch(() => null).then(fromServer => {
   let loaded = fromServer;
   if (isRemoteViewer) {
     try { loaded = JSON.parse(localStorage.getItem(LOCAL_SETTINGS_KEY)) || fromServer; } catch (e) { /* use the PC's */ }
@@ -889,272 +978,271 @@ fetch('/settings').then(r => r.ok ? r.json() : null).catch(() => null).then(from
   applySharpCanvas();
 });
 
-// QR code for the phone link. Byte mode, versions 1 to 10, error correction M,
-// which is plenty for an address plus a 32 character token (about 60 bytes).
-const QR = (() => {
-  const EC_PER_BLOCK = [0, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26]; // by version, level M
-  const NUM_BLOCKS = [0, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5];
-  const ALIGN_POS = [null, [], [6, 18], [6, 22], [6, 26], [6, 30], [6, 34], [6, 22, 38], [6, 24, 42], [6, 26, 46], [6, 28, 50]];
-
-  function gfMul(x, y) {
-    let z = 0;
-    for (let i = 7; i >= 0; i--) {
-      z = (z << 1) ^ ((z >>> 7) * 0x11D);
-      z ^= ((y >>> i) & 1) * x;
-    }
-    return z;
-  }
-  function rsGenerator(degree) {
-    const result = new Array(degree).fill(0);
-    result[degree - 1] = 1;
-    let root = 1;
-    for (let i = 0; i < degree; i++) {
-      for (let j = 0; j < degree; j++) {
-        result[j] = gfMul(result[j], root);
-        if (j + 1 < degree) result[j] ^= result[j + 1];
-      }
-      root = gfMul(root, 2);
-    }
-    return result;
-  }
-  function rsRemainder(data, generator) {
-    const result = new Array(generator.length).fill(0);
-    for (const b of data) {
-      const factor = b ^ result.shift();
-      result.push(0);
-      generator.forEach((coef, i) => { result[i] ^= gfMul(coef, factor); });
-    }
-    return result;
-  }
-
-  function rawCodewords(ver) {
-    let modules = (16 * ver + 128) * ver + 64;
-    if (ver >= 2) {
-      const numAlign = Math.floor(ver / 7) + 2;
-      modules -= (25 * numAlign - 10) * numAlign - 55;
-      if (ver >= 7) modules -= 36;
-    }
-    return Math.floor(modules / 8);
-  }
-  const dataCodewords = ver => rawCodewords(ver) - EC_PER_BLOCK[ver] * NUM_BLOCKS[ver];
-
-  function utf8(text) {
-    return Array.from(new TextEncoder().encode(text));
-  }
-
-  function buildCodewords(bytes, ver) {
-    const bits = [];
-    const push = (value, count) => { for (let i = count - 1; i >= 0; i--) bits.push((value >>> i) & 1); };
-    push(0x4, 4); // byte mode
-    push(bytes.length, ver < 10 ? 8 : 16);
-    bytes.forEach(b => push(b, 8));
-    const capacity = dataCodewords(ver) * 8;
-    push(0, Math.min(4, capacity - bits.length)); // terminator
-    while (bits.length % 8 !== 0) bits.push(0);
-    const data = [];
-    for (let i = 0; i < bits.length; i += 8) {
-      data.push(parseInt(bits.slice(i, i + 8).join(''), 2));
-    }
-    for (let pad = 0xEC; data.length < dataCodewords(ver); pad ^= 0xEC ^ 0x11) data.push(pad);
-
-    // split into blocks, add error correction, interleave
-    const numBlocks = NUM_BLOCKS[ver], ecLen = EC_PER_BLOCK[ver], raw = rawCodewords(ver);
-    const numShort = numBlocks - raw % numBlocks;
-    const shortLen = Math.floor(raw / numBlocks);
-    const generator = rsGenerator(ecLen);
-    const blocks = [];
-    let k = 0;
-    for (let i = 0; i < numBlocks; i++) {
-      const dat = data.slice(k, k + shortLen - ecLen + (i < numShort ? 0 : 1));
-      k += dat.length;
-      const ecc = rsRemainder(dat, generator);
-      if (i < numShort) dat.push(0); // keeps the columns aligned, skipped below
-      blocks.push(dat.concat(ecc));
-    }
-    const out = [];
-    for (let i = 0; i < blocks[0].length; i++) {
-      blocks.forEach((block, j) => {
-        if (i !== shortLen - ecLen || j >= numShort) out.push(block[i]);
-      });
-    }
-    return out;
-  }
-
-  const getBit = (x, i) => ((x >>> i) & 1) !== 0;
-
-  function encode(text) {
-    const bytes = utf8(text);
-    let ver = 1;
-    while (ver <= 10 && 4 + (ver < 10 ? 8 : 16) + 8 * bytes.length > dataCodewords(ver) * 8) ver++;
-    if (ver > 10) throw new Error('text too long for the QR code');
-    const codewords = buildCodewords(bytes, ver);
-
-    const size = ver * 4 + 17;
-    const modules = Array.from({ length: size }, () => new Array(size).fill(false));
-    const isFn = Array.from({ length: size }, () => new Array(size).fill(false));
-    const setFn = (x, y, dark) => {
-      if (x < 0 || y < 0 || x >= size || y >= size) return;
-      modules[y][x] = dark;
-      isFn[y][x] = true;
-    };
-
-    // timing patterns
-    for (let i = 0; i < size; i++) { setFn(6, i, i % 2 === 0); setFn(i, 6, i % 2 === 0); }
-    // finder patterns with their separators
-    const finder = (cx, cy) => {
-      for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
-        const dist = Math.max(Math.abs(dx), Math.abs(dy));
-        setFn(cx + dx, cy + dy, dist !== 2 && dist !== 4);
-      }
-    };
-    finder(3, 3); finder(size - 4, 3); finder(3, size - 4);
-    // alignment patterns
-    const pos = ALIGN_POS[ver];
-    pos.forEach((px, i) => pos.forEach((py, j) => {
-      if ((i === 0 && j === 0) || (i === 0 && j === pos.length - 1) || (i === pos.length - 1 && j === 0)) return;
-      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
-        setFn(px + dx, py + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
-      }
-    }));
-
-    const drawFormat = mask => {
-      const data = (0 << 3) | mask; // level M is 00
-      let rem = data;
-      for (let i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
-      const bits = ((data << 10) | rem) ^ 0x5412;
-      for (let i = 0; i <= 5; i++) setFn(8, i, getBit(bits, i));
-      setFn(8, 7, getBit(bits, 6));
-      setFn(8, 8, getBit(bits, 7));
-      setFn(7, 8, getBit(bits, 8));
-      for (let i = 9; i < 15; i++) setFn(14 - i, 8, getBit(bits, i));
-      for (let i = 0; i < 8; i++) setFn(size - 1 - i, 8, getBit(bits, i));
-      for (let i = 8; i < 15; i++) setFn(8, size - 15 + i, getBit(bits, i));
-      setFn(8, size - 8, true); // the always-dark module
-    };
-    drawFormat(0); // reserves the format areas
-    if (ver >= 7) {
-      let rem = ver;
-      for (let i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >>> 11) * 0x1F25);
-      const bits = (ver << 12) | rem;
-      for (let i = 0; i < 18; i++) {
-        const a = size - 11 + i % 3, b = Math.floor(i / 3);
-        setFn(a, b, getBit(bits, i));
-        setFn(b, a, getBit(bits, i));
-      }
-    }
-
-    // data bits in the zigzag order
-    let bitIndex = 0;
-    for (let right = size - 1; right >= 1; right -= 2) {
-      if (right === 6) right = 5;
-      for (let vert = 0; vert < size; vert++) {
-        for (let j = 0; j < 2; j++) {
-          const x = right - j;
-          const upward = ((right + 1) & 2) === 0;
-          const y = upward ? size - 1 - vert : vert;
-          if (!isFn[y][x] && bitIndex < codewords.length * 8) {
-            modules[y][x] = getBit(codewords[bitIndex >>> 3], 7 - (bitIndex & 7));
-            bitIndex++;
-          }
-        }
-      }
-    }
-
-    const applyMask = mask => {
-      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-        let invert;
-        switch (mask) {
-          case 0: invert = (x + y) % 2 === 0; break;
-          case 1: invert = y % 2 === 0; break;
-          case 2: invert = x % 3 === 0; break;
-          case 3: invert = (x + y) % 3 === 0; break;
-          case 4: invert = (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0; break;
-          case 5: invert = x * y % 2 + x * y % 3 === 0; break;
-          case 6: invert = (x * y % 2 + x * y % 3) % 2 === 0; break;
-          default: invert = ((x + y) % 2 + x * y % 3) % 2 === 0; break;
-        }
-        if (!isFn[y][x] && invert) modules[y][x] = !modules[y][x];
-      }
-    };
-
-    // choose the mask with the lowest penalty (the usual four rules)
-    const penalty = () => {
-      let score = 0;
-      const line = get => {
-        let run = 1, dark = 0;
-        for (let i = 0; i < size; i++) {
-          const v = get(i);
-          if (v) dark++;
-          if (i > 0 && v === get(i - 1)) { run++; if (run === 5) score += 3; else if (run > 5) score++; } else run = 1;
-        }
-        return dark;
-      };
-      let darkTotal = 0;
-      for (let y = 0; y < size; y++) darkTotal += line(i => modules[y][i]);
-      for (let x = 0; x < size; x++) line(i => modules[i][x]);
-      for (let y = 0; y < size - 1; y++) for (let x = 0; x < size - 1; x++) {
-        const c = modules[y][x];
-        if (c === modules[y][x + 1] && c === modules[y + 1][x] && c === modules[y + 1][x + 1]) score += 3;
-      }
-      const pat = [true, false, true, true, true, false, true];
-      const finderLike = get => {
-        for (let i = 0; i + 7 <= size; i++) {
-          if (!pat.every((p, k) => get(i + k) === p)) continue;
-          const before = i - 4 >= 0 && [1, 2, 3, 4].every(k => !get(i - k));
-          const after = i + 11 <= size && [0, 1, 2, 3].every(k => !get(i + 7 + k));
-          if (before || after) score += 40;
-        }
-      };
-      for (let y = 0; y < size; y++) finderLike(i => modules[y][i]);
-      for (let x = 0; x < size; x++) finderLike(i => modules[i][x]);
-      const total = size * size;
-      score += (Math.ceil(Math.abs(darkTotal * 20 - total * 10) / total) - 1) * 10;
-      return score;
-    };
-    let best = 0, bestScore = Infinity;
-    for (let mask = 0; mask < 8; mask++) {
-      applyMask(mask);
-      drawFormat(mask);
-      const score = penalty();
-      if (score < bestScore) { best = mask; bestScore = score; }
-      applyMask(mask); // undo
-    }
-    applyMask(best);
-    drawFormat(best);
-    return { size, version: ver, mask: best, modules };
-  }
-
-  // Paints the code black on white, with the 4 module quiet zone scanners need.
-  function draw(canvas, text) {
-    const qr = encode(text);
-    const total = qr.size + 8;
-    const scale = Math.max(3, Math.floor(200 / total));
-    canvas.width = canvas.height = total * scale;
-    const c = canvas.getContext('2d');
-    c.fillStyle = '#fff';
-    c.fillRect(0, 0, canvas.width, canvas.height);
-    c.fillStyle = '#000';
-    for (let y = 0; y < qr.size; y++) for (let x = 0; x < qr.size; x++) {
-      if (qr.modules[y][x]) c.fillRect((x + 4) * scale, (y + 4) * scale, scale, scale);
-    }
-    return qr;
-  }
-  return { encode, draw };
-})();
+// QR code for the phone link. Byte mode, versions 1 to 10, error correction M,
+// which is plenty for an address plus a 32 character token (about 60 bytes).
+const QR = (() => {
+  const EC_PER_BLOCK = [0, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26]; // by version, level M
+  const NUM_BLOCKS = [0, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5];
+  const ALIGN_POS = [null, [], [6, 18], [6, 22], [6, 26], [6, 30], [6, 34], [6, 22, 38], [6, 24, 42], [6, 26, 46], [6, 28, 50]];
+
+  function gfMul(x, y) {
+    let z = 0;
+    for (let i = 7; i >= 0; i--) {
+      z = (z << 1) ^ ((z >>> 7) * 0x11D);
+      z ^= ((y >>> i) & 1) * x;
+    }
+    return z;
+  }
+  function rsGenerator(degree) {
+    const result = new Array(degree).fill(0);
+    result[degree - 1] = 1;
+    let root = 1;
+    for (let i = 0; i < degree; i++) {
+      for (let j = 0; j < degree; j++) {
+        result[j] = gfMul(result[j], root);
+        if (j + 1 < degree) result[j] ^= result[j + 1];
+      }
+      root = gfMul(root, 2);
+    }
+    return result;
+  }
+  function rsRemainder(data, generator) {
+    const result = new Array(generator.length).fill(0);
+    for (const b of data) {
+      const factor = b ^ result.shift();
+      result.push(0);
+      generator.forEach((coef, i) => { result[i] ^= gfMul(coef, factor); });
+    }
+    return result;
+  }
+
+  function rawCodewords(ver) {
+    let modules = (16 * ver + 128) * ver + 64;
+    if (ver >= 2) {
+      const numAlign = Math.floor(ver / 7) + 2;
+      modules -= (25 * numAlign - 10) * numAlign - 55;
+      if (ver >= 7) modules -= 36;
+    }
+    return Math.floor(modules / 8);
+  }
+  const dataCodewords = ver => rawCodewords(ver) - EC_PER_BLOCK[ver] * NUM_BLOCKS[ver];
+
+  function utf8(text) {
+    return Array.from(new TextEncoder().encode(text));
+  }
+
+  function buildCodewords(bytes, ver) {
+    const bits = [];
+    const push = (value, count) => { for (let i = count - 1; i >= 0; i--) bits.push((value >>> i) & 1); };
+    push(0x4, 4); // byte mode
+    push(bytes.length, ver < 10 ? 8 : 16);
+    bytes.forEach(b => push(b, 8));
+    const capacity = dataCodewords(ver) * 8;
+    push(0, Math.min(4, capacity - bits.length)); // terminator
+    while (bits.length % 8 !== 0) bits.push(0);
+    const data = [];
+    for (let i = 0; i < bits.length; i += 8) {
+      data.push(parseInt(bits.slice(i, i + 8).join(''), 2));
+    }
+    for (let pad = 0xEC; data.length < dataCodewords(ver); pad ^= 0xEC ^ 0x11) data.push(pad);
+
+    // split into blocks, add error correction, interleave
+    const numBlocks = NUM_BLOCKS[ver], ecLen = EC_PER_BLOCK[ver], raw = rawCodewords(ver);
+    const numShort = numBlocks - raw % numBlocks;
+    const shortLen = Math.floor(raw / numBlocks);
+    const generator = rsGenerator(ecLen);
+    const blocks = [];
+    let k = 0;
+    for (let i = 0; i < numBlocks; i++) {
+      const dat = data.slice(k, k + shortLen - ecLen + (i < numShort ? 0 : 1));
+      k += dat.length;
+      const ecc = rsRemainder(dat, generator);
+      if (i < numShort) dat.push(0); // keeps the columns aligned, skipped below
+      blocks.push(dat.concat(ecc));
+    }
+    const out = [];
+    for (let i = 0; i < blocks[0].length; i++) {
+      blocks.forEach((block, j) => {
+        if (i !== shortLen - ecLen || j >= numShort) out.push(block[i]);
+      });
+    }
+    return out;
+  }
+
+  const getBit = (x, i) => ((x >>> i) & 1) !== 0;
+
+  function encode(text) {
+    const bytes = utf8(text);
+    let ver = 1;
+    while (ver <= 10 && 4 + (ver < 10 ? 8 : 16) + 8 * bytes.length > dataCodewords(ver) * 8) ver++;
+    if (ver > 10) throw new Error('text too long for the QR code');
+    const codewords = buildCodewords(bytes, ver);
+
+    const size = ver * 4 + 17;
+    const modules = Array.from({ length: size }, () => new Array(size).fill(false));
+    const isFn = Array.from({ length: size }, () => new Array(size).fill(false));
+    const setFn = (x, y, dark) => {
+      if (x < 0 || y < 0 || x >= size || y >= size) return;
+      modules[y][x] = dark;
+      isFn[y][x] = true;
+    };
+
+    // timing patterns
+    for (let i = 0; i < size; i++) { setFn(6, i, i % 2 === 0); setFn(i, 6, i % 2 === 0); }
+    // finder patterns with their separators
+    const finder = (cx, cy) => {
+      for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+        const dist = Math.max(Math.abs(dx), Math.abs(dy));
+        setFn(cx + dx, cy + dy, dist !== 2 && dist !== 4);
+      }
+    };
+    finder(3, 3); finder(size - 4, 3); finder(3, size - 4);
+    // alignment patterns
+    const pos = ALIGN_POS[ver];
+    pos.forEach((px, i) => pos.forEach((py, j) => {
+      if ((i === 0 && j === 0) || (i === 0 && j === pos.length - 1) || (i === pos.length - 1 && j === 0)) return;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+        setFn(px + dx, py + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+      }
+    }));
+
+    const drawFormat = mask => {
+      const data = (0 << 3) | mask; // level M is 00
+      let rem = data;
+      for (let i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+      const bits = ((data << 10) | rem) ^ 0x5412;
+      for (let i = 0; i <= 5; i++) setFn(8, i, getBit(bits, i));
+      setFn(8, 7, getBit(bits, 6));
+      setFn(8, 8, getBit(bits, 7));
+      setFn(7, 8, getBit(bits, 8));
+      for (let i = 9; i < 15; i++) setFn(14 - i, 8, getBit(bits, i));
+      for (let i = 0; i < 8; i++) setFn(size - 1 - i, 8, getBit(bits, i));
+      for (let i = 8; i < 15; i++) setFn(8, size - 15 + i, getBit(bits, i));
+      setFn(8, size - 8, true); // the always-dark module
+    };
+    drawFormat(0); // reserves the format areas
+    if (ver >= 7) {
+      let rem = ver;
+      for (let i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >>> 11) * 0x1F25);
+      const bits = (ver << 12) | rem;
+      for (let i = 0; i < 18; i++) {
+        const a = size - 11 + i % 3, b = Math.floor(i / 3);
+        setFn(a, b, getBit(bits, i));
+        setFn(b, a, getBit(bits, i));
+      }
+    }
+
+    // data bits in the zigzag order
+    let bitIndex = 0;
+    for (let right = size - 1; right >= 1; right -= 2) {
+      if (right === 6) right = 5;
+      for (let vert = 0; vert < size; vert++) {
+        for (let j = 0; j < 2; j++) {
+          const x = right - j;
+          const upward = ((right + 1) & 2) === 0;
+          const y = upward ? size - 1 - vert : vert;
+          if (!isFn[y][x] && bitIndex < codewords.length * 8) {
+            modules[y][x] = getBit(codewords[bitIndex >>> 3], 7 - (bitIndex & 7));
+            bitIndex++;
+          }
+        }
+      }
+    }
+
+    const applyMask = mask => {
+      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+        let invert;
+        switch (mask) {
+          case 0: invert = (x + y) % 2 === 0; break;
+          case 1: invert = y % 2 === 0; break;
+          case 2: invert = x % 3 === 0; break;
+          case 3: invert = (x + y) % 3 === 0; break;
+          case 4: invert = (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0; break;
+          case 5: invert = x * y % 2 + x * y % 3 === 0; break;
+          case 6: invert = (x * y % 2 + x * y % 3) % 2 === 0; break;
+          default: invert = ((x + y) % 2 + x * y % 3) % 2 === 0; break;
+        }
+        if (!isFn[y][x] && invert) modules[y][x] = !modules[y][x];
+      }
+    };
+
+    // choose the mask with the lowest penalty (the usual four rules)
+    const penalty = () => {
+      let score = 0;
+      const line = get => {
+        let run = 1, dark = 0;
+        for (let i = 0; i < size; i++) {
+          const v = get(i);
+          if (v) dark++;
+          if (i > 0 && v === get(i - 1)) { run++; if (run === 5) score += 3; else if (run > 5) score++; } else run = 1;
+        }
+        return dark;
+      };
+      let darkTotal = 0;
+      for (let y = 0; y < size; y++) darkTotal += line(i => modules[y][i]);
+      for (let x = 0; x < size; x++) line(i => modules[i][x]);
+      for (let y = 0; y < size - 1; y++) for (let x = 0; x < size - 1; x++) {
+        const c = modules[y][x];
+        if (c === modules[y][x + 1] && c === modules[y + 1][x] && c === modules[y + 1][x + 1]) score += 3;
+      }
+      const pat = [true, false, true, true, true, false, true];
+      const finderLike = get => {
+        for (let i = 0; i + 7 <= size; i++) {
+          if (!pat.every((p, k) => get(i + k) === p)) continue;
+          const before = i - 4 >= 0 && [1, 2, 3, 4].every(k => !get(i - k));
+          const after = i + 11 <= size && [0, 1, 2, 3].every(k => !get(i + 7 + k));
+          if (before || after) score += 40;
+        }
+      };
+      for (let y = 0; y < size; y++) finderLike(i => modules[y][i]);
+      for (let x = 0; x < size; x++) finderLike(i => modules[i][x]);
+      const total = size * size;
+      score += (Math.ceil(Math.abs(darkTotal * 20 - total * 10) / total) - 1) * 10;
+      return score;
+    };
+    let best = 0, bestScore = Infinity;
+    for (let mask = 0; mask < 8; mask++) {
+      applyMask(mask);
+      drawFormat(mask);
+      const score = penalty();
+      if (score < bestScore) { best = mask; bestScore = score; }
+      applyMask(mask); // undo
+    }
+    applyMask(best);
+    drawFormat(best);
+    return { size, version: ver, mask: best, modules };
+  }
+
+  // Paints the code black on white, with the 4 module quiet zone scanners need.
+  function draw(canvas, text, target = 200) {
+    const qr = encode(text);
+    const total = qr.size + 8;
+    const scale = Math.max(3, Math.floor(target / total));
+    canvas.width = canvas.height = total * scale;
+    const c = canvas.getContext('2d');
+    c.fillStyle = '#fff';
+    c.fillRect(0, 0, canvas.width, canvas.height);
+    c.fillStyle = '#000';
+    for (let y = 0; y < qr.size; y++) for (let x = 0; x < qr.size; x++) {
+      if (qr.modules[y][x]) c.fillRect((x + 4) * scale, (y + 4) * scale, scale, scale);
+    }
+    return qr;
+  }
+  return { encode, draw };
+})();
 
 // The phone link, shown only on the PC itself and only if LAN access is on.
-if (!isRemoteViewer) {
-  fetch('/lan').then(r => r.ok ? r.json() : null).then(info => {
-    if (!info || !info.enabled) return;
-    document.getElementById('lanUrl').value = info.url;
-    document.getElementById('lanGroup').hidden = false;
-    const qrCanvas = document.getElementById('lanQr');
-    try { QR.draw(qrCanvas, info.url); } catch (e) { qrCanvas.hidden = true; }
-  }).catch(() => {});
-}
-document.getElementById('lanCopy').addEventListener('click', () => {
-  const input = document.getElementById('lanUrl');
-  const button = document.getElementById('lanCopy');
+let lanInfo = null;
+const lanReady = isRemoteViewer ? Promise.resolve() : fetch('/lan').then(r => r.ok ? r.json() : null).then(info => {
+  if (!info || !info.enabled) return;
+  lanInfo = info;
+  document.getElementById('lanUrl').value = info.url;
+  document.getElementById('lanGroup').hidden = false;
+  const qrCanvas = document.getElementById('lanQr');
+  try { QR.draw(qrCanvas, info.url); } catch (e) { qrCanvas.hidden = true; }
+}).catch(() => {});
+
+function copyFrom(input, button) {
   input.select();
   input.setSelectionRange(0, input.value.length);
   let copied = false;
@@ -1165,6 +1253,15 @@ document.getElementById('lanCopy').addEventListener('click', () => {
   }
   button.textContent = copied ? 'copied' : 'select it';
   setTimeout(() => { button.textContent = 'copy'; }, 1500);
+}
+document.getElementById('lanCopy').addEventListener('click', () =>
+  copyFrom(document.getElementById('lanUrl'), document.getElementById('lanCopy')));
+document.getElementById('startCopy').addEventListener('click', () =>
+  copyFrom(document.getElementById('startUrl'), document.getElementById('startCopy')));
+
+document.getElementById('startModeSelect').addEventListener('change', e => {
+  settings.display.startMode = e.target.value;
+  saveSettings();
 });
 
 document.querySelectorAll('.panel input[type=checkbox][data-group]').forEach(cb => {
@@ -2071,11 +2168,17 @@ function animationActive() {
   return false;
 }
 
+// False while the PC shows the phone link instead of the map: nothing is drawn and
+// no connection is open, so the plugin has no work to do until a device connects.
+let mapActive = false;
+let frameLoopRunning = false;
+
 function scheduleFrame() {
   requestAnimationFrame(renderFrame);
 }
 
 function renderFrame(now) {
+  if (!mapActive) { frameLoopRunning = false; return; }
   const idleFps = settings.display.fps || 8;
   const fps = performance.now() < boostUntil ? 30
     : animationActive() ? Math.max(idleFps, 15)
@@ -2646,7 +2749,6 @@ function playerStatBlock(sx, sy) {
     rect: { x: sx + 10, y: top, w: textW + 8, h: lines.length * 13 + 6 }
   };
 }
-scheduleFrame();
 
 // The page only knows the game is gone once the server stops answering. A short
 // blip (or a mission loading) reconnects within a try or two, so only a few
@@ -2700,6 +2802,7 @@ document.addEventListener('visibilitychange', () => {
 function connect() {
   clearTimeout(reconnectTimer);
   reconnectTimer = null;
+  if (!mapActive) return;
   if (source) source.close();
   const thisSource = new EventSource('/events');
   source = thisSource;
@@ -2736,7 +2839,69 @@ function connect() {
     reconnectTimer = setTimeout(connect, 2000);
   };
 }
-connect();
+
+// ---- What the game PC shows first
+// With LAN access on, the PC asks whether the map is for this tab or for another
+// device. "Remember my choice" saves it as display.startMode: 'here' goes straight
+// to the map, 'device' goes straight to the QR code and link. Without LAN access
+// (the default), and on every other device, the map just starts.
+const startScreen = document.getElementById('startScreen');
+
+function startMap() {
+  mapActive = true;
+  startScreen.hidden = true;
+  if (!frameLoopRunning) { frameLoopRunning = true; scheduleFrame(); }
+  connect();
+}
+
+function stopMap() {
+  mapActive = false;
+  clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+  if (source) { source.close(); source = null; }
+  status.classList.remove('live');
+  status.textContent = 'showing the phone link';
+}
+
+function showStart(view) {
+  startScreen.hidden = false;
+  document.getElementById('startChoose').hidden = view !== 'choose';
+  document.getElementById('startDeviceView').hidden = view !== 'device';
+  if (view === 'device') {
+    document.getElementById('startUrl').value = lanInfo.url;
+    const qr = document.getElementById('startQr');
+    qr.hidden = false;
+    try { QR.draw(qr, lanInfo.url, 320); } catch (e) { qr.hidden = true; }
+  } else {
+    document.getElementById('startHelp').open = !settings.display.startIntroSeen;
+  }
+}
+
+function pickStart(mode) {
+  if (document.getElementById('startRemember').checked) {
+    settings.display.startMode = mode;
+    document.getElementById('startModeSelect').value = mode;
+  }
+  settings.display.startIntroSeen = true;
+  saveSettings();
+  if (mode === 'here') startMap(); else showStart('device');
+}
+
+document.getElementById('startHere').addEventListener('click', () => pickStart('here'));
+document.getElementById('startDevice').addEventListener('click', () => pickStart('device'));
+document.getElementById('startShowHere').addEventListener('click', startMap);
+document.getElementById('startBack').addEventListener('click', () => showStart('choose'));
+document.getElementById('lanShowScreen').addEventListener('click', () => {
+  stopMap();
+  showStart('device');
+});
+
+Promise.all([settingsReady, lanReady]).then(() => {
+  const mode = settings.display.startMode;
+  if (isRemoteViewer || !lanInfo || mode === 'here') startMap();
+  else if (mode === 'device') showStart('device');
+  else showStart('choose');
+});
 
 function parseRgb(v) {
   let m = v.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
