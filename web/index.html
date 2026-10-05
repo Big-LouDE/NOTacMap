@@ -303,6 +303,7 @@
         </select>
       </label>
       <label><input type="checkbox" data-group="display" data-key="textOutline">Dark outline on text (easier to read on the map)</label>
+      <label><input type="checkbox" data-group="display" data-key="sharpCanvas">Sharp text and lines (uses more CPU on this device)</label>
       <label><input type="checkbox" data-group="display" data-key="showPilotNames">Show pilot names</label>
       <label><input type="checkbox" data-group="display" data-key="realNames">Use real names instead of callsigns</label>
       <label><input type="checkbox" data-group="display" data-key="darkMode">Dark mode (night vision)</label>
@@ -420,9 +421,25 @@ const gridRefEl = document.getElementById('gridRef');
 const style = getComputedStyle(document.documentElement);
 const col = name => style.getPropertyValue(name).trim();
 
+// True on any device that is not the PC running the game (a phone or tablet over the LAN).
+const isRemoteViewer = !['localhost', '127.0.0.1', '[::1]', ''].includes(location.hostname);
+
+// The canvas is drawn at the screen's real pixel density, so text and lines are sharp
+// on a phone (2 to 3 device pixels per CSS pixel). All drawing logic stays in CSS
+// pixels (viewWidth, viewHeight) and draw() scales once per frame. The game PC
+// is capped lower than a phone, since it is the one running the game.
+let sharpCanvas = true;
+let pixelRatio = 1;
+let viewWidth = window.innerWidth, viewHeight = window.innerHeight;
 function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  viewWidth = window.innerWidth;
+  viewHeight = window.innerHeight;
+  const dpr = window.devicePixelRatio || 1;
+  pixelRatio = sharpCanvas ? Math.min(dpr, isRemoteViewer ? 3 : 2) : 1;
+  canvas.width = Math.round(viewWidth * pixelRatio);
+  canvas.height = Math.round(viewHeight * pixelRatio);
+  canvas.style.width = viewWidth + 'px';
+  canvas.style.height = viewHeight + 'px';
 }
 window.addEventListener('resize', resize);
 resize();
@@ -480,8 +497,8 @@ function startGesture() {
       scale,
       // The world point under the midpoint when the pinch starts. It stays
       // under the midpoint while zooming (the inverse of toScreen).
-      worldX: origin.x + (midX - canvas.width / 2) * scale,
-      worldZ: origin.z - (midY - canvas.height / 2) * scale
+      worldX: origin.x + (midX - viewWidth / 2) * scale,
+      worldZ: origin.z - (midY - viewHeight / 2) * scale
     };
   } else {
     gesture = null;
@@ -514,8 +531,8 @@ canvas.addEventListener('pointermove', e => {
     scale = clampScale(gesture.scale * gesture.dist / dist);
     const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
     viewCenter = {
-      x: gesture.worldX - (midX - canvas.width / 2) * scale,
-      z: gesture.worldZ + (midY - canvas.height / 2) * scale
+      x: gesture.worldX - (midX - viewWidth / 2) * scale,
+      z: gesture.worldZ + (midY - viewHeight / 2) * scale
     };
   }
 });
@@ -554,7 +571,7 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null },
+  display: { textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true },
   overlays: { runwayGuides: true, weaponRange: true, grid: true },
   trails: { friendlyAircraft: true, enemyAircraft: true, friendlyMissiles: true, enemyMissiles: true, other: true },
   // Every fixed (non-theme) color on the map, customizable. hudText is the
@@ -817,6 +834,11 @@ window.addEventListener('resize', applyLegendState);
 
 // A dark outline behind text keeps it readable on any terrain. Page text gets it
 // from CSS (the data-outline attribute), canvas text from drawText().
+function applySharpCanvas() {
+  sharpCanvas = !!settings.display.sharpCanvas;
+  resize();
+}
+
 function applyTextOutline() {
   document.documentElement.toggleAttribute('data-outline', !!settings.display.textOutline);
 }
@@ -824,7 +846,6 @@ function applyTextOutline() {
 // On the PC running the game, settings live in settings.json next to the plugin.
 // Any other device (a phone or tablet over the LAN) can't write there, so it
 // keeps its own copy in the browser, seeded from the PC's settings on first use.
-const isRemoteViewer = !['localhost', '127.0.0.1', '[::1]', ''].includes(location.hostname);
 const LOCAL_SETTINGS_KEY = 'notacmap.settings';
 
 function saveSettings() {
@@ -865,6 +886,7 @@ fetch('/settings').then(r => r.ok ? r.json() : null).catch(() => null).then(from
   applyDarkMode();
   applyTextOutline();
   applyLegendState();
+  applySharpCanvas();
 });
 
 // QR code for the phone link. Byte mode, versions 1 to 10, error correction M,
@@ -1154,6 +1176,7 @@ document.querySelectorAll('.panel input[type=checkbox][data-group]').forEach(cb 
 
 document.querySelector('[data-group="display"][data-key="darkMode"]').addEventListener('change', applyDarkMode);
 document.querySelector('[data-group="display"][data-key="textOutline"]').addEventListener('change', applyTextOutline);
+document.querySelector('[data-group="display"][data-key="sharpCanvas"]').addEventListener('change', applySharpCanvas);
 
 document.getElementById('textScaleSelect').addEventListener('change', e => {
   settings.display.textScale = parseFloat(e.target.value);
@@ -1580,7 +1603,7 @@ function drawTrail(pts, headX, headZ, color, toScreen) {
 
 function drawBackground(origin) {
   if (!mapInfo || !bgReady || !bgCanvas) return;
-  const cx = canvas.width / 2, cy = canvas.height / 2;
+  const cx = viewWidth / 2, cy = viewHeight / 2;
   function toScreen(x, z) {
     return [cx + (x - origin.x) / scale, cy - (z - origin.z) / scale];
   }
@@ -1598,19 +1621,19 @@ function drawGrid(originScreenX, originScreenY) {
   if (majorPx < 3) return;
 
   const startCol = Math.floor(-originScreenX / majorPx);
-  const endCol = Math.ceil((canvas.width - originScreenX) / majorPx);
+  const endCol = Math.ceil((viewWidth - originScreenX) / majorPx);
   const startRow = Math.floor(-originScreenY / majorPx);
-  const endRow = Math.ceil((canvas.height - originScreenY) / majorPx);
+  const endRow = Math.ceil((viewHeight - originScreenY) / majorPx);
 
   ctx.strokeStyle = col('--grid-major');
   ctx.lineWidth = 1;
   for (let i = startCol; i <= endCol; i++) {
     const x = originScreenX + i * majorPx;
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, viewHeight); ctx.stroke();
   }
   for (let j = startRow; j <= endRow; j++) {
     const y = originScreenY + j * majorPx;
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(viewWidth, y); ctx.stroke();
   }
 
   const minorPx = majorPx / 10;
@@ -1618,11 +1641,11 @@ function drawGrid(originScreenX, originScreenY) {
     ctx.strokeStyle = col('--grid-minor');
     for (let i = startCol * 10; i <= endCol * 10; i++) {
       const x = originScreenX + i * minorPx;
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, viewHeight); ctx.stroke();
     }
     for (let j = startRow * 10; j <= endRow * 10; j++) {
       const y = originScreenY + j * minorPx;
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(viewWidth, y); ctx.stroke();
     }
   }
 
@@ -2073,10 +2096,11 @@ function draw() {
   // (blended over the 3D cockpit scene). Clear to opaque black first,
   // then wash with the translucent theme color on top, or a translucent
   // fillRect here would let previous frames bleed through as ghosting.
+  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   ctx.fillStyle = '#000000';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, viewWidth, viewHeight);
   ctx.fillStyle = col('--map-bg');
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, viewWidth, viewHeight);
 
   if (!latest) {
     return;
@@ -2093,8 +2117,8 @@ function draw() {
       : 'LIVE';
   }
 
-  const cx = canvas.width / 2;
-  const cy = canvas.height / 2;
+  const cx = viewWidth / 2;
+  const cy = viewHeight / 2;
   const origin = getViewOrigin(); // wherever the view is centered, you, or a manual pan
 
   function toScreen(x, z) {
@@ -2151,7 +2175,7 @@ function draw() {
   // any one time. Anything beyond these edges is skipped before any drawing,
   // font setup or label measuring. Generous on the right/bottom because a
   // label extends right of its icon, and a trail can reach back from its head.
-  const viewW = canvas.width, viewH = canvas.height;
+  const viewW = viewWidth, viewH = viewHeight;
   // Extra room on the left: a unit just past that edge can still have its
   // label (up to ~190px long) reaching into view.
   const offScreen = (sx, sy, pad) => sx < -pad - 190 || sx > viewW + pad || sy < -pad || sy > viewH + pad;
