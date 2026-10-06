@@ -57,9 +57,11 @@ Off by default. To open the map on another device on your home network:
 2. The first time, a prompt says what that opens up. Confirm it, and the page shows a QR code and the link. Open the link, or scan the code with the camera, on the other device once. The phone remembers the link afterwards.
 3. If Windows asks about the firewall, allow it on private networks only.
 
-Tick "Remember my choice" to skip the question and the prompt next time. DISPLAY > Phone / tablet has a switch to turn access from other devices on or off, shows the link and QR code while it is on, and changes what the page does when it opens. While the PC tab shows the QR code it draws no map, so the plugin sends nothing until a device connects. You can also set `Server > AllowLan` in the config; the switch keeps that value in step.
+Tick "Remember my choice" to skip the question and the prompt next time.
 
-Only devices on a private network address (192.168.x.x, 10.x.x.x, 172.16 to 31.x.x or 169.254.x.x) are accepted, and they need the secret in the link. Delete `LanToken` from the config and restart the game to get a new link and cut off old ones.
+Once access from other devices is on, it stays on after a restart until you switch it off. Picking "On this PC" does not turn it off. DISPLAY > Phone / tablet has the switch, shows the link and QR code while it is on, and changes what the page does when it opens. While the PC tab shows the QR code it draws no map and keeps no connection open. You can also set `Server > AllowLan` in the config; the switch keeps that value in step.
+
+Only devices on a private network address (192.168.x.x, 10.x.x.x, 172.16 to 31.x.x or 169.254.x.x) are accepted, and they need the secret in the link. Delete `LanToken` from the config and restart the game to get a new link and cut off old ones. Switching access off and on again keeps the same link.
 
 Anyone who has the link can see your map, and the connection isn't encrypted, so use it at home and not on public wifi. Saving settings only works from the PC, so a phone keeps its own display settings.
 

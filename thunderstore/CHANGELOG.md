@@ -4,7 +4,7 @@
 
 New
 - Open the map on a phone or tablet on your home network. Off by default: pick "On another device" when the map page opens, or use the switch in DISPLAY > Phone / tablet. The page works with touch (drag to pan, pinch to zoom, fullscreen button) and has a landscape layout
-- The map page on the PC first asks where you want to see the map. "On another device" turns on access from other devices after a short prompt and shows a QR code and the link. It draws no map on the PC. "Remember my choice" skips the question and the prompt next time. The switch in DISPLAY turns it off again without restarting the game
+- The map page on the PC first asks where you want to see the map. "On another device" turns on access from other devices after a short prompt and shows a QR code and the link. It draws no map on the PC. "Remember my choice" skips the question and the prompt next time. The switch in DISPLAY turns it off again without restarting the game. It stays on after a restart until you do
 - The link follows your PC if it changes network or address while the game is running
 - Tap the legend to open or close it
 - Colors are picked from a honeycomb palette, with RGB and hex boxes for exact values

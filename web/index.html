@@ -459,6 +459,7 @@
         <button type="button" id="startHere"><b>On this PC</b><span>Show the map in this browser tab.</span></button>
         <button type="button" id="startDevice"><b>On another device</b><span>Phone, tablet or another computer on the same wifi. You get a QR code and a link.</span></button>
       </div>
+      <div class="start-note" id="startLanNote" hidden>Access from other devices is switched on. Turn it off under DISPLAY > Phone / tablet.</div>
       <div class="start-error" id="startError" hidden></div>
       <label class="start-remember"><input type="checkbox" id="startRemember">Remember my choice</label>
       <div class="start-note">You can change this later: DISPLAY, then Phone / tablet.</div>
@@ -2999,6 +3000,7 @@ function showStart(view) {
     refreshLan();
   } else {
     document.getElementById('startHelp').open = !settings.display.startIntroSeen;
+    document.getElementById('startLanNote').hidden = !lanInfo;
   }
 }
 
