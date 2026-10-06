@@ -4,7 +4,7 @@
 
 New
 - Open the map on a phone or tablet on your home network. Off by default: set Server > AllowLan to true in the config. The page works with touch (drag to pan, pinch to zoom, fullscreen button) and has a landscape layout
-- With LAN on, the map page on the PC asks where you want to see the map. "On another device" shows a QR code and the link and nothing else, so the PC tab draws no map and the game has no extra work until a device connects. "Remember my choice" skips the question next time, and DISPLAY > Phone / tablet changes it
+- With LAN on, the map page on the PC first asks where you want to see the map. "On another device" shows a QR code and the link and draws no map on the PC. "Remember my choice" skips the question next time
 - The link follows your PC if it changes network or address while the game is running
 - Tap the legend to open or close it
 - Colors are picked from a honeycomb palette, with RGB and hex boxes for exact values
