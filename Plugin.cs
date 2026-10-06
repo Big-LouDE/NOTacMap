@@ -26,6 +26,9 @@ namespace NOTacMap
 		private ConfigEntry<string> lanAddress;
 		private ConfigEntry<string> lanToken;
 		private MapServer server;
+		private Timer networkWatch;
+		private string pendingLan = NoPendingLan;
+		private const string NoPendingLan = "";
 		private float timer;
 		private float keepAliveTimer;
 		private float mapCheckTimer;
@@ -98,16 +101,23 @@ namespace NOTacMap
 
 			string lan = null;
 			string token = null;
+			// With no address in the config, the plugin follows the PC's own address, so a new
+			// wifi or a new lease while the game runs doesn't leave the phone link stale.
+			bool followNetwork = string.IsNullOrWhiteSpace(lanAddress.Value);
 			if (allowLan.Value)
 			{
 				string problem;
 				lan = LanAddress.Resolve(lanAddress.Value, out problem);
-				if (lan == null)
+				if (lan == null && !followNetwork)
 				{
 					Log.LogWarning($"NOTacMap: LAN access is on in the config but can't be used: {problem}. The map is only available on this PC.");
 				}
 				else
 				{
+					if (lan == null)
+					{
+						Log.LogWarning($"NOTacMap: LAN access is on in the config but there is no network address yet ({problem}). The map is only available on this PC until there is one.");
+					}
 					if (string.IsNullOrEmpty(lanToken.Value))
 					{
 						lanToken.Value = NewToken();
@@ -128,6 +138,11 @@ namespace NOTacMap
 				Log.LogInfo($"NOTacMap LAN access is on. Other devices on this network can open the map with the link shown in the DISPLAY panel.");
 			}
 
+			if (token != null && followNetwork)
+			{
+				networkWatch = new Timer(_ => CheckNetwork(), null, NetworkCheckMs, NetworkCheckMs);
+			}
+
 			if (autoOpenBrowser.Value)
 			{
 				try
@@ -141,6 +156,44 @@ namespace NOTacMap
 					// Not worth failing startup over, the user can open the URL themselves.
 					Log.LogWarning($"NOTacMap: couldn't auto-open the browser ({ex.Message}). Open {url} manually.");
 				}
+			}
+		}
+
+		private const int NetworkCheckMs = 10000;
+
+		// Runs on a worker thread every few seconds. If the PC's address is no longer the one
+		// the server listens on, the server moves to the new one. The same answer has to come
+		// twice in a row first, so a wifi blip doesn't restart the listener.
+		private void CheckNetwork()
+		{
+			try
+			{
+				string problem;
+				string found = LanAddress.Resolve("", out problem);
+				if (found == server.LanAddress)
+				{
+					pendingLan = NoPendingLan;
+					return;
+				}
+				if (found != pendingLan)
+				{
+					pendingLan = found;
+					return;
+				}
+				pendingLan = NoPendingLan;
+				server.SetLanAddress(found);
+				if (server.LanActive)
+				{
+					Log.LogInfo("NOTacMap: this PC's network address changed. LAN access moved to the new one, the link in the DISPLAY panel is updated.");
+				}
+				else if (found == null)
+				{
+					Log.LogInfo("NOTacMap: no network address found. LAN access is paused until there is one.");
+				}
+			}
+			catch (Exception ex)
+			{
+				Log.LogWarning($"NOTacMap: checking the network address failed ({ex.Message}).");
 			}
 		}
 
@@ -231,6 +284,7 @@ namespace NOTacMap
 
 		private void OnDestroy()
 		{
+			networkWatch?.Dispose();
 			server?.Stop();
 		}
 	}

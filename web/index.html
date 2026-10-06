@@ -1231,16 +1231,33 @@ const QR = (() => {
   return { encode, draw };
 })();
 
-// The phone link, shown only on the PC itself and only if LAN access is on.
+// The phone link, shown only on the PC itself and only if LAN access is on. The link
+// changes when the PC moves to another network, so it is asked for again now and then.
 let lanInfo = null;
-const lanReady = isRemoteViewer ? Promise.resolve() : fetch('/lan').then(r => r.ok ? r.json() : null).then(info => {
-  if (!info || !info.enabled) return;
-  lanInfo = info;
-  document.getElementById('lanUrl').value = info.url;
-  document.getElementById('lanGroup').hidden = false;
+
+function applyLan(info) {
+  const url = info && info.enabled ? info.url : null;
+  const changed = (lanInfo ? lanInfo.url : null) !== url;
+  lanInfo = url ? info : null;
+  document.getElementById('lanGroup').hidden = !url;
+  if (!url) {
+    // No address any more: a PC showing only the link has nothing to show, so it shows the map.
+    if (!startScreen.hidden && !document.getElementById('startDeviceView').hidden) startMap();
+    return;
+  }
+  if (!changed) return;
+  document.getElementById('lanUrl').value = url;
   const qrCanvas = document.getElementById('lanQr');
-  try { QR.draw(qrCanvas, info.url); } catch (e) { qrCanvas.hidden = true; }
-}).catch(() => {});
+  qrCanvas.hidden = false;
+  try { QR.draw(qrCanvas, url); } catch (e) { qrCanvas.hidden = true; }
+  if (!document.getElementById('startDeviceView').hidden) fillDeviceView();
+}
+
+function refreshLan() {
+  if (isRemoteViewer) return Promise.resolve();
+  return fetch('/lan', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(applyLan).catch(() => {});
+}
+const lanReady = refreshLan();
 
 function copyFrom(input, button) {
   input.select();
@@ -2807,6 +2824,7 @@ function connect() {
   const thisSource = new EventSource('/events');
   source = thisSource;
   source.onopen = () => {
+    refreshLan();
     everConnected = true;
     failedAttempts = 0;
     status.textContent = 'live';
@@ -2863,19 +2881,33 @@ function stopMap() {
   status.textContent = 'showing the phone link';
 }
 
+function fillDeviceView() {
+  document.getElementById('startUrl').value = lanInfo.url;
+  const qr = document.getElementById('startQr');
+  qr.hidden = false;
+  try { QR.draw(qr, lanInfo.url, 320); } catch (e) { qr.hidden = true; }
+}
+
 function showStart(view) {
   startScreen.hidden = false;
   document.getElementById('startChoose').hidden = view !== 'choose';
   document.getElementById('startDeviceView').hidden = view !== 'device';
   if (view === 'device') {
-    document.getElementById('startUrl').value = lanInfo.url;
-    const qr = document.getElementById('startQr');
-    qr.hidden = false;
-    try { QR.draw(qr, lanInfo.url, 320); } catch (e) { qr.hidden = true; }
+    fillDeviceView();
+    refreshLan();
   } else {
     document.getElementById('startHelp').open = !settings.display.startIntroSeen;
   }
 }
+
+// Pick up a changed link when the page comes back into view, when DISPLAY opens, and
+// while the QR screen is showing.
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshLan(); });
+window.addEventListener('focus', refreshLan);
+document.getElementById('displayBtn').addEventListener('click', refreshLan);
+setInterval(() => {
+  if (!startScreen.hidden && document.visibilityState === 'visible') refreshLan();
+}, 15000);
 
 function pickStart(mode) {
   if (document.getElementById('startRemember').checked) {
