@@ -19,7 +19,8 @@ A live tactical map for [Nuclear Option](https://store.steampowered.com/app/2168
 - Runway approach lines extending past each runway end
 - Fading trails behind moving units, with a Trails folder in FILTER to pick which kinds. The grid can be switched off too
 - Every map color is editable under DISPLAY, from a honeycomb palette or with RGB and hex values
-- Tap the legend to open or close it. A dark outline on text keeps labels readable over the terrain (switch it off in DISPLAY)
+- Tap the legend to open or close it
+- A dark outline on text keeps labels readable over the terrain (switch it off in DISPLAY)
 - FILTER and DISPLAY (top right) control what's shown, how it looks, and the colors
 - The background map comes from the game's own terrain texture, so any map works
 - Pan, zoom, and a button to recenter on you
@@ -32,7 +33,7 @@ Sharing marked targets between teammates who both have the mod. The game doesn't
 
 ## How it works
 
-The plugin (`NOTacMap.dll`) runs inside the game and starts a local HTTP server (`http://localhost:8123/` by default). It only reads data your client already has, and never asks the game server for anything extra or sends networked commands. Marked targets and locks only show what the game's own tracker knows. Other websites can't read it or change your settings. The page (`web/index.html`) is a single HTML/JS file that connects over Server-Sent Events and draws on a canvas.
+The plugin (`NOTacMap.dll`) runs inside the game and starts a local HTTP server (`http://localhost:8123/` by default). Only this PC can reach it, unless you turn on LAN access (see Phone or tablet). It only reads data your client already has, and never asks the game server for anything extra or sends networked commands. Marked targets and locks only show what the game's own tracker knows. Other websites can't read it or change your settings. The page (`web/index.html`) is a single HTML/JS file that connects over Server-Sent Events and draws on a canvas.
 
 ## Installation
 
@@ -53,10 +54,14 @@ To build from source:
 Off by default. To open the map on another device on your home network:
 
 1. Set `Server > AllowLan` to `true` in `BepInEx/config/com.bigloude.notacmap.cfg` and start the game.
-2. Open DISPLAY in the map page on your PC. A "Phone / tablet" link and a QR code appear there. Open the link, or scan the code with the camera, on the other device once. It remembers you afterwards.
+2. With LAN on, the map page on your PC first asks where you want to see the map. Pick "On another device" and it shows a QR code and the link. Open the link, or scan the code with the camera, on the other device once. The phone stays signed in afterwards.
 3. If Windows asks about the firewall, allow it on private networks only.
 
-Only devices on a private home address (192.168.x.x, 10.x.x.x, 172.16 to 31.x.x) are accepted, and they need the secret in the link. Anyone who has the link can see your map, and the connection isn't encrypted, so use it at home and not on public wifi. Delete `LanToken` from the config to get a new link and cut off old ones. Saving settings only works from the PC, so a phone keeps its own display settings.
+Tick "Remember my choice" to skip the question next time. DISPLAY > Phone / tablet changes it later and brings the QR code back. While the PC tab shows the QR code it draws no map, so the game has no extra work until a device connects.
+
+Only devices on a private home address (192.168.x.x, 10.x.x.x, 172.16 to 31.x.x or 169.254.x.x) are accepted, and they need the secret in the link. Delete `LanToken` from the config to get a new link and cut off old ones.
+
+Anyone who has the link can see your map, and the connection isn't encrypted, so use it at home and not on public wifi. Saving settings only works from the PC, so a phone keeps its own display settings.
 
 If Windows won't let the game listen on the network, the plugin says so in the log and the map keeps working on the PC. The page can't keep a phone screen awake over plain HTTP, so set a longer screen timeout on the phone.
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.0
+
+New
+- Open the map on a phone or tablet on your home network. Off by default: set Server > AllowLan to true in the config. The page works with touch (drag to pan, pinch to zoom, fullscreen button) and has a landscape layout
+- With LAN on, the map page on the PC asks where you want to see the map. "On another device" shows a QR code and the link and nothing else, so the PC tab draws no map and the game has no extra work until a device connects. "Remember my choice" skips the question next time, and DISPLAY > Phone / tablet changes it
+- The link follows your PC if it changes network or address while the game is running
+- Tap the legend to open or close it
+- Colors are picked from a honeycomb palette, with RGB and hex boxes for exact values
+- A dark outline behind the map's text so it stays readable over the terrain. Switch it off in DISPLAY
+- Text and lines are drawn at the screen's real pixel density, so they are sharp on a phone. Switch it off in DISPLAY if it costs too much
+
+Security
+- LAN access only accepts devices on private home addresses, and they need the secret in the link. The phone remembers it with a cookie afterwards. Saving settings only works from the PC. Delete LanToken from the config to cut off old links
+
 ## 1.1.1
 
 Better

@@ -1,6 +1,6 @@
 {
   "name": "NOTacMap",
-  "version_number": "1.1.1",
+  "version_number": "1.2.0",
   "website_url": "https://github.com/Big-LouDE/NOTacMap",
   "description": "Live tactical map for a second monitor. Units, airbases, missile locks and warnings, trails, and your weapon's range in a browser page that opens when the game starts. Nothing to set up per map.",
   "dependencies": [

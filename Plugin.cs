@@ -15,7 +15,7 @@ namespace NOTacMap
 	{
 		public const string PluginGuid = "com.bigloude.notacmap";
 		public const string PluginName = "NOTacMap";
-		public const string PluginVersion = "1.1.1";
+		public const string PluginVersion = "1.2.0";
 
 		internal static ManualLogSource Log;
 
