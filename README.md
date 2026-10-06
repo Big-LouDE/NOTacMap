@@ -69,6 +69,10 @@ If Windows won't let the game listen on the network, the page and the log say so
 
 All settings are on screen. **FILTER** covers unit types, weapon categories, overlays, and trails. **DISPLAY** covers text size, redraw rate, pilot names, dark mode, and colors. Both save to `settings.json` next to the plugin.
 
+## Feedback and bugs
+
+Found a bug or have an idea? Open an issue on GitHub: https://github.com/Big-LouDE/NOTacMap/issues (it needs a free GitHub account). Say what you did and what you expected. If something broke, add the NOTacMap lines from `BepInEx/LogOutput.log`.
+
 ## About this project
 
 Claude helped out here and there while I was building this, mostly to make sense of how the game's code works.

@@ -53,11 +53,15 @@ If Windows won't let the game listen on the network, the page and the log say so
 
 The plugin runs inside the game and starts a local HTTP server (`http://localhost:8123/` by default). Only this PC can reach it, unless you turn on LAN access (see Phone or tablet). It only reads data your client already has, and never asks the game server for anything extra or sends networked commands. Marked targets and locks only show what the game's own tracker knows. Other websites can't read it or change your settings. The page is a single HTML/JS file that connects over Server-Sent Events and draws on a canvas.
 
+## Feedback and bugs
+
+Found a bug or have an idea? Open an issue on GitHub: https://github.com/Big-LouDE/NOTacMap/issues (it needs a free GitHub account). Say what you did and what you expected. If something broke, add the NOTacMap lines from `BepInEx/LogOutput.log`.
+
 ## About this project
 
 Claude helped out here and there while I was building this, mostly to make sense of how the game's code works.
 
-Source and issues: https://github.com/Big-LouDE/NOTacMap
+Source: https://github.com/Big-LouDE/NOTacMap
 
 ## Credits / third-party components
 

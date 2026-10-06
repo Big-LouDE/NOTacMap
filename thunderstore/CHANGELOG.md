@@ -10,6 +10,7 @@ New
 - Colors are picked from a honeycomb palette, with RGB and hex boxes for exact values
 - A dark outline behind the map's text so it stays readable over the terrain. Switch it off in DISPLAY
 - Text and lines are drawn at the screen's real pixel density, so they are sharp on a phone. Switch it off in DISPLAY if it costs too much
+- A "Send feedback or report a bug" link at the bottom of DISPLAY
 
 Security
 - LAN access only accepts devices on private network addresses, and they need the secret in the link. The phone remembers it with a cookie afterwards. Saving settings only works from the PC. Delete LanToken from the config and restart the game to cut off old links
