@@ -157,6 +157,23 @@ internal static class Program
         Check("token bad: non-ascii", !RequestGuard.IsValidToken("aaaaaaaaaaaaaaaä"));
         Check("token bad: newline", !RequestGuard.IsValidToken("aaaaaaaaaaaaaaa\n"));
 
+        // ---- the LAN switch (POST /lan): this PC only, like saving settings
+        Check("pc can switch LAN (LAN on)", Ask(lan, "localhost:8123", "http://localhost:8123", Pc, "POST", "/lan").Status == 0);
+        Check("pc can switch LAN (LAN off)", Ask(off, "localhost:8123", "http://localhost:8123", Pc, "POST", "/lan").Status == 0);
+        Check("pc LAN switch without origin", Ask(lan, "localhost:8123", null, Pc, "POST", "/lan").Status == 0);
+        Check("LAN switch from another site", Ask(lan, "localhost:8123", "http://evil.com", Pc, "POST", "/lan").Status == 403);
+        Check("LAN switch from another site (LAN off)", Ask(off, "localhost:8123", "http://evil.com", Pc, "POST", "/lan").Status == 403);
+        Check("LAN switch with a rebinding host", Ask(lan, "evil.com:8123", null, Pc, "POST", "/lan").Status == 403);
+        Check("phone cannot switch LAN", Ask(lan, LH, "http://" + LH, Phone, "POST", "/lan", cookie: "notacmap_t=" + TOKEN).Status == 403);
+        Check("phone cannot switch LAN with the token link", Ask(lan, LH, "http://" + LH, Phone, "POST", "/lan", "t=" + TOKEN).Status == 403);
+        Check("phone cannot switch LAN, no secret", Ask(lan, LH, null, Phone, "POST", "/lan").Status == 403);
+        Check("other device cannot switch LAN when it is off", Ask(off, "localhost:8123", null, Phone, "POST", "/lan").Status == 403);
+        Check("PUT /lan refused", Ask(lan, "localhost:8123", null, Pc, "PUT", "/lan").Status == 405);
+        Check("DELETE /lan refused", Ask(lan, "localhost:8123", null, Pc, "DELETE", "/lan").Status == 405);
+        Check("lowercase post /lan refused", Ask(lan, "localhost:8123", null, Pc, "post", "/lan").Status == 405);
+        Check("POST /lan/ is not the switch", Ask(lan, "localhost:8123", null, Pc, "POST", "/lan/").Status == 405);
+        Check("POST /LAN is not the switch", Ask(lan, "localhost:8123", null, Pc, "POST", "/LAN").Status == 405);
+
         Console.WriteLine($"\n{pass} passed, {fail} failed");
         Environment.Exit(fail == 0 ? 0 : 1);
     }

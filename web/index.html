@@ -150,12 +150,16 @@
   #lanGroup .mini-btn { margin-top: 6px; }
 
   /* Start screen: shown on the game PC when LAN access is on, before the map starts. */
-  #startScreen {
+  #startScreen, #lanConsent {
     position: fixed; inset: 0; z-index: 200; background: #030803; overflow: auto;
     display: flex; align-items: flex-start; justify-content: center;
     color: var(--hud-dim); font: calc(13px * var(--text-scale)) "Consolas", monospace;
   }
-  #startScreen[hidden] { display: none; }
+  #lanConsent { z-index: 210; }
+  #startScreen[hidden], #lanConsent[hidden] { display: none; }
+  .start-error, .lan-error { color: var(--hostile); }
+  .start-error { margin: 8px 0; }
+  .lan-consent-text { line-height: 1.5; margin: 0 0 12px; }
   .start-card { box-sizing: border-box; width: min(560px, 100%); padding: 24px 16px; margin: auto 0; }
   .start-card h2 { margin: 0 0 12px; color: var(--hud-green); font-size: 1.3em; font-weight: normal; text-transform: uppercase; letter-spacing: 0.06em; }
   .start-card ol { margin: 6px 0 12px; padding-left: 22px; line-height: 1.5; }
@@ -354,12 +358,18 @@
     </div>
     <div class="group" id="lanGroup" hidden>
       <h4>Phone / tablet</h4>
-      <div class="note">Open this link on a device on the same network. Anyone who has it can see your map.</div>
-      <div class="lan-row">
-        <input id="lanUrl" type="text" readonly>
-        <button type="button" id="lanCopy">copy</button>
+      <label><input type="checkbox" id="lanToggle">Let other devices open the map</label>
+      <div class="note" id="lanOffNote">Off. Turn it on to open the map on a phone or tablet on your home network.</div>
+      <div class="note lan-error" id="lanError" hidden></div>
+      <div id="lanOn" hidden>
+        <div class="note">Open this link on a device on the same network. Anyone who has it can see your map.</div>
+        <div class="lan-row">
+          <input id="lanUrl" type="text" readonly>
+          <button type="button" id="lanCopy">copy</button>
+        </div>
+        <canvas id="lanQr" title="Scan with the phone camera"></canvas>
+        <button type="button" id="lanShowScreen" class="mini-btn">Show the phone screen now</button>
       </div>
-      <canvas id="lanQr" title="Scan with the phone camera"></canvas>
       <label>When this page opens
         <select id="startModeSelect">
           <option value="ask">Ask me</option>
@@ -367,7 +377,6 @@
           <option value="device">Show the phone link</option>
         </select>
       </label>
-      <button type="button" id="lanShowScreen" class="mini-btn">Show the phone screen now</button>
     </div>
     <div class="group">
       <h4>Colors</h4>
@@ -446,6 +455,7 @@
         <button type="button" id="startHere"><b>On this PC</b><span>Show the map in this browser tab.</span></button>
         <button type="button" id="startDevice"><b>On another device</b><span>Phone, tablet or another computer on the same wifi. You get a QR code and a link.</span></button>
       </div>
+      <div class="start-error" id="startError" hidden></div>
       <label class="start-remember"><input type="checkbox" id="startRemember">Remember my choice</label>
       <div class="start-note">You can change this later: DISPLAY, then Phone / tablet.</div>
     </div>
@@ -463,6 +473,18 @@
         <button type="button" id="startShowHere">Show the map here too</button>
         <button type="button" id="startBack">Change my choice</button>
       </div>
+    </div>
+  </div>
+</div>
+<div id="lanConsent" hidden role="dialog" aria-label="Turn on access from other devices">
+  <div class="start-card">
+    <h2>This opens the map to your network</h2>
+    <p class="lan-consent-text">Right now the map can only be opened on this PC. If you go on, the game also answers other devices on your home network. They need the secret link, but anyone who has it can see where you and everyone else are, so keep it private.</p>
+    <p class="lan-consent-text">The connection is plain HTTP: use it at home, not on public wifi. If Windows asks about the firewall, choose private networks only. You can switch it off again under DISPLAY.</p>
+    <div class="start-error" id="lanConsentError" hidden></div>
+    <div class="start-actions">
+      <button type="button" id="lanConsentYes">I understand, turn it on</button>
+      <button type="button" id="lanConsentNo">Keep it on this PC only</button>
     </div>
   </div>
 </div>
@@ -1239,9 +1261,12 @@ function applyLan(info) {
   const url = info && info.enabled ? info.url : null;
   const changed = (lanInfo ? lanInfo.url : null) !== url;
   lanInfo = url ? info : null;
-  document.getElementById('lanGroup').hidden = !url;
+  document.getElementById('lanToggle').checked = !!url;
+  document.getElementById('lanOn').hidden = !url;
+  document.getElementById('lanOffNote').hidden = !!url;
   if (!url) {
-    // No address any more: a PC showing only the link has nothing to show, so it shows the map.
+    // Switched off, or no address any more: a PC showing only the link has nothing to show,
+    // so it shows the map.
     if (!startScreen.hidden && !document.getElementById('startDeviceView').hidden) startMap();
     return;
   }
@@ -1257,6 +1282,79 @@ function refreshLan() {
   if (isRemoteViewer) return Promise.resolve();
   return fetch('/lan', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(applyLan).catch(() => {});
 }
+
+// The PC asks the plugin to switch LAN access on or off. The answer is the new state, with
+// an "error" text when it didn't work.
+function setLan(on) {
+  return fetch('/lan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: on })
+  }).then(r => r.ok ? r.json() : { enabled: false, error: "The game didn't accept that." })
+    .catch(() => ({ enabled: false, error: "Couldn't reach the game." }))
+    .then(res => { applyLan(res); return res; });
+}
+
+function showLanError(message) {
+  const line = document.getElementById('lanError');
+  line.textContent = message || '';
+  line.hidden = !message;
+}
+
+// Turns LAN access on without asking: used when the person already said yes by
+// remembering "On another device". Says why in DISPLAY if it fails.
+function enableLanQuietly() {
+  showLanError('');
+  return setLan(true).then(res => {
+    if (!lanInfo) showLanError(res.error || "Couldn't turn on access from other devices.");
+    return !!lanInfo;
+  });
+}
+
+// The first-time prompt. Resolves true once LAN access is on, false if the person backs out.
+function askAndEnableLan() {
+  const dialog = document.getElementById('lanConsent');
+  const yes = document.getElementById('lanConsentYes');
+  const no = document.getElementById('lanConsentNo');
+  const error = document.getElementById('lanConsentError');
+  return new Promise(resolve => {
+    const close = result => {
+      dialog.hidden = true;
+      document.removeEventListener('keydown', onKey);
+      resolve(result);
+    };
+    const onKey = e => { if (e.key === 'Escape') close(false); };
+    error.hidden = true;
+    yes.textContent = 'I understand, turn it on';
+    yes.disabled = false;
+    yes.onclick = () => {
+      yes.disabled = true;
+      setLan(true).then(res => {
+        yes.disabled = false;
+        if (lanInfo) { close(true); return; }
+        error.textContent = res.error || "Couldn't turn on access from other devices.";
+        error.hidden = false;
+        yes.textContent = 'Try again';
+      });
+    };
+    no.onclick = () => close(false);
+    document.addEventListener('keydown', onKey);
+    dialog.hidden = false;
+    no.focus(); // the safe choice is the one Enter hits
+  });
+}
+
+if (!isRemoteViewer) document.getElementById('lanGroup').hidden = false;
+document.getElementById('lanToggle').addEventListener('change', e => {
+  showLanError('');
+  if (e.target.checked) {
+    // Someone who remembered "On another device" has already said yes once.
+    const asked = settings.display.startMode === 'device' ? enableLanQuietly() : askAndEnableLan();
+    asked.then(ok => { if (!ok) e.target.checked = false; });
+  } else {
+    setLan(false);
+  }
+});
 const lanReady = refreshLan();
 
 function copyFrom(input, button) {
@@ -2909,14 +3007,42 @@ setInterval(() => {
   if (!startScreen.hidden && document.visibilityState === 'visible') refreshLan();
 }, 15000);
 
+function startError(message) {
+  const line = document.getElementById('startError');
+  line.textContent = message || '';
+  line.hidden = !message;
+}
+
+// "On another device" turns LAN access on first, after the prompt unless it was remembered.
 function pickStart(mode) {
-  if (document.getElementById('startRemember').checked) {
-    settings.display.startMode = mode;
-    document.getElementById('startModeSelect').value = mode;
+  const remember = document.getElementById('startRemember').checked;
+  startError('');
+  const done = () => {
+    if (remember) {
+      settings.display.startMode = mode;
+      document.getElementById('startModeSelect').value = mode;
+    }
+    settings.display.startIntroSeen = true;
+    saveSettings();
+  };
+  if (mode === 'here') {
+    done();
+    startMap();
+    return;
   }
-  settings.display.startIntroSeen = true;
-  saveSettings();
-  if (mode === 'here') startMap(); else showStart('device');
+  const ready = lanInfo ? Promise.resolve(true)
+    : (settings.display.startMode === 'device' ? enableLanQuietly() : askAndEnableLan());
+  ready.then(ok => {
+    if (ok) {
+      done();
+      showStart('device');
+    } else if (!lanInfo) {
+      // It didn't work: stay on the question with the reason. Backed out of the prompt
+      // ("Keep it on this PC only"): show the map here, and remember nothing.
+      const why = document.getElementById('lanError').textContent;
+      if (why) startError(why); else startMap();
+    }
+  });
 }
 
 document.getElementById('startHere').addEventListener('click', () => pickStart('here'));
@@ -2930,9 +3056,21 @@ document.getElementById('lanShowScreen').addEventListener('click', () => {
 
 Promise.all([settingsReady, lanReady]).then(() => {
   const mode = settings.display.startMode;
-  if (isRemoteViewer || !lanInfo || mode === 'here') startMap();
-  else if (mode === 'device') showStart('device');
-  else showStart('choose');
+  if (isRemoteViewer || mode === 'here') {
+    startMap();
+  } else if (mode === 'device') {
+    // Remembered, so no prompt. If it can't be turned on, say why on the question.
+    (lanInfo ? Promise.resolve(true) : enableLanQuietly()).then(ok => {
+      if (ok) {
+        showStart('device');
+      } else {
+        showStart('choose');
+        startError(document.getElementById('lanError').textContent);
+      }
+    });
+  } else {
+    showStart('choose');
+  }
 });
 
 function parseRgb(v) {

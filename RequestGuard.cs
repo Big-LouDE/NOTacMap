@@ -89,7 +89,8 @@ namespace NOTacMap
 			}
 
 			bool settingsPost = method == "POST" && path == "/settings";
-			if (method != "GET" && method != "HEAD" && !settingsPost)
+			bool lanPost = method == "POST" && path == "/lan";
+			if (method != "GET" && method != "HEAD" && !settingsPost && !lanPost)
 			{
 				return GuardDecision.Reject(405, "method not allowed");
 			}
@@ -113,7 +114,7 @@ namespace NOTacMap
 			{
 				return GuardDecision.Reject(403, "not a private network address");
 			}
-			// Saving settings and the phone link are for this PC only.
+			// Saving settings, the phone link and the LAN switch are for this PC only.
 			if (settingsPost || path == "/lan")
 			{
 				return GuardDecision.Reject(403, "this page is for the game PC only");
@@ -145,7 +146,7 @@ namespace NOTacMap
 
 			// Wrong secret and no secret are told apart in the log only.
 			string reason = (cookie != null || given != null) ? "wrong secret" : "no secret in the request";
-			return GuardDecision.Reject(401, reason, "Open the phone link shown in the DISPLAY panel on the game PC.");
+			return GuardDecision.Reject(401, reason, "Open the phone link or the QR code from the map page on the game PC.");
 		}
 
 		private static IPAddress Normalize(IPAddress a)
@@ -235,7 +236,7 @@ namespace NOTacMap
 				IPAddress parsed;
 				if (!IPAddress.TryParse(configured.Trim(), out parsed) || !IsPrivate(parsed))
 				{
-					problem = "LanAddress must be a private IPv4 address (192.168.x.x, 10.x.x.x or 172.16-31.x.x)";
+					problem = "LanAddress must be a private IPv4 address (192.168.x.x, 10.x.x.x, 172.16-31.x.x or 169.254.x.x)";
 					return null;
 				}
 				return parsed.ToString();

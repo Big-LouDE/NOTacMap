@@ -14,18 +14,23 @@ namespace NOTacMap
 	// and every browser's EventSource API understands them natively.
 	internal class MapServer
 	{
+		// Two listeners. The first one only takes localhost and 127.0.0.1 and is opened once, so the
+		// map on this PC never restarts. The second one only takes the network address, and is
+		// opened, closed and moved while the game runs when LAN access changes.
 		private volatile HttpListener listener;
+		private volatile HttpListener lanListener;
 		private readonly object listenerLock = new object();
+		private readonly HashSet<HttpListenerResponse> lanClients = new HashSet<HttpListenerResponse>();
 		private readonly List<HttpListenerResponse> clients = new List<HttpListenerResponse>();
 		private readonly object clientsLock = new object();
 		private readonly object writeLock = new object();
-		private Thread acceptThread;
 		private volatile bool running;
 
 		private const int MaxSseClients = 8;
 		private const int MaxSettingsBytes = 64 * 1024;
+		private const int MaxLanBodyBytes = 1024;
 		private readonly int port;
-		private readonly string lanToken;
+		private volatile string lanToken; // null while LAN access is off
 		private volatile string lanAddress; // null when LAN access is off, or if it couldn't start
 		private string refusedAddress; // an address Windows turned down, not tried again until the address changes
 		private volatile RequestGuard guard;
@@ -33,6 +38,7 @@ namespace NOTacMap
 
 		// lanToken is null to keep the map on this PC only. lanAddress can be null while
 		// the PC has no network yet; SetLanAddress picks it up when one shows up.
+		// EnableLan and DisableLan switch LAN access on and off while the game runs.
 		public MapServer(int port, string lanAddress, string lanToken)
 		{
 			this.port = port;
@@ -50,6 +56,16 @@ namespace NOTacMap
 		{
 			get { return lanAddress; }
 		}
+
+		// True while LAN access is switched on, even if no address could be used yet.
+		public bool LanAllowed
+		{
+			get { return lanToken != null; }
+		}
+
+		// Set by the plugin. Switches LAN access on or off for the page's switch in DISPLAY.
+		// Returns null when it worked, or a short message for the user when it didn't.
+		public Func<bool, string> LanSwitch;
 
 		// What a phone opens. Contains the secret, so it is only ever shown on
 		// this PC and never logged.
@@ -89,69 +105,85 @@ namespace NOTacMap
 			running = true;
 			lock (listenerLock)
 			{
-				OpenListener(1);
+				HttpListener main = StartListener(null);
+				listener = main;
+				StartAccepting(main, false);
+				if (lanAddress != null && lanToken != null)
+				{
+					OpenLanListener(lanAddress, 1);
+				}
 			}
 		}
 
-		// Opens the listener for the current address and starts accepting on it. The caller
-		// holds listenerLock. If even the localhost prefixes can't be bound (the port is still
-		// held, say right after the old listener was closed), it waits a moment and tries again,
-		// up to `attempts` times, then throws.
-		private void OpenListener(int attempts)
+		private void StartAccepting(HttpListener mine, bool isLan)
+		{
+			var thread = new Thread(() => AcceptLoop(mine, isLan))
+			{
+				IsBackground = true,
+				Name = isLan ? "NOTacMap-Accept-LAN" : "NOTacMap-Accept"
+			};
+			thread.Start();
+		}
+
+		// Opens the network listener. Returns false, with LAN access left off and the address
+		// remembered as refused, when Windows won't have it (typically without admin rights).
+		// The map on this PC keeps working either way. The caller holds listenerLock.
+		private bool OpenLanListener(string address, int attempts)
 		{
 			Exception last = null;
 			for (int i = 1; i <= attempts; i++)
 			{
-				HttpListener opened = null;
-				string lan = lanAddress;
-				Exception lanError = null;
-				if (lan != null)
+				try
 				{
-					// A second try, so an address that fails only for a moment isn't written off
-					// as refused. Only when rebuilding on a worker thread, never at game start.
-					for (int tries = attempts > 1 ? 2 : 1; opened == null && tries > 0; tries--)
-					{
-						try { opened = StartListener(lan); lanError = null; }
-						catch (Exception ex)
-						{
-							lanError = ex;
-							if (tries > 1) Thread.Sleep(250);
-						}
-					}
+					HttpListener opened = StartListener(address);
+					lanListener = opened;
+					lanAddress = address;
+					guard = new RequestGuard(port, address, lanToken);
+					StartAccepting(opened, true);
+					return true;
 				}
-				if (opened == null)
+				catch (Exception ex)
 				{
-					try { opened = StartListener(null); }
-					catch (Exception ex)
-					{
-						last = ex;
-						if (i < attempts) Thread.Sleep(250);
-						continue;
-					}
-					if (lanError != null)
-					{
-						// The port was free but the network address was turned down, typically
-						// Windows refusing it without admin rights. The map must still work on this PC.
-						Plugin.Log?.LogWarning($"NOTacMap: couldn't listen on {lan} for LAN access ({lanError.Message}). LAN access is off, the map still works on this PC.");
-						refusedAddress = lan;
-						lanAddress = null;
-						guard = new RequestGuard(port, null, null);
-					}
+					last = ex;
+					if (i < attempts) Thread.Sleep(250);
 				}
-				listener = opened;
-				acceptThread = new Thread(() => AcceptLoop(opened)) { IsBackground = true, Name = "NOTacMap-Accept" };
-				acceptThread.Start();
-				return;
 			}
-			throw last;
+			Plugin.Log?.LogWarning($"NOTacMap: couldn't listen on {address} for LAN access ({last.Message}). LAN access is off, the map still works on this PC.");
+			refusedAddress = address;
+			lanAddress = null;
+			guard = new RequestGuard(port, null, null);
+			return false;
 		}
 
+		// Only the network listener and the connections that came through it. The caller
+		// holds listenerLock.
+		private void CloseLanListener()
+		{
+			HttpListener old = lanListener;
+			lanListener = null; // tells its accept loop to stop
+			try { if (old != null) old.Close(); } catch { }
+			lock (clientsLock)
+			{
+				foreach (HttpListenerResponse client in lanClients)
+				{
+					try { client.OutputStream.Close(); } catch { }
+					clients.Remove(client);
+				}
+				lanClients.Clear();
+			}
+			lanAddress = null;
+		}
+
+		// A listener for the localhost prefixes (lan is null) or for the network address only.
 		private HttpListener StartListener(string lan)
 		{
 			var opened = new HttpListener();
-			opened.Prefixes.Add($"http://localhost:{port}/");
-			opened.Prefixes.Add($"http://127.0.0.1:{port}/");
-			if (lan != null)
+			if (lan == null)
+			{
+				opened.Prefixes.Add($"http://localhost:{port}/");
+				opened.Prefixes.Add($"http://127.0.0.1:{port}/");
+			}
+			else
 			{
 				opened.Prefixes.Add($"http://{lan}:{port}/");
 			}
@@ -167,41 +199,61 @@ namespace NOTacMap
 			return opened;
 		}
 
-		// True when the server should be running but has no listener, because a rebuild
-		// couldn't get the port back. SetLanAddress with the current address tries again.
-		public bool Down
-		{
-			get { return running && listener == null; }
-		}
-
 		// For when the PC moves to another network or gets a new address while the game is
-		// running. The listener is rebuilt, which drops every open connection; the pages
-		// reconnect by themselves. null turns LAN access off until an address comes back.
+		// running. Only the network listener is rebuilt; the map on this PC isn't touched.
+		// null turns the network listener off until an address comes back.
 		public void SetLanAddress(string address)
 		{
 			if (lanToken == null) return;
 			lock (listenerLock)
 			{
+				ApplyAddress(address);
+			}
+		}
+
+		// Switches LAN access on with a token and an address, without a restart. If Windows
+		// turns the address down, LanActive stays false and the caller says so.
+		public void EnableLan(string token, string address)
+		{
+			lock (listenerLock)
+			{
 				if (!running) return;
-				string wanted = (address != null && address == refusedAddress) ? null : address;
-				if (listener != null && wanted == lanAddress) return;
-				if (address != refusedAddress) refusedAddress = null;
+				lanToken = token;
+				refusedAddress = null;
+				ApplyAddress(address);
+				guard = new RequestGuard(port, lanAddress, lanToken); // a new token also needs a new guard
+			}
+		}
 
-				HttpListener old = listener;
-				listener = null; // tells the old accept loop to stop
-				try { if (old != null) old.Close(); } catch { }
-				DropClients();
+		// Back to this PC only. Drops the connections that came in over the network.
+		public void DisableLan()
+		{
+			lock (listenerLock)
+			{
+				if (!running) return;
+				lanToken = null;
+				refusedAddress = null;
+				CloseLanListener();
+				guard = new RequestGuard(port, null, null);
+			}
+		}
 
-				lanAddress = wanted;
-				guard = new RequestGuard(port, wanted, lanToken);
-				try
-				{
-					OpenListener(5);
-				}
-				catch (Exception ex)
-				{
-					Plugin.Log?.LogWarning($"NOTacMap: couldn't reopen the map server ({ex.Message}). The network check tries again in about 20 seconds.");
-				}
+		// The caller holds listenerLock.
+		private void ApplyAddress(string address)
+		{
+			if (!running) return;
+			string wanted = (address != null && address == refusedAddress) ? null : address;
+			if (wanted == lanAddress) return;
+			if (address != refusedAddress) refusedAddress = null;
+
+			CloseLanListener();
+			if (wanted != null && lanToken != null)
+			{
+				OpenLanListener(wanted, 2);
+			}
+			else
+			{
+				guard = new RequestGuard(port, null, null);
 			}
 		}
 
@@ -211,12 +263,8 @@ namespace NOTacMap
 			lock (listenerLock)
 			{
 				try { if (listener != null) listener.Stop(); } catch { }
+				try { if (lanListener != null) lanListener.Stop(); } catch { }
 			}
-			DropClients();
-		}
-
-		private void DropClients()
-		{
 			lock (clientsLock)
 			{
 				foreach (HttpListenerResponse client in clients)
@@ -224,6 +272,7 @@ namespace NOTacMap
 					try { client.OutputStream.Close(); } catch { }
 				}
 				clients.Clear();
+				lanClients.Clear();
 			}
 		}
 
@@ -279,6 +328,7 @@ namespace NOTacMap
 					foreach (HttpListenerResponse client in failed)
 					{
 						clients.Remove(client);
+						lanClients.Remove(client);
 					}
 				}
 				foreach (HttpListenerResponse client in failed)
@@ -288,10 +338,10 @@ namespace NOTacMap
 			}
 		}
 
-		private void AcceptLoop(HttpListener mine)
+		private void AcceptLoop(HttpListener mine, bool isLan)
 		{
-			// Ends when the server stops or when SetLanAddress has replaced this listener.
-			while (running && ReferenceEquals(mine, listener))
+			// Ends when the server stops or when this listener has been replaced or closed.
+			while (running && ReferenceEquals(mine, isLan ? lanListener : listener))
 			{
 				try
 				{
@@ -308,7 +358,7 @@ namespace NOTacMap
 				}
 				catch (Exception ex)
 				{
-					if (!ReferenceEquals(mine, listener)) break;
+					if (!ReferenceEquals(mine, isLan ? lanListener : listener)) break;
 					Plugin.Log?.LogWarning($"NOTacMap accept loop error: {ex.Message}");
 				}
 			}
@@ -368,6 +418,11 @@ namespace NOTacMap
 							return;
 						}
 						clients.Add(response);
+						IPAddress from = context.Request.RemoteEndPoint?.Address;
+						if (from != null && !IPAddress.IsLoopback(from.IsIPv4MappedToIPv6 ? from.MapToIPv4() : from))
+						{
+							lanClients.Add(response);
+						}
 					}
 
 					// Headers only go out with the first write. Sending one
@@ -442,10 +497,63 @@ namespace NOTacMap
 
 				if (path == "/lan")
 				{
+					string error = null;
+					if (context.Request.HttpMethod == "POST")
+					{
+						// Same rules as saving settings: our own page sends application/json,
+						// which a cross-site form or no-cors request can't.
+						string contentType = context.Request.ContentType ?? "";
+						if (!contentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase))
+						{
+							Reject(context, 415);
+							return;
+						}
+						if (context.Request.ContentLength64 > MaxLanBodyBytes)
+						{
+							Reject(context, 413);
+							return;
+						}
+						byte[] buffer = new byte[MaxLanBodyBytes + 1];
+						int total = 0;
+						int read;
+						Stream input = context.Request.InputStream;
+						while (total < buffer.Length && (read = input.Read(buffer, total, buffer.Length - total)) > 0)
+						{
+							total += read;
+						}
+						if (total > MaxLanBodyBytes)
+						{
+							Reject(context, 413);
+							return;
+						}
+
+						bool turnOn;
+						try
+						{
+							var body = Newtonsoft.Json.Linq.JObject.Parse(Encoding.UTF8.GetString(buffer, 0, total));
+							var flag = body["enabled"];
+							if (flag == null || flag.Type != Newtonsoft.Json.Linq.JTokenType.Boolean)
+							{
+								Reject(context, 400);
+								return;
+							}
+							turnOn = (bool)flag;
+						}
+						catch (Newtonsoft.Json.JsonException)
+						{
+							Reject(context, 400);
+							return;
+						}
+						Func<bool, string> handler = LanSwitch;
+						error = handler == null ? "LAN access can't be switched from here." : handler(turnOn);
+					}
+
 					string lanUrl = LanUrl;
 					string json = lanUrl == null
-						? "{\"enabled\":false}"
-						: "{\"enabled\":true,\"url\":\"" + lanUrl + "\"}";
+						? "{\"enabled\":false"
+						: "{\"enabled\":true,\"url\":\"" + lanUrl + "\"";
+					if (error != null) json += ",\"error\":" + Newtonsoft.Json.JsonConvert.ToString(error);
+					json += "}";
 					byte[] bytes = Encoding.UTF8.GetBytes(json);
 					context.Response.ContentType = "application/json";
 					context.Response.Headers.Add("Cache-Control", "no-store");

@@ -93,11 +93,11 @@ namespace NOTacMap
 				"Automatically open the map page in your default browser each time the game starts. Turn off if you'd rather open it yourself (e.g. you keep it pinned in a specific browser/window already).");
 
 			allowLan = Config.Bind("Server", "AllowLan", false,
-				"Let other devices on your home network (a phone or tablet) open the map. Off by default. Anyone on your network who has the link shown in the DISPLAY panel can see the map, so only turn it on on a network you trust. Takes effect the next time the game starts.");
+				"Let other devices on your home network (a phone or tablet) open the map. Off by default. The map page switches this for you (DISPLAY > Phone / tablet, or the question when the page opens) and keeps this value in step. If you set it here yourself, it takes effect the next time the game starts. Anyone on your network who has the link can see the map, so only turn it on on a network you trust.");
 			lanAddress = Config.Bind("Server", "LanAddress", "",
 				"The network address to listen on for LAN access. Leave empty to use your PC's private address automatically. Must be a private address such as 192.168.x.x.");
 			lanToken = Config.Bind("Server", "LanToken", "",
-				"The secret in the phone link. Created automatically the first time LAN access is turned on. Delete it to get a new one, which stops old links working. If you set one yourself, use letters, digits, - and _ only, at least 16 of them.");
+				"The secret in the phone link. Created automatically the first time LAN access is turned on. Delete it and restart the game to get a new one, which stops old links working. If you set one yourself, use letters, digits, - and _ only, at least 16 of them.");
 
 			string lan = null;
 			string token = null;
@@ -132,6 +132,7 @@ namespace NOTacMap
 			}
 
 			server = new MapServer(port.Value, lan, token);
+			server.LanSwitch = SwitchLan;
 			server.Start();
 			string url = $"http://localhost:{port.Value}/";
 			Log.LogInfo($"NOTacMap listening at {url}, open that on your second monitor.");
@@ -139,10 +140,10 @@ namespace NOTacMap
 			{
 				// The link itself holds the secret, so it isn't logged. The page
 				// shows it under DISPLAY, on this PC only.
-				Log.LogInfo($"NOTacMap LAN access is on. Other devices on this network can open the map with the link shown in the DISPLAY panel.");
+				Log.LogInfo($"NOTacMap LAN access is on. Other devices on this network can open the map with the link on the map page (DISPLAY > Phone / tablet).");
 			}
 
-			if (token != null && followNetwork)
+			if (followNetwork)
 			{
 				networkWatch = new Timer(_ => CheckNetwork(), null, NetworkCheckMs, NetworkCheckMs);
 			}
@@ -172,9 +173,10 @@ namespace NOTacMap
 		{
 			try
 			{
+				if (!server.LanAllowed) return;
 				string problem;
 				string found = LanAddress.Resolve("", out problem);
-				if (found == server.LanAddress && !server.Down)
+				if (found == server.LanAddress)
 				{
 					pendingLan = NoPendingLan;
 					return;
@@ -185,17 +187,10 @@ namespace NOTacMap
 					return;
 				}
 				pendingLan = NoPendingLan;
-				bool wasDown = server.Down;
 				server.SetLanAddress(found);
-				if (wasDown)
+				if (server.LanActive)
 				{
-					Log.LogInfo(server.Down
-						? "NOTacMap: the map server is still down, trying again."
-						: "NOTacMap: the map server is back.");
-				}
-				else if (server.LanActive)
-				{
-					Log.LogInfo("NOTacMap: this PC's network address changed. LAN access moved to the new one, the link in the DISPLAY panel is updated.");
+					Log.LogInfo("NOTacMap: this PC's network address changed. LAN access moved to the new one, the link on the map page is updated.");
 				}
 				else if (found == null)
 				{
@@ -205,6 +200,48 @@ namespace NOTacMap
 			catch (Exception ex)
 			{
 				Log.LogWarning($"NOTacMap: checking the network address failed ({ex.Message}).");
+			}
+		}
+
+		private readonly object lanSwitchLock = new object();
+
+		// The switch in the page's DISPLAY panel (this PC only). Turns LAN access on or off
+		// while the game runs and keeps the config in step, so the choice survives a restart.
+		// Returns null when it worked, else a message the page shows to the user.
+		private string SwitchLan(bool on)
+		{
+			lock (lanSwitchLock)
+			{
+				if (!on)
+				{
+					server.DisableLan();
+					allowLan.Value = false;
+					Log.LogInfo("NOTacMap: LAN access turned off from the map page.");
+					return null;
+				}
+
+				string problem;
+				string address = LanAddress.Resolve(lanAddress.Value, out problem);
+				if (address == null)
+				{
+					return string.IsNullOrWhiteSpace(lanAddress.Value)
+						? "No private network address found on this PC. Connect to your wifi or router and try again."
+						: "The LanAddress in the config is not a private network address.";
+				}
+				if (!RequestGuard.IsValidToken(lanToken.Value))
+				{
+					lanToken.Value = NewToken();
+					Config.Save();
+				}
+				server.EnableLan(lanToken.Value, address);
+				if (!server.LanActive)
+				{
+					server.DisableLan();
+					return "Windows would not let the game listen on the network, so the map can't be shared.";
+				}
+				allowLan.Value = true;
+				Log.LogInfo("NOTacMap: LAN access turned on from the map page. Other devices on this network can open the map with the link shown there.");
+				return null;
 			}
 		}
 
