@@ -54,12 +54,12 @@ To build from source:
 Off by default. To open the map on another device on your home network:
 
 1. Set `Server > AllowLan` to `true` in `BepInEx/config/com.bigloude.notacmap.cfg` and start the game.
-2. With LAN on, the map page on your PC first asks where you want to see the map. Pick "On another device" and it shows a QR code and the link. Open the link, or scan the code with the camera, on the other device once. The phone stays signed in afterwards.
+2. With LAN on, the map page on your PC first asks where you want to see the map. Pick "On another device" and it shows a QR code and the link. Open the link, or scan the code with the camera, on the other device once. The phone remembers the link afterwards.
 3. If Windows asks about the firewall, allow it on private networks only.
 
-Tick "Remember my choice" to skip the question next time. DISPLAY > Phone / tablet changes it later and brings the QR code back. While the PC tab shows the QR code it draws no map, so the game has no extra work until a device connects.
+Tick "Remember my choice" to skip the question next time. DISPLAY > Phone / tablet changes it later and brings the QR code back. While the PC tab shows the QR code it draws no map, so the plugin sends nothing until a device connects.
 
-Only devices on a private home address (192.168.x.x, 10.x.x.x, 172.16 to 31.x.x or 169.254.x.x) are accepted, and they need the secret in the link. Delete `LanToken` from the config to get a new link and cut off old ones.
+Only devices on a private network address (192.168.x.x, 10.x.x.x, 172.16 to 31.x.x or 169.254.x.x) are accepted, and they need the secret in the link. Delete `LanToken` from the config and restart the game to get a new link and cut off old ones.
 
 Anyone who has the link can see your map, and the connection isn't encrypted, so use it at home and not on public wifi. Saving settings only works from the PC, so a phone keeps its own display settings.
 

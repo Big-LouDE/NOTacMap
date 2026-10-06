@@ -12,7 +12,8 @@ New
 - Text and lines are drawn at the screen's real pixel density, so they are sharp on a phone. Switch it off in DISPLAY if it costs too much
 
 Security
-- LAN access only accepts devices on private home addresses, and they need the secret in the link. The phone remembers it with a cookie afterwards. Saving settings only works from the PC. Delete LanToken from the config to cut off old links
+- LAN access only accepts devices on private network addresses, and they need the secret in the link. The phone remembers it with a cookie afterwards. Saving settings only works from the PC. Delete LanToken from the config and restart the game to cut off old links
+- The connection is plain HTTP, so use it at home and not on public wifi
 
 ## 1.1.1
 
