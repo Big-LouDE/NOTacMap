@@ -107,8 +107,17 @@ namespace NOTacMap
 				Exception lanError = null;
 				if (lan != null)
 				{
-					try { opened = StartListener(lan); }
-					catch (Exception ex) { lanError = ex; }
+					// A second try, so an address that fails only for a moment isn't written off
+					// as refused. Only when rebuilding on a worker thread, never at game start.
+					for (int tries = attempts > 1 ? 2 : 1; opened == null && tries > 0; tries--)
+					{
+						try { opened = StartListener(lan); lanError = null; }
+						catch (Exception ex)
+						{
+							lanError = ex;
+							if (tries > 1) Thread.Sleep(250);
+						}
+					}
 				}
 				if (opened == null)
 				{
@@ -191,7 +200,7 @@ namespace NOTacMap
 				}
 				catch (Exception ex)
 				{
-					Plugin.Log?.LogWarning($"NOTacMap: couldn't reopen the map server ({ex.Message}). It tries again in a few seconds.");
+					Plugin.Log?.LogWarning($"NOTacMap: couldn't reopen the map server ({ex.Message}). The network check tries again in about 20 seconds.");
 				}
 			}
 		}
