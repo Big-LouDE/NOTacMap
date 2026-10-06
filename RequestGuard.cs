@@ -35,6 +35,19 @@ namespace NOTacMap
 	{
 		public const string CookieName = "notacmap_t";
 
+		// The token ends up in a link, a cookie and a JSON string, so only plain characters are
+		// allowed, and it has to be long enough that guessing it is hopeless.
+		public static bool IsValidToken(string token)
+		{
+			if (string.IsNullOrEmpty(token) || token.Length < 16 || token.Length > 128) return false;
+			foreach (char c in token)
+			{
+				bool plain = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '-' || c == '_';
+				if (!plain) return false;
+			}
+			return true;
+		}
+
 		private readonly HashSet<string> allowedHosts;
 		private readonly byte[] token; // null when LAN access is off
 

@@ -89,32 +89,52 @@ namespace NOTacMap
 			running = true;
 			lock (listenerLock)
 			{
-				OpenListener();
+				OpenListener(1);
 			}
 		}
 
 		// Opens the listener for the current address and starts accepting on it. The caller
-		// holds listenerLock.
-		private void OpenListener()
+		// holds listenerLock. If even the localhost prefixes can't be bound (the port is still
+		// held, say right after the old listener was closed), it waits a moment and tries again,
+		// up to `attempts` times, then throws.
+		private void OpenListener(int attempts)
 		{
-			HttpListener opened;
-			try
+			Exception last = null;
+			for (int i = 1; i <= attempts; i++)
 			{
-				opened = StartListener(lanAddress);
+				HttpListener opened = null;
+				string lan = lanAddress;
+				Exception lanError = null;
+				if (lan != null)
+				{
+					try { opened = StartListener(lan); }
+					catch (Exception ex) { lanError = ex; }
+				}
+				if (opened == null)
+				{
+					try { opened = StartListener(null); }
+					catch (Exception ex)
+					{
+						last = ex;
+						if (i < attempts) Thread.Sleep(250);
+						continue;
+					}
+					if (lanError != null)
+					{
+						// The port was free but the network address was turned down, typically
+						// Windows refusing it without admin rights. The map must still work on this PC.
+						Plugin.Log?.LogWarning($"NOTacMap: couldn't listen on {lan} for LAN access ({lanError.Message}). LAN access is off, the map still works on this PC.");
+						refusedAddress = lan;
+						lanAddress = null;
+						guard = new RequestGuard(port, null, null);
+					}
+				}
+				listener = opened;
+				acceptThread = new Thread(() => AcceptLoop(opened)) { IsBackground = true, Name = "NOTacMap-Accept" };
+				acceptThread.Start();
+				return;
 			}
-			catch (Exception ex) when (lanAddress != null)
-			{
-				// Typically Windows refusing a listener on a network address
-				// without admin rights. The map must still work on this PC.
-				Plugin.Log?.LogWarning($"NOTacMap: couldn't listen on {lanAddress} for LAN access ({ex.Message}). LAN access is off, the map still works on this PC.");
-				refusedAddress = lanAddress;
-				lanAddress = null;
-				guard = new RequestGuard(port, null, null);
-				opened = StartListener(null);
-			}
-			listener = opened;
-			acceptThread = new Thread(() => AcceptLoop(opened)) { IsBackground = true, Name = "NOTacMap-Accept" };
-			acceptThread.Start();
+			throw last;
 		}
 
 		private HttpListener StartListener(string lan)
@@ -138,25 +158,41 @@ namespace NOTacMap
 			return opened;
 		}
 
+		// True when the server should be running but has no listener, because a rebuild
+		// couldn't get the port back. SetLanAddress with the current address tries again.
+		public bool Down
+		{
+			get { return running && listener == null; }
+		}
+
 		// For when the PC moves to another network or gets a new address while the game is
 		// running. The listener is rebuilt, which drops every open connection; the pages
 		// reconnect by themselves. null turns LAN access off until an address comes back.
 		public void SetLanAddress(string address)
 		{
-			if (!running || lanToken == null) return;
+			if (lanToken == null) return;
 			lock (listenerLock)
 			{
-				if (address == lanAddress || (address != null && address == refusedAddress)) return;
-				refusedAddress = null;
+				if (!running) return;
+				string wanted = (address != null && address == refusedAddress) ? null : address;
+				if (listener != null && wanted == lanAddress) return;
+				if (address != refusedAddress) refusedAddress = null;
 
 				HttpListener old = listener;
 				listener = null; // tells the old accept loop to stop
 				try { if (old != null) old.Close(); } catch { }
 				DropClients();
 
-				lanAddress = address;
-				guard = new RequestGuard(port, address, lanToken);
-				OpenListener();
+				lanAddress = wanted;
+				guard = new RequestGuard(port, wanted, lanToken);
+				try
+				{
+					OpenListener(5);
+				}
+				catch (Exception ex)
+				{
+					Plugin.Log?.LogWarning($"NOTacMap: couldn't reopen the map server ({ex.Message}). It tries again in a few seconds.");
+				}
 			}
 		}
 

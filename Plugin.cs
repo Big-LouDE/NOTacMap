@@ -97,7 +97,7 @@ namespace NOTacMap
 			lanAddress = Config.Bind("Server", "LanAddress", "",
 				"The network address to listen on for LAN access. Leave empty to use your PC's private address automatically. Must be a private address such as 192.168.x.x.");
 			lanToken = Config.Bind("Server", "LanToken", "",
-				"The secret in the phone link. Created automatically the first time LAN access is turned on. Delete it to get a new one, which stops old links working.");
+				"The secret in the phone link. Created automatically the first time LAN access is turned on. Delete it to get a new one, which stops old links working. If you set one yourself, use letters, digits, - and _ only, at least 16 of them.");
 
 			string lan = null;
 			string token = null;
@@ -118,8 +118,12 @@ namespace NOTacMap
 					{
 						Log.LogWarning($"NOTacMap: LAN access is on in the config but there is no network address yet ({problem}). The map is only available on this PC until there is one.");
 					}
-					if (string.IsNullOrEmpty(lanToken.Value))
+					if (!RequestGuard.IsValidToken(lanToken.Value))
 					{
+						if (!string.IsNullOrEmpty(lanToken.Value))
+						{
+							Log.LogWarning("NOTacMap: LanToken in the config is too short or has characters that don't belong in a link. A new one was created, so old links stop working.");
+						}
 						lanToken.Value = NewToken();
 						Config.Save();
 					}
@@ -170,7 +174,7 @@ namespace NOTacMap
 			{
 				string problem;
 				string found = LanAddress.Resolve("", out problem);
-				if (found == server.LanAddress)
+				if (found == server.LanAddress && !server.Down)
 				{
 					pendingLan = NoPendingLan;
 					return;
@@ -181,8 +185,15 @@ namespace NOTacMap
 					return;
 				}
 				pendingLan = NoPendingLan;
+				bool wasDown = server.Down;
 				server.SetLanAddress(found);
-				if (server.LanActive)
+				if (wasDown)
+				{
+					Log.LogInfo(server.Down
+						? "NOTacMap: the map server is still down, trying again."
+						: "NOTacMap: the map server is back.");
+				}
+				else if (server.LanActive)
 				{
 					Log.LogInfo("NOTacMap: this PC's network address changed. LAN access moved to the new one, the link in the DISPLAY panel is updated.");
 				}

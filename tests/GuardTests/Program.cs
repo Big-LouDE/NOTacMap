@@ -140,6 +140,23 @@ internal static class Program
         Check("query parse bad escape", RequestGuard.ReadQueryValue("t=%zz", "t", out rem) != null);
         Check("query parse first t wins", RequestGuard.ReadQueryValue("t=1&t=2", "t", out rem) == "1" && rem == "t=2");
 
+        // the token has to be long and made of plain characters
+        Check("token ok: 32 hex", RequestGuard.IsValidToken("0123456789abcdef0123456789abcdef"));
+        Check("token ok: 16 chars with - and _", RequestGuard.IsValidToken("Ab-_Ab-_Ab-_Ab-_"));
+        Check("token ok: 128 chars", RequestGuard.IsValidToken(new string('a', 128)));
+        Check("token bad: null", !RequestGuard.IsValidToken(null));
+        Check("token bad: empty", !RequestGuard.IsValidToken(""));
+        Check("token bad: 15 chars", !RequestGuard.IsValidToken(new string('a', 15)));
+        Check("token bad: 129 chars", !RequestGuard.IsValidToken(new string('a', 129)));
+        Check("token bad: quote", !RequestGuard.IsValidToken("aaaaaaaaaaaaaaa\""));
+        Check("token bad: ampersand", !RequestGuard.IsValidToken("aaaaaaaaaaaaaaa&"));
+        Check("token bad: hash", !RequestGuard.IsValidToken("aaaaaaaaaaaaaaa#"));
+        Check("token bad: semicolon", !RequestGuard.IsValidToken("aaaaaaaaaaaaaaa;"));
+        Check("token bad: space", !RequestGuard.IsValidToken("aaaaaaaaaaaaaaa "));
+        Check("token bad: percent", !RequestGuard.IsValidToken("aaaaaaaaaaaaaaa%"));
+        Check("token bad: non-ascii", !RequestGuard.IsValidToken("aaaaaaaaaaaaaaaä"));
+        Check("token bad: newline", !RequestGuard.IsValidToken("aaaaaaaaaaaaaaa\n"));
+
         Console.WriteLine($"\n{pass} passed, {fail} failed");
         Environment.Exit(fail == 0 ? 0 : 1);
     }
