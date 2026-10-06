@@ -53,17 +53,17 @@ To build from source:
 
 Off by default. To open the map on another device on your home network:
 
-1. Set `Server > AllowLan` to `true` in `BepInEx/config/com.bigloude.notacmap.cfg` and start the game.
-2. With LAN on, the map page on your PC first asks where you want to see the map. Pick "On another device" and it shows a QR code and the link. Open the link, or scan the code with the camera, on the other device once. The phone remembers the link afterwards.
+1. Start the game. The map page on your PC first asks where you want to see the map. Pick "On another device".
+2. The first time, a prompt says what that opens up. Confirm it, and the page shows a QR code and the link. Open the link, or scan the code with the camera, on the other device once. The phone remembers the link afterwards.
 3. If Windows asks about the firewall, allow it on private networks only.
 
-Tick "Remember my choice" to skip the question next time. DISPLAY > Phone / tablet changes it later and brings the QR code back. While the PC tab shows the QR code it draws no map, so the plugin sends nothing until a device connects.
+Tick "Remember my choice" to skip the question and the prompt next time. DISPLAY > Phone / tablet has a switch to turn access from other devices on or off, shows the link and QR code while it is on, and changes what the page does when it opens. While the PC tab shows the QR code it draws no map, so the plugin sends nothing until a device connects. You can also set `Server > AllowLan` in the config; the switch keeps that value in step.
 
 Only devices on a private network address (192.168.x.x, 10.x.x.x, 172.16 to 31.x.x or 169.254.x.x) are accepted, and they need the secret in the link. Delete `LanToken` from the config and restart the game to get a new link and cut off old ones.
 
 Anyone who has the link can see your map, and the connection isn't encrypted, so use it at home and not on public wifi. Saving settings only works from the PC, so a phone keeps its own display settings.
 
-If Windows won't let the game listen on the network, the plugin says so in the log and the map keeps working on the PC. The page can't keep a phone screen awake over plain HTTP, so set a longer screen timeout on the phone.
+If Windows won't let the game listen on the network, the page and the log say so, and the map keeps working on the PC. The page can't keep a phone screen awake over plain HTTP, so set a longer screen timeout on the phone.
 
 ## Configuration
 
