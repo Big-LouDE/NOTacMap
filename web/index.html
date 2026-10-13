@@ -122,6 +122,12 @@
     color: var(--hud-dim); font-size: calc(10px * var(--text-scale)); letter-spacing: 0.03em;
     cursor: pointer; user-select: none; -webkit-user-select: none;
   }
+  .legend-bar { display: flex; gap: 6px; align-items: flex-start; }
+  .help-tag {
+    text-transform: uppercase; letter-spacing: 0.08em; border: 1px solid var(--hud-dim); padding: 1px 6px;
+    background: rgba(0, 10, 0, 0.6); color: var(--hud-dim); font: inherit; cursor: pointer;
+  }
+  .help-tag:hover { color: var(--hud-green); border-color: var(--hud-green); }
   .legend-head {
     text-transform: uppercase; letter-spacing: 0.08em; border: 1px solid var(--hud-dim);
     padding: 1px 6px; width: fit-content; background: rgba(0, 10, 0, 0.6);
@@ -149,15 +155,21 @@
   }
   #lanCopy:hover, .mini-btn:hover { color: var(--hud-green); border-color: var(--hud-green); }
   #lanGroup .mini-btn { margin-top: 6px; }
+  #lanGroup #lanNewLink { margin-left: 6px; }
 
   /* Start screen: shown on the game PC when LAN access is on, before the map starts. */
-  #startScreen, #lanConsent {
+  #startScreen, #lanConsent, #helpDialog {
     position: fixed; inset: 0; z-index: 200; background: #030803; overflow: auto;
     display: flex; align-items: flex-start; justify-content: center;
     color: var(--hud-dim); font: calc(13px * var(--text-scale)) "Consolas", monospace;
   }
   #lanConsent { z-index: 210; }
-  #startScreen[hidden], #lanConsent[hidden] { display: none; }
+  #helpDialog { z-index: 205; }
+  #startScreen[hidden], #lanConsent[hidden], #helpDialog[hidden] { display: none; }
+  .help-card h3 { margin: 16px 0 4px; color: var(--hud-green); font-size: 1em; font-weight: normal; text-transform: uppercase; letter-spacing: 0.05em; }
+  .help-card p, .help-card ol { margin: 0 0 6px; line-height: 1.5; }
+  .help-card ol { padding-left: 22px; }
+  .help-card a { color: var(--hud-green); }
   .start-error, .lan-error { color: var(--hostile); }
   .start-error { margin: 8px 0; }
   .lan-consent-text { line-height: 1.5; margin: 0 0 12px; }
@@ -271,7 +283,10 @@
 <body>
 <div id="status">connecting...</div>
 <div id="legend" title="Tap to open or close">
-  <div class="legend-head" id="legendHead">legend</div>
+  <div class="legend-bar">
+    <div class="legend-head" id="legendHead">legend</div>
+    <button type="button" class="help-tag" id="helpBtn" title="How this works">? help</button>
+  </div>
   <div class="legend-rows">
   <div class="row"><svg viewBox="0 0 16 16"><polygon points="8,2 13,12 8,9 3,12" fill="currentColor" stroke="none"/></svg>Plane</div>
   <div class="row"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="3.5"/><line x1="8" y1="1" x2="8" y2="15"/><line x1="1" y1="8" x2="15" y2="8"/></svg>Helicopter</div>
@@ -370,6 +385,7 @@
         </div>
         <canvas id="lanQr" title="Scan with the phone camera"></canvas>
         <button type="button" id="lanShowScreen" class="mini-btn">Show the phone screen now</button>
+        <button type="button" id="lanNewLink" class="mini-btn" title="Makes a new secret link and cuts off every device that has the old one">New link</button>
       </div>
       <label>When this page opens
         <select id="startModeSelect">
@@ -478,6 +494,32 @@
         <button type="button" id="startShowHere">Show the map here too</button>
         <button type="button" id="startBack">Change my choice</button>
       </div>
+    </div>
+  </div>
+</div>
+<div id="helpDialog" hidden role="dialog" aria-label="Help">
+  <div class="start-card help-card">
+    <h2>Help</h2>
+    <h3>Quick start</h3>
+    <ol>
+      <li>Start the game. This page opens by itself in your browser.</li>
+      <li>Drag it to your second monitor. Double-click the map for fullscreen.</li>
+    </ol>
+    <h3>Reading the map</h3>
+    <p>Yellow: you and other human pilots on your team. Blue: AI and structures on your side. Red: the enemy.</p>
+    <p>Pink lines and rings: missile locks. Amber reticle: your marked target.</p>
+    <p>The circle or cone around you is the range of the weapon you have selected.</p>
+    <p>LEGEND (top left) lists every symbol.</p>
+    <h3>Settings</h3>
+    <p>FILTER: which unit types, weapon kinds, overlays and trails to show.</p>
+    <p>DISPLAY: text size, redraw rate, dark mode, colors and the phone or tablet link.</p>
+    <h3>Phone or tablet</h3>
+    <p>DISPLAY > Phone / tablet. Off by default, home network only.</p>
+    <h3>Something wrong?</h3>
+    <p>Is the game running? Does something else use port 8123? (You can change the port in the config.)</p>
+    <p>Feedback and bugs: <a href="https://github.com/Big-LouDE/NOTacMap/issues" target="_blank" rel="noopener noreferrer">github.com/Big-LouDE/NOTacMap/issues</a></p>
+    <div class="start-actions">
+      <button type="button" id="helpClose">Close</button>
     </div>
   </div>
 </div>
@@ -948,6 +990,22 @@ legendEl.addEventListener('click', () => {
 });
 window.addEventListener('resize', applyLegendState);
 
+// The help button sits next to the legend tag, so it must not toggle the legend.
+const helpDialog = document.getElementById('helpDialog');
+function closeHelp() {
+  helpDialog.hidden = true;
+  document.removeEventListener('keydown', onHelpKey);
+}
+function onHelpKey(e) { if (e.key === 'Escape') closeHelp(); }
+document.getElementById('helpBtn').addEventListener('click', e => {
+  e.stopPropagation();
+  helpDialog.hidden = false;
+  document.addEventListener('keydown', onHelpKey);
+  helpDialog.scrollTop = 0;
+  document.getElementById('helpClose').focus({ preventScroll: true });
+});
+document.getElementById('helpClose').addEventListener('click', closeHelp);
+
 // A dark outline behind text keeps it readable on any terrain. Page text gets it
 // from CSS (the data-outline attribute), canvas text from drawText().
 function applySharpCanvas() {
@@ -1290,14 +1348,18 @@ function refreshLan() {
 
 // The PC asks the plugin to switch LAN access on or off. The answer is the new state, with
 // an "error" text when it didn't work.
-function setLan(on) {
+function postLan(body) {
   return fetch('/lan', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ enabled: on })
+    body: JSON.stringify(body)
   }).then(r => r.ok ? r.json() : { enabled: false, error: "The game didn't accept that." })
     .catch(() => ({ enabled: false, error: "Couldn't reach the game." }))
     .then(res => { applyLan(res); return res; });
+}
+
+function setLan(on) {
+  return postLan({ enabled: on });
 }
 
 function showLanError(message) {
@@ -1350,6 +1412,12 @@ function askAndEnableLan() {
 }
 
 if (!isRemoteViewer) document.getElementById('lanGroup').hidden = false;
+
+document.getElementById('lanNewLink').addEventListener('click', () => {
+  if (!confirm('This makes a new link and cuts off every device that has the old one. Continue?')) return;
+  showLanError('');
+  postLan({ newLink: true }).then(res => { if (res.error) showLanError(res.error); });
+});
 document.getElementById('lanToggle').addEventListener('change', e => {
   showLanError('');
   if (e.target.checked) {
