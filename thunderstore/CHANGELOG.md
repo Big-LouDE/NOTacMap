@@ -12,7 +12,7 @@ Better
 - The README is shorter
 
 Security
-- Other websites can't use up the map's few connection slots any more: the live stream only answers the map page itself
+- In current browsers, other websites can't use up the map's few connection slots any more: the live stream only answers the map page itself
 - A device on your network can use at most 3 live streams and 32 requests at a time
 
 ## 1.2.0

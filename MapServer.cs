@@ -85,6 +85,25 @@ namespace NOTacMap
 			}
 		}
 
+		private int StreamsFrom(string who)
+		{
+			lock (clientsLock)
+			{
+				return StreamsFromLocked(who);
+			}
+		}
+
+		// The caller holds clientsLock.
+		private int StreamsFromLocked(string who)
+		{
+			int n = 0;
+			foreach (string other in lanClients.Values)
+			{
+				if (other == who) n++;
+			}
+			return n;
+		}
+
 		private int ClientCount
 		{
 			get
@@ -382,16 +401,24 @@ namespace NOTacMap
 
 		private void HandleRequest(HttpListenerContext context)
 		{
-			IPAddress sender = context.Request.RemoteEndPoint?.Address;
-			bool fromNetwork = sender != null && !IPAddress.IsLoopback(sender.IsIPv4MappedToIPv6 ? sender.MapToIPv4() : sender);
-			if (fromNetwork && Interlocked.Increment(ref networkRequests) > MaxNetworkRequests)
-			{
-				Interlocked.Decrement(ref networkRequests);
-				Reject(context, 503);
-				return;
-			}
+			IPAddress sender = null;
+			bool fromNetwork = false;
+			bool counted = false; // this request holds one of the network request slots
 			try
 			{
+				sender = context.Request.RemoteEndPoint?.Address;
+				fromNetwork = sender != null && !IPAddress.IsLoopback(sender.IsIPv4MappedToIPv6 ? sender.MapToIPv4() : sender);
+				if (fromNetwork)
+				{
+					if (Interlocked.Increment(ref networkRequests) > MaxNetworkRequests)
+					{
+						Interlocked.Decrement(ref networkRequests);
+						Reject(context, 503);
+						return;
+					}
+					counted = true;
+				}
+
 				context.Response.Headers.Add("X-Content-Type-Options", "nosniff");
 				context.Response.Headers.Add("X-Frame-Options", "DENY");
 				context.Response.Headers.Add("Referrer-Policy", "no-referrer");
@@ -400,7 +427,8 @@ namespace NOTacMap
 				string path = request.Url.AbsolutePath;
 				string method = request.HttpMethod;
 
-				GuardDecision decision = guard.Evaluate(request.Headers["Host"], request.Headers["Origin"],
+				RequestGuard usedGuard = guard;
+				GuardDecision decision = usedGuard.Evaluate(request.Headers["Host"], request.Headers["Origin"],
 					request.RemoteEndPoint?.Address, method, path, request.Url.Query, request.Headers["Cookie"],
 					request.Headers["Sec-Fetch-Site"]);
 				if (decision.Status == 302)
@@ -424,7 +452,8 @@ namespace NOTacMap
 					// fails, and the first write to a dead socket can still
 					// succeed. Ping twice before turning anyone away, so a few
 					// reloads in a row never fill the list with ghosts.
-					if (ClientCount >= MaxSseClients)
+					string who = fromNetwork ? (sender.IsIPv4MappedToIPv6 ? sender.MapToIPv4() : sender).ToString() : null;
+					if (ClientCount >= MaxSseClients || (who != null && StreamsFrom(who) >= MaxSseClientsPerAddress))
 					{
 						Ping();
 						Thread.Sleep(150);
@@ -444,13 +473,9 @@ namespace NOTacMap
 						}
 						if (fromNetwork)
 						{
-							string who = (sender.IsIPv4MappedToIPv6 ? sender.MapToIPv4() : sender).ToString();
-							int mine = 0;
-							foreach (string other in lanClients.Values)
-							{
-								if (other == who) mine++;
-							}
-							if (mine >= MaxSseClientsPerAddress)
+							// The secret or the address changed while this request was on its way in
+							// (a new link, a moved listener): it was let in by a guard that is gone.
+							if (!ReferenceEquals(usedGuard, guard) || StreamsFromLocked(who) >= MaxSseClientsPerAddress)
 							{
 								Reject(context, 503);
 								return;
@@ -690,7 +715,7 @@ namespace NOTacMap
 			}
 			finally
 			{
-				if (fromNetwork) Interlocked.Decrement(ref networkRequests);
+				if (counted) Interlocked.Decrement(ref networkRequests);
 			}
 		}
 

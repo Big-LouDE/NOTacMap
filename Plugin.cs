@@ -260,12 +260,13 @@ namespace NOTacMap
 					return "Turn on access from other devices first.";
 				}
 				string token = NewToken();
+				// Saved first, so a restart can never bring the old link back.
+				lanToken.Value = token;
+				Config.Save();
 				if (!server.EnableLan(token, server.LanAddress))
 				{
 					return "The game is closing, so a new link can't be made right now.";
 				}
-				lanToken.Value = token;
-				Config.Save();
 				Log.LogInfo("NOTacMap: a new phone link was made from the map page. The old links stop working.");
 				return null;
 			}
