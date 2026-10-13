@@ -49,9 +49,9 @@ Off by default. To open the map on another device on your home network:
 
 Tick "Remember my choice" to skip the question and the prompt next time.
 
-Once access from other devices is on, it stays on after a restart until you switch it off. Picking "On this PC" does not turn it off. DISPLAY > Phone / tablet has the switch, shows the link and QR code while it is on, and changes what the page does when it opens. While the PC tab shows the QR code it draws no map and keeps no connection open. You can also set `Server > AllowLan` in the config; the switch keeps that value in step.
+Once access from other devices is on, it stays on after a restart until you switch it off. Picking "On this PC" does not turn it off. The DEVICES button (top right) has the switch and the setting for what the page does when it opens. The QR code and the link stay hidden until you press "Show QR code and link", and hide again after 2 minutes. While the PC tab shows the QR code it draws no map and keeps no connection open. You can also set `Server > AllowLan` in the config; the switch keeps that value in step.
 
-Only devices on a private network address (192.168.x.x, 10.x.x.x, 172.16 to 31.x.x or 169.254.x.x) are accepted, and they need the secret in the link. The New link button in DISPLAY > Phone / tablet makes a new link and cuts off every device that has the old one. Deleting `LanToken` from the config and restarting the game does the same. Switching access off and on again keeps the same link.
+Only devices on a private network address (192.168.x.x, 10.x.x.x, 172.16 to 31.x.x or 169.254.x.x) are accepted, and they need the secret in the link. The New link button in DEVICES makes a new link and cuts off every device that has the old one. Deleting `LanToken` from the config and restarting the game does the same. Switching access off and on again keeps the same link.
 
 Anyone who has the link can see your map, and the connection isn't encrypted, so use it at home and not on public wifi. Don't forward the port (router port forwarding, WSL2 or `netsh portproxy`, a reverse proxy): anything forwarded to this PC looks like it comes from the PC itself and needs no secret. Saving settings only works from the PC, so a phone keeps its own display settings.
 

@@ -93,7 +93,7 @@ namespace NOTacMap
 				"Open the map page in your default browser each time the game starts. Turn it off if you would rather open the page yourself, for example in a browser window you keep pinned on the second monitor.");
 
 			allowLan = Config.Bind("Server", "AllowLan", false,
-				"Let other devices on your home network (a phone or tablet) open the map. Off by default. The map page switches this for you (DISPLAY > Phone / tablet, or the question when the page opens) and keeps this value in step. If you set it here yourself, it takes effect the next time the game starts. Anyone on your network who has the link can see the map, so only turn it on on a network you trust.");
+				"Let other devices on your home network (a phone or tablet) open the map. Off by default. The map page switches this for you (the DEVICES button, or the question when the page opens) and keeps this value in step. If you set it here yourself, it takes effect the next time the game starts. Anyone on your network who has the link can see the map, so only turn it on on a network you trust.");
 			lanAddress = Config.Bind("Server", "LanAddress", "",
 				"The network address of this PC that other devices should use. Leave it empty and the plugin finds your private address (192.168.x.x, 10.x.x.x, 172.16 to 31.x.x or 169.254.x.x) and follows it if it changes. Only set it if you are on several networks and the wrong one is picked.");
 			lanToken = Config.Bind("Server", "LanToken", "",
@@ -141,7 +141,7 @@ namespace NOTacMap
 			{
 				// The link itself holds the secret, so it isn't logged. The page
 				// shows it under DISPLAY, on this PC only.
-				Log.LogInfo($"NOTacMap LAN access is on. Other devices on this network can open the map with the link on the map page (DISPLAY > Phone / tablet).");
+				Log.LogInfo($"NOTacMap LAN access is on. Other devices on this network can open the map with the link on the map page (DEVICES button).");
 			}
 
 			if (followNetwork)
