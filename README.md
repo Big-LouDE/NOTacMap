@@ -4,26 +4,16 @@ A live tactical map for [Nuclear Option](https://store.steampowered.com/app/2168
 
 ## Features
 
-- Opens in your browser when the game starts (can be turned off), and closes itself when the game does if the browser allows it
-- Double-click the map for fullscreen
-- Live position, tracked units, airbases, waypoints
-- Icons per unit type (planes, helicopters, tanks, APCs, radar, AA/SAM, ships, buildings) with a legend. Units are matched by name, mods included. Anything unknown gets a fallback shape
-- Icons rotate for your aircraft, helicopter, missiles and bombs
-- Teammates, AI/structures, and enemies each get their own color
-- Incoming-missile warnings with speed and ETA, from the same RWR detection as the cockpit
-- Friendly missiles in flight are shown for everyone, labeled with the pilot
+- Opens in your browser when the game starts (can be turned off), and closes itself when the game does if the browser allows it. Double-click the map for fullscreen
+- Live position, tracked units, airbases and waypoints, with an icon per unit type and a legend. Units are matched by name, mods included, and anything unknown gets a fallback shape. Icons rotate for your aircraft, helicopter, missiles and bombs
+- Teammates, AI/structures and enemies each get their own color, and every map color is editable under DISPLAY, from a honeycomb palette or with RGB and hex values
+- Incoming-missile warnings with speed and ETA, from the same RWR detection as the cockpit. Friendly missiles in flight are shown for everyone, labeled with the pilot
 - Marked targets get an amber reticle, which turns into a spinning "LOST" marker if you lose contact
-- Missile locks show as a pink line and ring. With several missiles out, the closest one gets the label and the rest are small rings (+N)
-- If a missile loses its lock on an aircraft, a ring shows where it was and the line snaps
+- Missile locks show as a pink line and ring. With several missiles out, the closest one gets the label and the rest are small rings (+N). If a missile loses its lock on an aircraft, a ring shows where it was and the line snaps
 - Weapon range ring: a circle at your weapon's base range that turns into a cone along your heading once you mark a target. The range matches the cockpit HUD
-- Runway approach lines extending past each runway end
-- Fading trails behind moving units, with a Trails folder in FILTER to pick which kinds. The grid can be switched off too
-- Every map color is editable under DISPLAY, from a honeycomb palette or with RGB and hex values
-- Tap the legend to open or close it
-- A dark outline on text keeps labels readable over the terrain (switch it off in DISPLAY)
-- FILTER and DISPLAY (top right) control what's shown, how it looks, and the colors
-- The background map comes from the game's own terrain texture, so any map works
-- Pan, zoom, and a button to recenter on you
+- Runway approach lines, and fading trails behind moving units. FILTER picks which kinds of trails show, and the grid can be switched off too
+- FILTER and DISPLAY (top right) control what's shown, how it looks, and the colors. A dark outline on text keeps labels readable over the terrain (switch it off in DISPLAY). Tap the legend to open or close it, and the Help button next to it explains the symbols and the settings
+- The background map comes from the game's own terrain texture, so any map works. Pan, zoom, and a button to recenter on you
 - Optional LAN mode to open the map on a phone or tablet on your home network. Off by default, touch works
 - Light on frame rate: redraws slowly when idle, speeds up when you pan or zoom, and sleeps while the tab is hidden
 
@@ -61,15 +51,17 @@ Tick "Remember my choice" to skip the question and the prompt next time.
 
 Once access from other devices is on, it stays on after a restart until you switch it off. Picking "On this PC" does not turn it off. DISPLAY > Phone / tablet has the switch, shows the link and QR code while it is on, and changes what the page does when it opens. While the PC tab shows the QR code it draws no map and keeps no connection open. You can also set `Server > AllowLan` in the config; the switch keeps that value in step.
 
-Only devices on a private network address (192.168.x.x, 10.x.x.x, 172.16 to 31.x.x or 169.254.x.x) are accepted, and they need the secret in the link. Delete `LanToken` from the config and restart the game to get a new link and cut off old ones. Switching access off and on again keeps the same link.
+Only devices on a private network address (192.168.x.x, 10.x.x.x, 172.16 to 31.x.x or 169.254.x.x) are accepted, and they need the secret in the link. The New link button in DISPLAY > Phone / tablet makes a new link and cuts off every device that has the old one. Deleting `LanToken` from the config and restarting the game does the same. Switching access off and on again keeps the same link.
 
-Anyone who has the link can see your map, and the connection isn't encrypted, so use it at home and not on public wifi. Saving settings only works from the PC, so a phone keeps its own display settings.
+Anyone who has the link can see your map, and the connection isn't encrypted, so use it at home and not on public wifi. Don't forward the port (router port forwarding, WSL2 or `netsh portproxy`, a reverse proxy): anything forwarded to this PC looks like it comes from the PC itself and needs no secret. Saving settings only works from the PC, so a phone keeps its own display settings.
 
 If Windows won't let the game listen on the network, the page and the log say so, and the map keeps working on the PC. The page can't keep a phone screen awake over plain HTTP, so set a longer screen timeout on the phone.
 
 ## Configuration
 
 All settings are on screen. **FILTER** covers unit types, weapon categories, overlays, and trails. **DISPLAY** covers text size, redraw rate, pilot names, dark mode, and colors. Both save to `settings.json` next to the plugin.
+
+A few things live in the BepInEx config instead, `BepInEx/config/com.bigloude.notacmap.cfg` (or press F1 if you have the BepInEx Configuration Manager): the port, the update rate, opening the page automatically, and access from other devices. Each entry has a plain description.
 
 ## Feedback and bugs
 

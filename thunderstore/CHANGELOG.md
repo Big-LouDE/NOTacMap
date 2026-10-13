@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.2.1
+
+New
+- A "? help" button next to the legend explains the map: quick start, the colors and symbols, FILTER and DISPLAY, the phone or tablet view, and what to check when something is wrong
+- A "New link" button in DISPLAY > Phone / tablet makes a new phone link and cuts off every device that has the old one, without restarting the game
+
+Better
+- Every setting in the BepInEx config has a plain-language description
+- If you use the access switch just as the game is closing, the page says the game is closing instead of blaming Windows
+- The README is shorter
+
+Security
+- Other websites can't use up the map's few connection slots any more: the live stream only answers the map page itself
+- A device on your network can use at most 3 live streams and 32 requests at a time
+
 ## 1.2.0
 
 New
