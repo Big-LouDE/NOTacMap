@@ -5,7 +5,8 @@
 New
 - A "? help" button next to the legend explains the map: quick start, the colors and symbols, FILTER and DISPLAY, the phone or tablet view, and what to check when something is wrong
 - A "New link" button in DEVICES makes a new phone link and cuts off every device that has the old one, without restarting the game
-- The phone settings have their own DEVICES button now, and DISPLAY is grouped into Text, Map, Page and Colors. The QR code and the link stay hidden until you press "Show QR code and link", so a bright code doesn't flash at you and nobody next to you can scan it by accident
+- The phone settings have their own DEVICES button now, and DISPLAY is grouped into Text, Map, Page and Colors
+- The QR code and the link stay hidden until you press "Show QR code and link", and hide again after 2 minutes
 
 Better
 - Every setting in the BepInEx config has a plain-language description

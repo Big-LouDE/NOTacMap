@@ -28,12 +28,12 @@ Requires BepInEx 5, which the mod manager installs for you.
 Off by default. To open the map on another device on your home network:
 
 1. Start the game. The map page on your PC first asks where you want to see the map. Pick "On another device".
-2. The first time, a prompt says what that opens up. Confirm it, and the page shows a QR code and the link. Open the link, or scan the code with the camera, on the other device once. The phone remembers the link afterwards.
+2. The first time, a prompt says what that opens up. Confirm it, then press "Show QR code and link". Open the link, or scan the code with the camera, on the other device once. The phone remembers the link afterwards.
 3. If Windows asks about the firewall, allow it on private networks only.
 
 Tick "Remember my choice" to skip the question and the prompt next time.
 
-Once access from other devices is on, it stays on after a restart until you switch it off. Picking "On this PC" does not turn it off. The DEVICES button (top right) has the switch and the setting for what the page does when it opens. The QR code and the link stay hidden until you press "Show QR code and link", and hide again after 2 minutes. While the PC tab shows the QR code it draws no map and keeps no connection open. You can also set `Server > AllowLan` in the config; the switch keeps that value in step.
+Once access from other devices is on, it stays on after a restart until you switch it off. Picking "On this PC" does not turn it off. The DEVICES button (top right) has the switch and the setting for what the page does when it opens. The QR code and the link stay hidden until you press "Show QR code and link", and hide again after 2 minutes. While the PC tab is on that screen it draws no map and keeps no connection open. You can also set `Server > AllowLan` in the config; the switch keeps that value in step.
 
 Only devices on a private network address (192.168.x.x, 10.x.x.x, 172.16 to 31.x.x or 169.254.x.x) are accepted, and they need the secret in the link. The New link button in DEVICES makes a new link and cuts off every device that has the old one. Deleting `LanToken` from the config and restarting the game does the same. Switching access off and on again keeps the same link.
 
