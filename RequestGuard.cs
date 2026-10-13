@@ -65,8 +65,9 @@ namespace NOTacMap
 			}
 		}
 
+		// fetchSite is the Sec-Fetch-Site header, which current browsers add to every request.
 		public GuardDecision Evaluate(string host, string origin, IPAddress remote, string method,
-			string path, string query, string cookieHeader)
+			string path, string query, string cookieHeader, string fetchSite = null)
 		{
 			// Only our own Host values are served. Stops a web page from
 			// reaching us through DNS rebinding (its own domain pointed at one of
@@ -86,6 +87,17 @@ namespace NOTacMap
 				{
 					return GuardDecision.Reject(403, "request comes from another site");
 				}
+			}
+
+			// The event stream is only ever opened by our own page, which is same-origin. Something
+			// else asking for it (an image tag on another site, a page on another local port) would
+			// hold one of the few stream slots and lock the map out. A browser that sends no header
+			// at all is let through.
+			if (path == "/events" && fetchSite != null
+				&& !fetchSite.Equals("same-origin", StringComparison.OrdinalIgnoreCase)
+				&& !fetchSite.Equals("none", StringComparison.OrdinalIgnoreCase))
+			{
+				return GuardDecision.Reject(403, "request comes from another site");
 			}
 
 			bool settingsPost = method == "POST" && path == "/settings";

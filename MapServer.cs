@@ -20,7 +20,7 @@ namespace NOTacMap
 		private volatile HttpListener listener;
 		private volatile HttpListener lanListener;
 		private readonly object listenerLock = new object();
-		private readonly HashSet<HttpListenerResponse> lanClients = new HashSet<HttpListenerResponse>();
+		private readonly Dictionary<HttpListenerResponse, string> lanClients = new Dictionary<HttpListenerResponse, string>(); // event streams that came in over the network, with the address they came from
 		private readonly List<HttpListenerResponse> clients = new List<HttpListenerResponse>();
 		private readonly object clientsLock = new object();
 		private readonly object writeLock = new object();
@@ -29,6 +29,9 @@ namespace NOTacMap
 		private const int MaxSseClients = 8;
 		private const int MaxSettingsBytes = 64 * 1024;
 		private const int MaxLanBodyBytes = 1024;
+		private const int MaxSseClientsPerAddress = 3; // per device on the network, so one device can't take every slot
+		private const int MaxNetworkRequests = 32;     // requests from the network being handled at once
+		private int networkRequests;
 		private readonly int port;
 		private volatile string lanToken; // null while LAN access is off
 		private volatile string lanAddress; // null when LAN access is off, or if it couldn't start
@@ -66,6 +69,10 @@ namespace NOTacMap
 		// Set by the plugin. Switches LAN access on or off for the page's switch in DISPLAY.
 		// Returns null when it worked, or a short message for the user when it didn't.
 		public Func<bool, string> LanSwitch;
+
+		// Set by the plugin. Makes a new secret for the phone link and cuts off the old one. Same
+		// result convention as LanSwitch.
+		public Func<string> LanNewLink;
 
 		// What a phone opens. Contains the secret, so it is only ever shown on
 		// this PC and never logged.
@@ -162,16 +169,22 @@ namespace NOTacMap
 			HttpListener old = lanListener;
 			lanListener = null; // tells its accept loop to stop
 			try { if (old != null) old.Close(); } catch { }
+			DropLanClients();
+			lanAddress = null;
+		}
+
+		// The event streams that came in over the network. This PC's own streams stay.
+		private void DropLanClients()
+		{
 			lock (clientsLock)
 			{
-				foreach (HttpListenerResponse client in lanClients)
+				foreach (HttpListenerResponse client in lanClients.Keys)
 				{
 					try { client.OutputStream.Close(); } catch { }
 					clients.Remove(client);
 				}
 				lanClients.Clear();
 			}
-			lanAddress = null;
 		}
 
 		// A listener for the localhost prefixes (lan is null) or for the network address only.
@@ -213,15 +226,18 @@ namespace NOTacMap
 
 		// Switches LAN access on with a token and an address, without a restart. If Windows
 		// turns the address down, LanActive stays false and the caller says so.
-		public void EnableLan(string token, string address)
+		public bool EnableLan(string token, string address)
 		{
 			lock (listenerLock)
 			{
-				if (!running) return;
+				if (!running) return false;
+				bool newToken = lanToken != null && lanToken != token;
 				lanToken = token;
 				refusedAddress = null;
 				ApplyAddress(address);
 				guard = new RequestGuard(port, lanAddress, lanToken); // a new token also needs a new guard
+				if (newToken) DropLanClients(); // a phone with the old link keeps no stream open
+				return true;
 			}
 		}
 
@@ -366,6 +382,14 @@ namespace NOTacMap
 
 		private void HandleRequest(HttpListenerContext context)
 		{
+			IPAddress sender = context.Request.RemoteEndPoint?.Address;
+			bool fromNetwork = sender != null && !IPAddress.IsLoopback(sender.IsIPv4MappedToIPv6 ? sender.MapToIPv4() : sender);
+			if (fromNetwork && Interlocked.Increment(ref networkRequests) > MaxNetworkRequests)
+			{
+				Interlocked.Decrement(ref networkRequests);
+				Reject(context, 503);
+				return;
+			}
 			try
 			{
 				context.Response.Headers.Add("X-Content-Type-Options", "nosniff");
@@ -377,7 +401,8 @@ namespace NOTacMap
 				string method = request.HttpMethod;
 
 				GuardDecision decision = guard.Evaluate(request.Headers["Host"], request.Headers["Origin"],
-					request.RemoteEndPoint?.Address, method, path, request.Url.Query, request.Headers["Cookie"]);
+					request.RemoteEndPoint?.Address, method, path, request.Url.Query, request.Headers["Cookie"],
+					request.Headers["Sec-Fetch-Site"]);
 				if (decision.Status == 302)
 				{
 					context.Response.AddHeader("Set-Cookie", decision.SetCookie);
@@ -417,12 +442,22 @@ namespace NOTacMap
 							Reject(context, 503);
 							return;
 						}
-						clients.Add(response);
-						IPAddress from = context.Request.RemoteEndPoint?.Address;
-						if (from != null && !IPAddress.IsLoopback(from.IsIPv4MappedToIPv6 ? from.MapToIPv4() : from))
+						if (fromNetwork)
 						{
-							lanClients.Add(response);
+							string who = (sender.IsIPv4MappedToIPv6 ? sender.MapToIPv4() : sender).ToString();
+							int mine = 0;
+							foreach (string other in lanClients.Values)
+							{
+								if (other == who) mine++;
+							}
+							if (mine >= MaxSseClientsPerAddress)
+							{
+								Reject(context, 503);
+								return;
+							}
+							lanClients[response] = who;
 						}
+						clients.Add(response);
 					}
 
 					// Headers only go out with the first write. Sending one
@@ -527,25 +562,40 @@ namespace NOTacMap
 							return;
 						}
 
-						bool turnOn;
+						bool turnOn = false;
+						bool newLink = false;
 						try
 						{
 							var body = Newtonsoft.Json.Linq.JObject.Parse(Encoding.UTF8.GetString(buffer, 0, total));
 							var flag = body["enabled"];
-							if (flag == null || flag.Type != Newtonsoft.Json.Linq.JTokenType.Boolean)
+							var fresh = body["newLink"];
+							bool hasFlag = flag != null;
+							bool hasFresh = fresh != null;
+							// Exactly one of the two, and it has to be a real boolean.
+							if (hasFlag == hasFresh
+								|| (hasFlag && flag.Type != Newtonsoft.Json.Linq.JTokenType.Boolean)
+								|| (hasFresh && (fresh.Type != Newtonsoft.Json.Linq.JTokenType.Boolean || !(bool)fresh)))
 							{
 								Reject(context, 400);
 								return;
 							}
-							turnOn = (bool)flag;
+							if (hasFlag) turnOn = (bool)flag; else newLink = true;
 						}
 						catch (Newtonsoft.Json.JsonException)
 						{
 							Reject(context, 400);
 							return;
 						}
-						Func<bool, string> handler = LanSwitch;
-						error = handler == null ? "LAN access can't be switched from here." : handler(turnOn);
+						if (newLink)
+						{
+							Func<string> makeLink = LanNewLink;
+							error = makeLink == null ? "A new link can't be made from here." : makeLink();
+						}
+						else
+						{
+							Func<bool, string> handler = LanSwitch;
+							error = handler == null ? "LAN access can't be switched from here." : handler(turnOn);
+						}
 					}
 
 					string lanUrl = LanUrl;
@@ -637,6 +687,10 @@ namespace NOTacMap
 			{
 				Plugin.Log?.LogWarning($"NOTacMap request error: {ex.Message}");
 				try { context.Response.Close(); } catch { }
+			}
+			finally
+			{
+				if (fromNetwork) Interlocked.Decrement(ref networkRequests);
 			}
 		}
 

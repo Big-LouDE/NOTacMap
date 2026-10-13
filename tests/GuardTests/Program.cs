@@ -20,8 +20,8 @@ internal static class Program
     }
 
     static GuardDecision Ask(RequestGuard g, string host, string origin, IPAddress from, string method = "GET",
-        string path = "/", string query = "", string cookie = null)
-        => g.Evaluate(host, origin, from, method, path, query, cookie);
+        string path = "/", string query = "", string cookie = null, string fetchSite = null)
+        => g.Evaluate(host, origin, from, method, path, query, cookie, fetchSite);
 
     static void Main()
     {
@@ -173,6 +173,22 @@ internal static class Program
         Check("lowercase post /lan refused", Ask(lan, "localhost:8123", null, Pc, "post", "/lan").Status == 405);
         Check("POST /lan/ is not the switch", Ask(lan, "localhost:8123", null, Pc, "POST", "/lan/").Status == 405);
         Check("POST /LAN is not the switch", Ask(lan, "localhost:8123", null, Pc, "POST", "/LAN").Status == 405);
+
+        // ---- Sec-Fetch-Site on the event stream: only our own page (same-origin), or no header at all
+        Check("events: no header from this PC", Ask(lan, "localhost:8123", null, Pc, path: "/events").Status == 0);
+        Check("events: same-origin from this PC", Ask(lan, "localhost:8123", null, Pc, path: "/events", fetchSite: "same-origin").Status == 0);
+        Check("events: same-origin, different case", Ask(lan, "localhost:8123", null, Pc, path: "/events", fetchSite: "Same-Origin").Status == 0);
+        Check("events: none (typed in the address bar)", Ask(lan, "localhost:8123", null, Pc, path: "/events", fetchSite: "none").Status == 0);
+        Check("events: cross-site refused", Ask(lan, "localhost:8123", null, Pc, path: "/events", fetchSite: "cross-site").Status == 403);
+        Check("events: same-site refused (another local port)", Ask(lan, "localhost:8123", null, Pc, path: "/events", fetchSite: "same-site").Status == 403);
+        Check("events: empty value refused", Ask(lan, "localhost:8123", null, Pc, path: "/events", fetchSite: "").Status == 403);
+        Check("events: unknown value refused", Ask(lan, "localhost:8123", null, Pc, path: "/events", fetchSite: "whatever").Status == 403);
+        Check("events: cross-site refused with LAN off", Ask(off, "localhost:8123", null, Pc, path: "/events", fetchSite: "cross-site").Status == 403);
+        Check("events: phone with cookie, same-origin", Ask(lan, LH, null, Phone, path: "/events", cookie: ck, fetchSite: "same-origin").Status == 0);
+        Check("events: phone with cookie, cross-site refused", Ask(lan, LH, null, Phone, path: "/events", cookie: ck, fetchSite: "cross-site").Status == 403);
+        Check("page: cross-site navigation still allowed (a link from a chat)", Ask(off, "localhost:8123", null, Pc, path: "/", fetchSite: "cross-site").Status == 0);
+        Check("page: phone link from another app, cross-site, goes through", Ask(lan, LH, null, Phone, path: "/", query: "t=" + TOKEN, fetchSite: "cross-site").Status == 302);
+        Check("settings read: cross-site header does not matter here", Ask(off, "localhost:8123", null, Pc, path: "/settings", fetchSite: "cross-site").Status == 0);
 
         Console.WriteLine($"\n{pass} passed, {fail} failed");
         Environment.Exit(fail == 0 ? 0 : 1);

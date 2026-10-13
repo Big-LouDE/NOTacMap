@@ -86,18 +86,18 @@ namespace NOTacMap
 		{
 			Log = Logger;
 			port = Config.Bind("Server", "Port", 8123,
-				"Local port to serve the second-monitor map page on. Avoid 8111, used by NOX.");
+				"The port the map page is served on, so the map is at http://localhost:<port>/. Change it only if something else already uses it (the NOX mod uses 8111). Takes effect the next time the game starts.");
 			updateInterval = Config.Bind("Server", "UpdateInterval", 0.2f,
-				"Seconds between snapshots pushed to connected browser tabs.");
+				"How often, in seconds, the game sends a new picture of the map to the open page. Lower is smoother and costs a little more. The default of 0.2 is 5 times a second.");
 			autoOpenBrowser = Config.Bind("Server", "AutoOpenBrowser", true,
-				"Automatically open the map page in your default browser each time the game starts. Turn off if you'd rather open it yourself (e.g. you keep it pinned in a specific browser/window already).");
+				"Open the map page in your default browser each time the game starts. Turn it off if you would rather open the page yourself, for example in a browser window you keep pinned on the second monitor.");
 
 			allowLan = Config.Bind("Server", "AllowLan", false,
 				"Let other devices on your home network (a phone or tablet) open the map. Off by default. The map page switches this for you (DISPLAY > Phone / tablet, or the question when the page opens) and keeps this value in step. If you set it here yourself, it takes effect the next time the game starts. Anyone on your network who has the link can see the map, so only turn it on on a network you trust.");
 			lanAddress = Config.Bind("Server", "LanAddress", "",
-				"The network address to listen on for LAN access. Leave empty to use your PC's private address automatically. Must be a private address such as 192.168.x.x.");
+				"The network address of this PC that other devices should use. Leave it empty and the plugin finds your private address (192.168.x.x, 10.x.x.x, 172.16 to 31.x.x or 169.254.x.x) and follows it if it changes. Only set it if you are on several networks and the wrong one is picked.");
 			lanToken = Config.Bind("Server", "LanToken", "",
-				"The secret in the phone link. Created automatically the first time LAN access is turned on. Delete it and restart the game to get a new one, which stops old links working. If you set one yourself, use letters, digits, - and _ only, at least 16 of them.");
+				"The secret in the phone link. It is made automatically the first time you turn on access from other devices. The map page has a New link button that makes a new one and cuts off the old links. You can also delete this value and restart the game. If you write one yourself, use letters, digits, - and _ only, at least 16 of them.");
 
 			string lan = null;
 			string token = null;
@@ -133,6 +133,7 @@ namespace NOTacMap
 
 			server = new MapServer(port.Value, lan, token);
 			server.LanSwitch = SwitchLan;
+			server.LanNewLink = NewLink;
 			server.Start();
 			string url = $"http://localhost:{port.Value}/";
 			Log.LogInfo($"NOTacMap listening at {url}, open that on your second monitor.");
@@ -233,7 +234,10 @@ namespace NOTacMap
 					lanToken.Value = NewToken();
 					Config.Save();
 				}
-				server.EnableLan(lanToken.Value, address);
+				if (!server.EnableLan(lanToken.Value, address))
+				{
+					return "The game is closing, so the map can't be shared right now.";
+				}
 				if (!server.LanActive)
 				{
 					server.DisableLan();
@@ -241,6 +245,28 @@ namespace NOTacMap
 				}
 				allowLan.Value = true;
 				Log.LogInfo("NOTacMap: LAN access turned on from the map page. Other devices on this network can open the map with the link shown there.");
+				return null;
+			}
+		}
+
+		// The "New link" button in the page (this PC only). Makes a new secret, saves it, and cuts
+		// off every device that has the old link. Returns null when it worked, else a message.
+		private string NewLink()
+		{
+			lock (lanSwitchLock)
+			{
+				if (!server.LanActive)
+				{
+					return "Turn on access from other devices first.";
+				}
+				string token = NewToken();
+				if (!server.EnableLan(token, server.LanAddress))
+				{
+					return "The game is closing, so a new link can't be made right now.";
+				}
+				lanToken.Value = token;
+				Config.Save();
+				Log.LogInfo("NOTacMap: a new phone link was made from the map page. The old links stop working.");
 				return null;
 			}
 		}
