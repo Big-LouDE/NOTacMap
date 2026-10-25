@@ -63,6 +63,18 @@ All settings are on screen. **FILTER** covers unit types, weapon categories, ove
 
 A few things live in the BepInEx config instead, `BepInEx/config/com.bigloude.notacmap.cfg` (or press F1 if you have the BepInEx Configuration Manager): the port, the update rate, opening the page automatically, and access from other devices. Each entry has a plain description.
 
+## Troubleshooting
+
+**The page says "Bad Request (Invalid host)".** Open `http://127.0.0.1:8123/` and not `localhost`. Some browsers (Firefox often) reach `localhost` over a route the game's web server doesn't answer. Since 1.2.2 the mod opens the right address by itself, so this only happens if you typed `localhost` or run an older version.
+
+**The page doesn't load at all.** Check that the game is running. If you changed the port in the config, restart the game and use the new port. If something else already uses the port (the NOX mod uses 8111), pick a free one with `Server > Port` in `BepInEx/config/com.bigloude.notacmap.cfg`. The game has to be restarted for a new port to apply.
+
+**The page loads but says "disconnected, retrying".** The game closed, or it is still starting up. The page connects by itself as soon as the game is back.
+
+**The phone can't open the link.** Both devices need to be on the same wifi, and the access switch under DEVICES has to be on. If Windows asks about the firewall, allow it on private networks. The link changes when the PC changes network, and "New link" cuts off the old one, so open DEVICES and scan the current code again.
+
+**Where is the log?** In `BepInEx/LogOutput.log` in the game folder. The lines with NOTacMap say what the mod is doing and why a request was turned away. It never contains your phone link.
+
 ## Feedback and bugs
 
 Found a bug or have an idea? Open an issue on GitHub: https://github.com/Big-LouDE/NOTacMap/issues (it needs a free GitHub account). Say what you did and what you expected. If something broke, add the NOTacMap lines from `BepInEx/LogOutput.log`.
