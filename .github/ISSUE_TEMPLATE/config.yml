@@ -1,1 +1,5 @@
 blank_issues_enabled: true
+contact_links:
+  - name: Ideas and questions
+    url: https://github.com/Big-LouDE/NOTacMap/discussions
+    about: Have an idea for the map or a question about it? Start a discussion instead of a bug report.
