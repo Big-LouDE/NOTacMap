@@ -15,7 +15,7 @@ namespace NOTacMap
 	{
 		public const string PluginGuid = "com.bigloude.notacmap";
 		public const string PluginName = "NOTacMap";
-		public const string PluginVersion = "1.2.1";
+		public const string PluginVersion = "1.2.2";
 
 		internal static ManualLogSource Log;
 
@@ -86,7 +86,7 @@ namespace NOTacMap
 		{
 			Log = Logger;
 			port = Config.Bind("Server", "Port", 8123,
-				"The port the map page is served on, so the map is at http://localhost:<port>/. Change it only if something else already uses it (the NOX mod uses 8111). Takes effect the next time the game starts.");
+				"The port the map page is served on, so the map is at http://127.0.0.1:<port>/. Change it only if something else already uses it (the NOX mod uses 8111). Takes effect the next time the game starts.");
 			updateInterval = Config.Bind("Server", "UpdateInterval", 0.2f,
 				"How often, in seconds, the game sends a new picture of the map to the open page. Lower is smoother and costs a little more. The default of 0.2 is 5 times a second.");
 			autoOpenBrowser = Config.Bind("Server", "AutoOpenBrowser", true,
@@ -135,12 +135,15 @@ namespace NOTacMap
 			server.LanSwitch = SwitchLan;
 			server.LanNewLink = NewLink;
 			server.Start();
-			string url = $"http://localhost:{port.Value}/";
+			// 127.0.0.1 and not "localhost": the game's web server knows the name "localhost" on one
+			// loopback address only (usually the IPv6 one), so a browser that reaches localhost over
+			// IPv4, Firefox for one, got "Bad Request (Invalid host)". The IPv4 address always works.
+			string url = $"http://127.0.0.1:{port.Value}/";
 			Log.LogInfo($"NOTacMap listening at {url}, open that on your second monitor.");
 			if (server.LanActive)
 			{
 				// The link itself holds the secret, so it isn't logged. The page
-				// shows it under DISPLAY, on this PC only.
+				// shows it under DEVICES, on this PC only.
 				Log.LogInfo($"NOTacMap LAN access is on. Other devices on this network can open the map with the link on the map page (DEVICES button).");
 			}
 
@@ -260,9 +263,19 @@ namespace NOTacMap
 					return "Turn on access from other devices first.";
 				}
 				string token = NewToken();
+				string oldToken = lanToken.Value;
 				// Saved first, so a restart can never bring the old link back.
-				lanToken.Value = token;
-				Config.Save();
+				try
+				{
+					lanToken.Value = token;
+					Config.Save();
+				}
+				catch (Exception ex)
+				{
+					Log.LogWarning($"NOTacMap: couldn't save the new link to the config ({ex.Message}), so nothing was changed.");
+					try { lanToken.Value = oldToken; } catch { /* the old value is still what the server uses */ }
+					return "The new link couldn't be saved to the config, so nothing was changed.";
+				}
 				if (!server.EnableLan(token, server.LanAddress))
 				{
 					return "The game is closing, so a new link can't be made right now.";

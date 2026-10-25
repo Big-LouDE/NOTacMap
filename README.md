@@ -23,7 +23,7 @@ Sharing marked targets between teammates who both have the mod. The game doesn't
 
 ## How it works
 
-The plugin (`NOTacMap.dll`) runs inside the game and starts a local HTTP server (`http://localhost:8123/` by default). Only this PC can reach it, unless you turn on LAN access (see Phone or tablet). It only reads data your client already has, and never asks the game server for anything extra or sends networked commands. Marked targets and locks only show what the game's own tracker knows. Other websites can't read it or change your settings. The page (`web/index.html`) is a single HTML/JS file that connects over Server-Sent Events and draws on a canvas.
+The plugin (`NOTacMap.dll`) runs inside the game and starts a local HTTP server (`http://127.0.0.1:8123/` by default). Only this PC can reach it, unless you turn on LAN access (see Phone or tablet). It only reads data your client already has, and never asks the game server for anything extra or sends networked commands. Marked targets and locks only show what the game's own tracker knows. Other websites can't read it or change your settings. The page (`web/index.html`) is a single HTML/JS file that connects over Server-Sent Events and draws on a canvas.
 
 ## Installation
 
@@ -31,7 +31,7 @@ NOTacMap is listed on [NOMNOM](https://github.com/KopterBuzz/NOMNOM), the commun
 
 To install by hand, download the latest release from the [Releases page](https://github.com/Big-LouDE/NOTacMap/releases) and extract the `NOTacMap` folder into `BepInEx/plugins/` in your Nuclear Option install. Requires BepInEx 5.
 
-Either way, the map page opens in your default browser when the game starts. Drag it to your second monitor. To stop that, set `Server > AutoOpenBrowser` to false in the BepInEx config and open `http://localhost:8123/` yourself.
+Either way, the map page opens in your default browser when the game starts. Drag it to your second monitor. To stop that, set `Server > AutoOpenBrowser` to false in the BepInEx config and open `http://127.0.0.1:8123/` yourself. Use that address and not `localhost`: some browsers (Firefox often) reach `localhost` over IPv4, and the game's web server then answers "Bad Request (Invalid host)".
 
 To build from source:
 

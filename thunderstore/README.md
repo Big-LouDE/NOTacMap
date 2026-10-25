@@ -19,7 +19,7 @@ A live tactical map for Nuclear Option, for a second monitor. A BepInEx plugin r
 
 ## Install
 
-Install with r2modman or the Thunderstore app. The map page opens in your default browser when the game starts. Drag it to your second monitor. To stop that, set `Server > AutoOpenBrowser` to false in the BepInEx config and open `http://localhost:8123/` yourself.
+Install with r2modman or the Thunderstore app. The map page opens in your default browser when the game starts. Drag it to your second monitor. To stop that, set `Server > AutoOpenBrowser` to false in the BepInEx config and open `http://127.0.0.1:8123/` yourself. Use that address and not `localhost`: some browsers (Firefox often) reach `localhost` over IPv4, and the game's web server then answers "Bad Request (Invalid host)".
 
 Requires BepInEx 5, which the mod manager installs for you.
 
@@ -43,7 +43,7 @@ If Windows won't let the game listen on the network, the page and the log say so
 
 ## How it works
 
-The plugin runs inside the game and starts a local HTTP server (`http://localhost:8123/` by default). Only this PC can reach it, unless you turn on LAN access (see Phone or tablet). It only reads data your client already has, and never asks the game server for anything extra or sends networked commands. Marked targets and locks only show what the game's own tracker knows. Other websites can't read it or change your settings. The page is a single HTML/JS file that connects over Server-Sent Events and draws on a canvas.
+The plugin runs inside the game and starts a local HTTP server (`http://127.0.0.1:8123/` by default). Only this PC can reach it, unless you turn on LAN access (see Phone or tablet). It only reads data your client already has, and never asks the game server for anything extra or sends networked commands. Marked targets and locks only show what the game's own tracker knows. Other websites can't read it or change your settings. The page is a single HTML/JS file that connects over Server-Sent Events and draws on a canvas.
 
 ## Feedback and bugs
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.2
+
+Fixed
+- The map page opened with "Bad Request (Invalid host)" in browsers that reach `localhost` over IPv4, Firefox for one. The game now opens the page at `http://127.0.0.1:8123/`, which every browser can reach. If you typed `localhost` yourself, use that address instead
+
+Better
+- If a new link can't be saved to the config, the page says so and nothing changes
+
 ## 1.2.1
 
 New
