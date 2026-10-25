@@ -1,0 +1,101 @@
+name: Bug report
+description: Something doesn't work, or the map shows the wrong thing
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. The more of this you can fill in, the faster it gets fixed. Skip anything you don't know.
+        Please don't paste your phone link or QR code. It holds the secret that lets someone open your map.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you see, and what did you expect to see? An exact error text or a screenshot helps a lot.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: What you did and what you already tried
+      description: Steps to get there, and anything you tried to fix it (restart, another browser, another port).
+    validations:
+      required: false
+
+  - type: input
+    id: mod-version
+    attributes:
+      label: NOTacMap version
+      description: Shown in BepInEx/LogOutput.log ("Loading [NOTacMap ...]") and in your mod manager.
+      placeholder: "1.2.2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: installed-with
+    attributes:
+      label: How you installed it
+      options:
+        - NOMM (Nuclear Option Mod Manager)
+        - Thunderstore app or r2modman
+        - By hand from GitHub
+        - Other
+    validations:
+      required: false
+
+  - type: input
+    id: game-version
+    attributes:
+      label: Nuclear Option version
+      placeholder: "0.34.2"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where you open the map
+      options:
+        - On the PC that runs the game
+        - On a phone or tablet (access from other devices turned on)
+        - Both
+    validations:
+      required: false
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+      description: Your default browser, and the one you tried if it's another.
+      placeholder: "Firefox 130"
+    validations:
+      required: false
+
+  - type: input
+    id: system
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 23H2"
+    validations:
+      required: false
+
+  - type: textarea
+    id: hardware
+    attributes:
+      label: PC (only if it's about speed or frame rate)
+      description: Processor, graphics card and memory.
+    validations:
+      required: false
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log lines
+      description: |
+        Open BepInEx/LogOutput.log in your game folder and paste the lines that contain "NOTacMap", or any error near them.
+        The log never contains your phone link.
+      render: text
+    validations:
+      required: false
