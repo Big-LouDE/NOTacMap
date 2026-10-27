@@ -2,7 +2,7 @@
 
 A live tactical map for Nuclear Option, for a second monitor. A BepInEx plugin reads game state and serves it to a page in your browser. Nothing to calibrate or set up per map.
 
-A second-screen map for HOTAS pilots. It follows your aircraft by itself, so you never have to reach for the mouse. Works in multiplayer. Tested on official and community servers. It only shows what your own game already knows and sends nothing to the server.
+A second-screen map for HOTAS pilots. It follows your aircraft by itself, so you don't need the mouse during a flight. Works in multiplayer. Tested on official and community servers. It only shows what your own game already knows and sends nothing to the server.
 
 ## Features
 
