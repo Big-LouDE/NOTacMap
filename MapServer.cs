@@ -630,6 +630,21 @@ namespace NOTacMap
 					return;
 				}
 
+				if (path == "/about")
+				{
+					string aboutJson = Newtonsoft.Json.JsonConvert.SerializeObject(new
+					{
+						version = Plugin.PluginVersion,
+						label = Plugin.BuildLabel
+					});
+					byte[] aboutBytes = Encoding.UTF8.GetBytes(aboutJson);
+					context.Response.ContentType = "application/json";
+					context.Response.ContentLength64 = aboutBytes.Length;
+					context.Response.OutputStream.Write(aboutBytes, 0, aboutBytes.Length);
+					context.Response.Close();
+					return;
+				}
+
 				if (path == "/theme")
 				{
 					if (Plugin.ThemeJson == null)

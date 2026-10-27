@@ -21,7 +21,10 @@ namespace NOTacMap
 	{
 		public const string PluginGuid = "com.bigloude.notacmap";
 		public const string PluginName = "NOTacMap";
-		public const string PluginVersion = "1.2.3";
+		public const string PluginVersion = "1.3.0";
+		// Shown in the log and in Help. "dev" while building, "beta1", "beta2" for the test releases, empty for the real 1.3.0.
+		// It is not part of PluginVersion: BepInEx can only read a plain number there.
+		internal const string BuildLabel = "dev";
 
 		internal static ManualLogSource Log;
 
@@ -162,6 +165,10 @@ namespace NOTacMap
 			// IPv4, Firefox for one, got "Bad Request (Invalid host)". The IPv4 address always works.
 			string url = $"http://127.0.0.1:{port.Value}/";
 			Log.LogInfo($"NOTacMap listening at {url}, open that on your second monitor.");
+			if (BuildLabel.Length > 0)
+			{
+				Log.LogInfo($"NOTacMap {PluginVersion} {BuildLabel}: this is a test version, not a normal release.");
+			}
 			if (server.LanActive)
 			{
 				// The link itself holds the secret, so it isn't logged. The page

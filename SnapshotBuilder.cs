@@ -104,6 +104,21 @@ namespace NOTacMap
 		public bool armed; // false = static circle, true = live cone toward a marked target
 	}
 
+	// One of your own weapon stations, for the Combat view buttons. Your own aircraft's data only.
+	// air, surface and radar are WeaponInfo.effectiveness (0 to 1, how well the weapon works against that kind of target).
+	internal class LoadoutStation
+	{
+		public int n; // WeaponStation.Number
+		public string name;
+		public float air;
+		public float surface;
+		public float radar;
+		public bool gun;
+		public bool bomb; // a bomb or glide bomb
+		public int ammo;
+		public bool selected;
+	}
+
 	internal class PlayerSnapshot
 	{
 		public string type; // same unitName used for other units' classification, so the client can tell a heli apart from a plane for its own icon too
@@ -126,6 +141,8 @@ namespace NOTacMap
 		public List<WaypointSnapshot> waypoints = new List<WaypointSnapshot>();
 		public List<MarkedTargetSnapshot> markedTargets = new List<MarkedTargetSnapshot>();
 		public WeaponRangeSnapshot weaponRange;
+		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+		public List<LoadoutStation> loadout; // your own weapon stations, only while you are in an aircraft
 	}
 
 	internal static class SnapshotBuilder
@@ -240,6 +257,33 @@ namespace NOTacMap
 					}
 
 					WeaponStation station = playerAircraft.weaponManager.currentWeaponStation;
+
+					snapshot.loadout = new List<LoadoutStation>();
+					foreach (WeaponStation loadoutStation in playerAircraft.weaponStations)
+					{
+						WeaponInfo info = loadoutStation?.WeaponInfo;
+						if (info == null || loadoutStation.Cargo || info.cargo)
+						{
+							continue;
+						}
+						// Flares, jammers and the like have no effectiveness against anything: not a weapon here.
+						if (info.effectiveness.antiAir <= 0f && info.effectiveness.antiSurface <= 0f && info.effectiveness.antiRadar <= 0f && !info.gun)
+						{
+							continue;
+						}
+						snapshot.loadout.Add(new LoadoutStation
+						{
+							n = loadoutStation.Number,
+							name = string.IsNullOrEmpty(info.shortName) ? info.weaponName : info.shortName,
+							air = Mathf.Round(info.effectiveness.antiAir * 100f) / 100f,
+							surface = Mathf.Round(info.effectiveness.antiSurface * 100f) / 100f,
+							radar = Mathf.Round(info.effectiveness.antiRadar * 100f) / 100f,
+							gun = info.gun,
+							bomb = info.bomb || info.glideBomb,
+							ammo = loadoutStation.Ammo,
+							selected = loadoutStation == station
+						});
+					}
 					if (station != null && station.WeaponInfo.gun == false && station.WeaponInfo.targetRequirements.maxRange > 0f)
 					{
 						TargetRequirements req = station.WeaponInfo.targetRequirements;

@@ -20,6 +20,8 @@ namespace NOTacMap
     {
         public static FakeLog Log = new FakeLog();
         public static string ThemeJson = null;
+        public const string PluginVersion = "1.3.0";
+        public const string BuildLabel = "beta1";
     }
     internal static class MapImageCapture
     {
@@ -481,6 +483,12 @@ internal static class Program
             MapImageCapture.MapName = "";
             MapImageCapture.MapSizeX = 0;
             MapImageCapture.MapSizeY = 0;
+
+            // /about gives the version and the label of a test release
+            r = await Send("GET", H + "/about");
+            Newtonsoft.Json.Linq.JObject about = null;
+            try { about = Newtonsoft.Json.Linq.JObject.Parse(await r.Content.ReadAsStringAsync()); } catch { }
+            Check("H /about answers with the version and the label", about != null && (string)about["version"] == Plugin.PluginVersion && (string)about["label"] == Plugin.BuildLabel);
 
             hs.Stop();
             if (File.Exists(settingsFile)) File.Delete(settingsFile);
