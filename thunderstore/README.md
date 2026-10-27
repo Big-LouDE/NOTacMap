@@ -14,7 +14,7 @@ A second-screen map for HOTAS pilots. It follows your aircraft by itself, so you
 - Missile locks show as a pink line and ring. With several missiles out, the closest one gets the label and the rest are small rings (+N). If a missile loses its lock on an aircraft, a ring shows where it was and the line snaps
 - Weapon range ring: a circle at your weapon's base range that turns into a cone along your heading once you mark a target. The range matches the cockpit HUD
 - Runway approach lines, and fading trails behind moving units. FILTER picks which kinds of trails show, and the grid can be switched off too
-- FILTER and DISPLAY (top right) control what's shown, how it looks, and the colors. Saved to a `settings.json` next to the plugin. A dark outline on text keeps labels readable over the terrain (switch it off in DISPLAY). Tap the legend to open or close it, and the Help button next to it explains the symbols and the settings. The map shows teammates' real Steam names by default. If you stream, turn on callsigns under DISPLAY ("Use real names instead of callsigns").
+- FILTER and DISPLAY (top right) control what's shown, how it looks, and the colors. Saved to a `settings.json` next to the plugin. A dark outline on text keeps labels readable over the terrain (switch it off in DISPLAY). Tap the legend to open or close it, and the Help button next to it explains the symbols and the settings. Heads up if you stream: teammates' real Steam names are shown on the map by default. Untick "Use real names instead of callsigns" in DISPLAY and they get random callsigns instead.
 - The background map comes from the game's own terrain texture, so any map works. Pan, zoom, and a button to recenter on you
 - Optional LAN mode to open the map on a phone or tablet on your home network. Off by default, touch works
 - Light on frame rate: redraws slowly when idle, speeds up when you pan or zoom, and sleeps while the tab is hidden
@@ -23,7 +23,7 @@ Want the details? [FEATURES.md](https://github.com/Big-LouDE/NOTacMap/blob/maste
 
 ## Install
 
-Install with r2modman or the Thunderstore app. The map page opens in your default browser when the game starts. Drag it to your second monitor. To stop that, set `Server > AutoOpenBrowser` to false in the BepInEx config and open `http://127.0.0.1:8123/` yourself. Use that address and not `localhost`: some browsers (Firefox often) reach `localhost` over IPv4, and the game's web server then answers "Bad Request (Invalid host)".
+Install with r2modman or the Thunderstore app. The map page opens in your default browser when the game starts. Drag it to your second monitor. To stop that, set `Server > AutoOpenBrowser` to false in the BepInEx config and open `http://127.0.0.1:8123/` yourself. Use that address and not `localhost`: some browsers (Firefox often) reach `localhost` by a route the game's web server doesn't answer, and you get "Bad Request (Invalid host)".
 
 Requires BepInEx 5, which the mod manager installs for you.
 

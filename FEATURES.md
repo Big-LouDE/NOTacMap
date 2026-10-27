@@ -30,7 +30,7 @@ Double-click the map for fullscreen. F11 and Esc work as usual. There's also a f
 
 ## Looking around the map
 
-North is always up. Drag to pan, scroll the mouse wheel to zoom. On a touch screen one finger pans and two fingers pinch to zoom, around the point between your fingers. If you lift one finger of a pinch, you carry on panning with the other. Zoom goes from 0.5 to 200 metres per pixel and starts at 35.
+North is always up. Drag to pan, scroll the mouse wheel to zoom. On a touch screen one finger pans and two fingers pinch to zoom, around the point between your fingers. If you lift one finger of a pinch, you carry on panning with the other. Zoom goes from 0.5 to 200 meters per pixel and starts at 35.
 
 The view follows your aircraft until you drag it. After that it stays where you put it, and the "recenter on me" button puts it back on you.
 
@@ -40,7 +40,7 @@ The grid has a heavy line every 10 km and a thin line every 1 km once you're zoo
 
 In the top right corner there's a grid reference like the one in the cockpit, for example `Hg95`. It's always for your own position, even when you've panned somewhere else. The numbers count from an offset that every map sets for itself, and the mod reads it from the game, so the reference matches the cockpit's.
 
-You are a white arrow pointing along your heading. In a helicopter you're the helicopter symbol with a short line for the heading, since a rotor cross has no nose. Under you there's a small block with speed in km/h, altitude in metres and heading in degrees.
+You are a white arrow pointing along your heading. In a helicopter you're the helicopter symbol with a short line for the heading, since a rotor cross has no nose. Under you there's a small block with speed in km/h, altitude in meters and heading in degrees.
 
 Labels try not to sit on top of each other. Things that are closer and more dangerous get their spot first, and the speed block is reserved before everything else.
 
@@ -52,19 +52,19 @@ Every unit gets a symbol for its type. Planes are an arrow that turns with the h
 
 The type comes from the unit's name first. I keep lists of names for the vanilla aircraft and vehicles and for the mods I've installed. When a name isn't in the lists, the game's own base type decides, so a new modded aircraft still shows up as a plane and a new vehicle as a vehicle. Anything that fits nothing gets the plane arrow and counts under "Plane" in FILTER.
 
-Colours follow the side. Yellow is you and the other human pilots on your team, blue is AI and structures on your side, red is the enemy. You can change all three. Neutral things use the game's neutral colour.
+Colors follow the side. Yellow is you and the other human pilots on your team, blue is AI and structures on your side, red is the enemy. You can change all three. Neutral things use the game's neutral color.
 
-Each unit has its name next to it in its side's colour. If a unit is the target of a lock, its name appears in the lock label instead, so the two don't overlap.
+Each unit has its name next to it in its side's color. If a unit is the target of a lock, its name appears in the lock label instead, so the two don't overlap.
 
 Ejected pilots are hidden by default. You can show them in FILTER.
 
-Airbases are a square in the airbase's colour with the name beside it. A line through the square means no hangar is free. Landing runways get a dashed line that reaches 5 km past both ends, so you can line up on final. You can switch these lines off in FILTER or change their colour. If you have waypoints, a dashed line runs through them.
+Airbases are a square in the airbase's color with the name beside it. A line through the square means no hangar is free. Landing runways get a dashed line that reaches 5 km past both ends, so you can line up on final. You can switch these lines off in FILTER or change their color. If you have waypoints, a dashed line runs through them.
 
 ---
 
 ## Missiles, locks and warnings
 
-Your own missiles are a bright cyan needle with the weapon name next to them. No checkbox can hide your own missile. Missiles from teammates are a duller colour and carry the pilot's name or callsign with the weapon. A missile flown by AI shows just the weapon.
+Your own missiles are a bright cyan needle with the weapon name next to them. No checkbox can hide your own missile. Missiles from teammates are a duller color and carry the pilot's name or callsign with the weapon. A missile flown by AI shows just the weapon.
 
 A missile that has a lock gets a pink line to its target and a ring around the target, with the target's name. Your own lines are solid and your teammates' are fainter.
 
@@ -92,7 +92,7 @@ The weapon you have selected gets a dashed circle around you showing its range. 
 
 Once you mark a target, the circle turns into a cone along your heading. The width of the cone is the weapon's own limit for how far off the nose it can go, so different weapons draw different cones. The range is worked out by the game's own missile range calculation, using your speed and altitude and the target's, and it's refreshed about once a second, the same as the cockpit HUD. The distance is written just past the tip of the cone.
 
-The static circle is grey-blue and the cone is orange. Both colours can be changed, and FILTER can switch the whole thing off.
+The static circle is gray-blue and the cone is orange. Both colors can be changed, and FILTER can switch the whole thing off.
 
 ---
 
@@ -126,7 +126,7 @@ Everything you tick is saved.
 
 **Page.** "Close this tab when the game closes" is on by default. "Pause the feed while this tab is hidden" is on too, and I explain it further down.
 
-**Colours.** Eleven of them: your team (human pilots), AI and structures, enemy, your missile, teammate missile, lock, marked target, runway guide, weapon range (static), weapon range (armed) and HUD text. Each one has a swatch that opens a honeycomb picker with a row of greys, boxes for RGB and hex, and a reset arrow. HUD text follows the game's own live HUD theme until you pick a colour yourself, and reset puts it back to following the game.
+**Colors.** Eleven of them: your team (human pilots), AI and structures, enemy, your missile, teammate missile, lock, marked target, runway guide, weapon range (static), weapon range (armed) and HUD text. Each one has a swatch that opens a honeycomb picker with a row of grays, boxes for RGB and hex, and a reset arrow. HUD text follows the game's own live HUD theme until you pick a color yourself, and reset puts it back to following the game.
 
 At the bottom of the panel there's a link to report a bug.
 
@@ -138,7 +138,7 @@ The legend sits in the top left and lists every symbol. Tap it to open or close 
 
 The status line says what's going on: `connecting...`, `LIVE` (with the number of friendly weapons in flight when there are any), `disconnected, retrying...`, `asleep (tab hidden)`, `reconnecting...`, `game closed, you can close this tab` or `showing the phone link`.
 
-The colours of the HUD come from the game's live theme. Before a mission has loaded, the page uses a fallback palette and tells you so. It switches over on its own once the game's theme is there.
+The colors of the HUD come from the game's live theme. Before a mission has loaded, the page uses a fallback palette and tells you so. It switches over on its own once the game's theme is there.
 
 ---
 
@@ -162,7 +162,7 @@ Only devices on a private network address are let in (192.168.x.x, 10.x.x.x, 172
 
 If the PC changes network, access moves to the new address and the link on the map page updates. With no network at all, access waits until there is one.
 
-Saving settings only works from the PC. A phone keeps its own display settings in its browser. The page is made for touch too: bigger buttons, panels that fit the screen, and a layout for a phone held sideways, with the buttons in a row and the colour picker showing the numbers next to the honeycomb.
+Saving settings only works from the PC. A phone keeps its own display settings in its browser. The page is made for touch too: bigger buttons, panels that fit the screen, and a layout for a phone held sideways, with the buttons in a row and the color picker showing the numbers next to the honeycomb.
 
 The page can't keep a phone screen on, so set a longer screen timeout on the phone. On Android you can also turn on "Stay awake" in the developer options, which keeps the screen on while it charges. On an iPhone, set Auto-Lock to Never. The reason is that a web page may only keep a screen awake over HTTPS, and this map is plain HTTP on your home network.
 
@@ -197,7 +197,7 @@ When no page is connected, the plugin builds nothing. A hidden tab hangs up afte
 
 ## Things to know
 
-Grid references follow the offsets the game gives each map (80,000 metres each way on the standard maps, 120,000 across on the wide naval map). I checked them against the cockpit on two maps. If one map ever disagrees with your cockpit, please tell me which.
+Grid references follow the offsets the game gives each map (80,000 meters each way on the standard maps, 120,000 across on the wide naval map). I checked them against the cockpit on two maps. If one map ever disagrees with your cockpit, please tell me which.
 
 Unit types come from names plus the base type. An unknown modded aircraft shows as a plane, and a modded helicopter shows as a plane until I add its name.
 

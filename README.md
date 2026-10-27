@@ -35,7 +35,7 @@ NOTacMap is listed on [NOMNOM](https://github.com/KopterBuzz/NOMNOM), the commun
 
 To install by hand, download the latest release from the [Releases page](https://github.com/Big-LouDE/NOTacMap/releases) and extract the `NOTacMap` folder into `BepInEx/plugins/` in your Nuclear Option install. Requires BepInEx 5.
 
-Either way, the map page opens in your default browser when the game starts. Drag it to your second monitor. To stop that, set `Server > AutoOpenBrowser` to false in the BepInEx config and open `http://127.0.0.1:8123/` yourself. Use that address and not `localhost`: some browsers (Firefox often) reach `localhost` over IPv4, and the game's web server then answers "Bad Request (Invalid host)".
+Either way, the map page opens in your default browser when the game starts. Drag it to your second monitor. To stop that, set `Server > AutoOpenBrowser` to false in the BepInEx config and open `http://127.0.0.1:8123/` yourself. Use that address and not `localhost`: some browsers (Firefox often) reach `localhost` by a route the game's web server doesn't answer, and you get "Bad Request (Invalid host)".
 
 To build from source:
 
@@ -65,7 +65,7 @@ If Windows won't let the game listen on the network, the page and the log say so
 
 ## Configuration
 
-All settings are on screen. **FILTER** covers unit types, weapon categories, overlays, and trails. **DISPLAY** covers text size, redraw rate, pilot names, the red HUD (night vision), and colors. Both save to `settings.json` next to the plugin. The map shows teammates' real Steam names by default. If you stream, turn on callsigns under DISPLAY ("Use real names instead of callsigns").
+All settings are on screen. **FILTER** covers unit types, weapon categories, overlays, and trails. **DISPLAY** covers text size, redraw rate, pilot names, the red HUD (night vision), and colors. Both save to `settings.json` next to the plugin. Heads up if you stream: teammates' real Steam names are shown on the map by default. Untick "Use real names instead of callsigns" in DISPLAY and they get random callsigns instead.
 
 A few things live in the BepInEx config instead, `BepInEx/config/com.bigloude.notacmap.cfg` (or press F1 if you have the BepInEx Configuration Manager): the port, the update rate, opening the page automatically, and access from other devices. Each entry has a plain description.
 
