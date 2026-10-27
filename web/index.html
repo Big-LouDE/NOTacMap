@@ -370,8 +370,8 @@
       <label><input type="checkbox" data-group="overlays" data-key="runwayGuides" checked>Runway approach guides</label>
       <label><input type="checkbox" data-group="overlays" data-key="weaponRange" checked>Weapon range</label>
       <label><input type="checkbox" data-group="overlays" data-key="grid" checked>Grid</label>
-      <label><input type="checkbox" data-group="overlays" data-key="rangeRings">Range rings around me</label>
-      <label><input type="checkbox" data-group="overlays" data-key="scaleBar" checked>Scale bar</label>
+      <label><input type="checkbox" data-group="overlays" data-key="rangeRings">Distance rings</label>
+      <label><input type="checkbox" data-group="overlays" data-key="scaleBar" checked>Show scale</label>
     </div>
     <details class="group">
       <summary>Trails</summary>
@@ -441,28 +441,29 @@
           <option value="30">30 fps (smoothest)</option>
         </select>
       </label>
-      <label>Range rings
+      <label>Which rings
         <select id="ringSelect">
-          <option value="all" selected>5, 10, 20 and 40 km</option>
+          <option value="all" selected>All four</option>
           <option value="5">5 km only</option>
           <option value="10">10 km only</option>
           <option value="20">20 km only</option>
           <option value="40">40 km only</option>
         </select>
       </label>
-      <label><input type="checkbox" data-group="display" data-key="showMissileEta" checked>Speed and time to impact on incoming missiles</label>
+      <label><input type="checkbox" data-group="display" data-key="showMissileEta" checked>Missile warning shows speed and ETA</label>
+      <div class="note">Beyond the warning tone and the arrows, this is extra information from the map.</div>
       <label><input type="checkbox" data-group="display" data-key="sharpCanvas">Sharp text and lines (uses more CPU on this device)</label>
       <label><input type="checkbox" data-group="display" data-key="darkMode">Red HUD (night vision)</label>
     </div>
     <div class="group">
       <h4>Marked target in range</h4>
-      <label><input type="checkbox" data-group="display" data-key="cueFill" checked>Cone fills softly</label>
-      <label><input type="checkbox" data-group="display" data-key="cueBrackets" checked>Target brackets close in</label>
-      <label><input type="checkbox" data-group="display" data-key="cueNumber" checked>Range number lights up</label>
-      <label><input type="checkbox" data-group="display" data-key="cueFade" checked>One slow fade when it enters</label>
-      <label><input type="checkbox" data-group="display" data-key="cueSteer" checked>Arrows that show which way to turn</label>
-      <label><input type="checkbox" data-group="display" data-key="cueClosing" checked>Distance left until the target is in range</label>
-      <label><input type="checkbox" data-group="display" data-key="cueCount" checked>How many marked targets are in range</label>
+      <label><input type="checkbox" data-group="display" data-key="cueFill" checked>Tint the cone</label>
+      <label><input type="checkbox" data-group="display" data-key="cueBrackets" checked>Close in on the target</label>
+      <label><input type="checkbox" data-group="display" data-key="cueNumber" checked>Light up the range number</label>
+      <label><input type="checkbox" data-group="display" data-key="cueFade" checked>Fade once when it enters</label>
+      <label><input type="checkbox" data-group="display" data-key="cueSteer" checked>Turn arrows</label>
+      <label><input type="checkbox" data-group="display" data-key="cueClosing" checked>Distance still to go</label>
+      <label><input type="checkbox" data-group="display" data-key="cueCount" checked>Count of targets in range</label>
     </div>
     <div class="group">
       <h4>Page</h4>
@@ -590,6 +591,8 @@
     <h3>Settings</h3>
     <p>FILTER: which unit types, weapon kinds, overlays and trails to show.</p>
     <p>DISPLAY: text size, redraw rate, red HUD, names and colors.</p>
+    <p>FILTER also has presets. Combat shows only what your weapons can hit.</p>
+    <p>Range rings and a scale bar help to judge distances. Both are in FILTER.</p>
     <h3>Phone or tablet</h3>
     <p>DEVICES (top right). Off by default, home network only. The QR code stays hidden until you show it.</p>
     <h3>Something wrong?</h3>
@@ -1808,7 +1811,7 @@ function updateCombat(loadout) {
   if (key === combatKey) return;
   combatKey = key;
   if (result) applyFilterValues(result.values);
-  updatePresetButtons(result ? 'Showing ' + result.summary + '.' : (lastLoadout ? 'No weapon with ammo to go by, the boxes stay as they are.' : 'Waiting for your weapons...'));
+  updatePresetButtons(result ? 'Combat view: ' + result.summary + '.' : (lastLoadout ? 'No weapon with ammo, so nothing is changed.' : 'Waiting for your weapons...'));
 }
 
 document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => setPreset(b.dataset.preset)));
@@ -1819,7 +1822,7 @@ settingsReady.then(() => { updatePresetButtons(); });
 const rotateBtn = document.getElementById('rotateBtn');
 if (matchMedia('(pointer: coarse)').matches) rotateBtn.hidden = false;
 function rotateLabel() {
-  rotateBtn.textContent = '\u21bb rotate' + (rotation === 90 ? ': turn phone left' : rotation === 270 ? ': turn phone right' : '');
+  rotateBtn.textContent = '\u21bb rotate';
   rotateBtn.classList.toggle('active', rotation !== 0);
 }
 rotateBtn.addEventListener('click', () => {
