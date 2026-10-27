@@ -13,12 +13,25 @@ namespace NOTacMap
 		internal static float MapSizeX;
 		internal static float MapSizeY;
 		internal static string MapName;
+		// Each map sets its own grid offsets (the cockpit grid reference counts from them). 80000 is the
+		// game's default and what the 81920 m maps use, a wider map has more.
+		internal static int OffsetX = 80000;
+		internal static int OffsetY = 80000;
 
 		private static MapSettings lastCaptured;
 
-		// Cheap check; call this occasionally (not every frame) from Plugin.Update().
+		private static float nextRecheck;
+
+		// Call this every couple of seconds from Plugin.Update(). FindObjectOfType is not cheap (about
+		// 5 ms in a running mission, measured), so once a map is captured it only looks again every 30
+		// seconds. A mission change destroys the old MapSettings, and then it looks on every call.
 		public static void CaptureIfNeeded()
 		{
+			if (lastCaptured != null && Time.realtimeSinceStartup < nextRecheck)
+			{
+				return;
+			}
+			nextRecheck = Time.realtimeSinceStartup + 30f;
 			MapSettings settings = Object.FindObjectOfType<MapSettings>();
 			if (settings == null || settings == lastCaptured)
 			{
@@ -55,9 +68,11 @@ namespace NOTacMap
 			MapSizeX = settings.MapSize.x;
 			MapSizeY = settings.MapSize.y;
 			MapName = settings.name;
+			OffsetX = settings.OffsetX;
+			OffsetY = settings.OffsetY;
 
 			Object.Destroy(readable);
-			Plugin.Log.LogInfo($"NOTacMap: captured map image '{MapName}' ({source.width}x{source.height}, MapSize={MapSizeX}x{MapSizeY})");
+			Plugin.Log.LogInfo($"NOTacMap: captured map image '{MapName}' ({source.width}x{source.height}, MapSize={MapSizeX}x{MapSizeY}, grid offset {OffsetX},{OffsetY})");
 		}
 	}
 }

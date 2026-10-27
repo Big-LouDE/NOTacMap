@@ -10,12 +10,18 @@ using UnityEngine;
 
 namespace NOTacMap
 {
+	// Read by name by the BepInEx Configuration Manager (F1), which looks for a field called Browsable.
+	internal sealed class ConfigurationManagerAttributes
+	{
+		public bool? Browsable;
+	}
+
 	[BepInPlugin(PluginGuid, PluginName, PluginVersion)]
 	public class Plugin : BaseUnityPlugin
 	{
 		public const string PluginGuid = "com.bigloude.notacmap";
 		public const string PluginName = "NOTacMap";
-		public const string PluginVersion = "1.2.2";
+		public const string PluginVersion = "1.2.3";
 
 		internal static ManualLogSource Log;
 
@@ -85,10 +91,12 @@ namespace NOTacMap
 		private void Awake()
 		{
 			Log = Logger;
-			port = Config.Bind("Server", "Port", 8123,
-				"The port the map page is served on, so the map is at http://127.0.0.1:<port>/. Change it only if something else already uses it (the NOX mod uses 8111). Takes effect the next time the game starts.");
-			updateInterval = Config.Bind("Server", "UpdateInterval", 0.2f,
-				"How often, in seconds, the game sends a new picture of the map to the open page. Lower is smoother and costs a little more. The default of 0.2 is 5 times a second.");
+			port = Config.Bind("Server", "Port", 8123, new ConfigDescription(
+				"The port the map page is served on, so the map is at http://127.0.0.1:<port>/. Change it only if something else already uses it (the NOX mod uses 8111). Takes effect the next time the game starts.",
+				new AcceptableValueRange<int>(1024, 65535)));
+			updateInterval = Config.Bind("Server", "UpdateInterval", 0.2f, new ConfigDescription(
+				"How often, in seconds, the game sends a new picture of the map to the open page. Lower is smoother and costs a little more. The default of 0.2 is 5 times a second.",
+				new AcceptableValueRange<float>(0.05f, 5f)));
 			autoOpenBrowser = Config.Bind("Server", "AutoOpenBrowser", true,
 				"Open the map page in your default browser each time the game starts. Turn it off if you would rather open the page yourself, for example in a browser window you keep pinned on the second monitor.");
 
@@ -96,8 +104,12 @@ namespace NOTacMap
 				"Let other devices on your home network (a phone or tablet) open the map. Off by default. The map page switches this for you (the DEVICES button, or the question when the page opens) and keeps this value in step. If you set it here yourself, it takes effect the next time the game starts. Anyone on your network who has the link can see the map, so only turn it on on a network you trust.");
 			lanAddress = Config.Bind("Server", "LanAddress", "",
 				"The network address of this PC that other devices should use. Leave it empty and the plugin finds your private address (192.168.x.x, 10.x.x.x, 172.16 to 31.x.x or 169.254.x.x) and follows it if it changes. Only set it if you are on several networks and the wrong one is picked.");
-			lanToken = Config.Bind("Server", "LanToken", "",
-				"The secret in the phone link. It is made automatically the first time you turn on access from other devices. The map page has a New link button that makes a new one and cuts off the old links. You can also delete this value and restart the game. If you write one yourself, use letters, digits, - and _ only, at least 16 of them.");
+			// Browsable = false keeps the secret out of the F1 Configuration Manager window, where it
+			// would show on screen or on a stream. It stays in the config file.
+			lanToken = Config.Bind("Server", "LanToken", "", new ConfigDescription(
+				"The secret in the phone link. It is made automatically the first time you turn on access from other devices. The map page has a New link button that makes a new one and cuts off the old links. You can also delete this value and restart the game. If you write one yourself, use letters, digits, - and _ only, at least 16 of them.",
+				null,
+				new ConfigurationManagerAttributes { Browsable = false }));
 
 			string lan = null;
 			string token = null;
@@ -134,7 +146,17 @@ namespace NOTacMap
 			server = new MapServer(port.Value, lan, token);
 			server.LanSwitch = SwitchLan;
 			server.LanNewLink = NewLink;
-			server.Start();
+			try
+			{
+				server.Start();
+			}
+			catch (Exception ex)
+			{
+				Log.LogError($"NOTacMap: couldn't start the map server on port {port.Value} ({ex.Message.Trim()}). Something else probably uses that port (the NOX mod uses 8111). Set Server > Port in {Config.ConfigFilePath} to a free port and restart the game. The map stays off until then, the game itself is not affected.");
+				try { server.Stop(); } catch { /* it never fully started */ }
+				server = null;
+				return;
+			}
 			// 127.0.0.1 and not "localhost": the game's web server knows the name "localhost" on one
 			// loopback address only (usually the IPv6 one), so a browser that reaches localhost over
 			// IPv4, Firefox for one, got "Bad Request (Invalid host)". The IPv4 address always works.
@@ -177,7 +199,7 @@ namespace NOTacMap
 		{
 			try
 			{
-				if (!server.LanAllowed) return;
+				if (server == null || !server.LanAllowed) return;
 				string problem;
 				string found = LanAddress.Resolve("", out problem);
 				if (found == server.LanAddress)
@@ -300,6 +322,11 @@ namespace NOTacMap
 
 		private void Update()
 		{
+			if (server == null)
+			{
+				return;
+			}
+
 			DumpThemeOnce();
 
 			mapCheckTimer += Time.unscaledDeltaTime;
@@ -340,7 +367,17 @@ namespace NOTacMap
 			}
 
 			var buildStopwatch = System.Diagnostics.Stopwatch.StartNew();
-			MapSnapshot snapshot = SnapshotBuilder.Build();
+			MapSnapshot snapshot = null;
+			try
+			{
+				snapshot = SnapshotBuilder.Build();
+			}
+			catch (Exception ex)
+			{
+				// After a game update one internal call can start failing. Update runs five times a
+				// second here, so each distinct error is logged once and then stays quiet.
+				LogOnce("building the map", ex);
+			}
 			buildStopwatch.Stop();
 			// Logged when it is slow enough to matter for frame time.
 			if (buildStopwatch.ElapsedMilliseconds > 3)
@@ -362,12 +399,33 @@ namespace NOTacMap
 						string json = JsonConvert.SerializeObject(snapshot);
 						server.Broadcast(json);
 					}
+					catch (Exception ex)
+					{
+						LogOnce("sending the map", ex);
+					}
 					finally
 					{
 						broadcastInFlight = false;
 					}
 				});
 			}
+		}
+
+		private readonly System.Collections.Generic.HashSet<string> loggedErrors = new System.Collections.Generic.HashSet<string>();
+
+		// Logs an error the first time it is seen and then not again, so a failure that repeats on
+		// every update doesn't fill the log. Capped, in case the message keeps changing.
+		private void LogOnce(string what, Exception ex)
+		{
+			string key = what + "|" + ex.GetType().Name + "|" + ex.Message;
+			lock (loggedErrors)
+			{
+				if (loggedErrors.Count >= 20 || !loggedErrors.Add(key))
+				{
+					return;
+				}
+			}
+			Log.LogError($"NOTacMap: a problem while {what}: {ex}. This is logged once, the map keeps trying.");
 		}
 
 		private void OnDestroy()

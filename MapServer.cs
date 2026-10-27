@@ -23,11 +23,47 @@ namespace NOTacMap
 		private readonly Dictionary<HttpListenerResponse, string> lanClients = new Dictionary<HttpListenerResponse, string>(); // event streams that came in over the network, with the address they came from
 		private readonly List<HttpListenerResponse> clients = new List<HttpListenerResponse>();
 		private readonly object clientsLock = new object();
-		private readonly object writeLock = new object();
 		private volatile bool running;
 
 		private const int MaxSseClients = 8;
 		private const int MaxSettingsBytes = 64 * 1024;
+		private static readonly object settingsLock = new object();
+
+		// Two tabs can save at the same moment, and a crash in the middle of a write must not leave
+		// half a file. So one save at a time, written to a temp file first and then swapped in.
+		private static void WriteSettingsFile(string path, string body)
+		{
+			lock (settingsLock)
+			{
+				string temp = path + ".tmp";
+				File.WriteAllText(temp, body);
+				try
+				{
+					if (File.Exists(path))
+					{
+						File.Replace(temp, path, null);
+					}
+					else
+					{
+						File.Move(temp, path);
+					}
+				}
+				catch (Exception)
+				{
+					// Some setups don't support File.Replace. A plain copy still keeps the temp file's content whole.
+					File.Copy(temp, path, true);
+					try { File.Delete(temp); } catch { }
+				}
+			}
+		}
+
+		private static string ReadSettingsFile(string path)
+		{
+			lock (settingsLock)
+			{
+				return File.Exists(path) ? File.ReadAllText(path) : "{}";
+			}
+		}
 		private const int MaxLanBodyBytes = 1024;
 		private const int MaxSseClientsPerAddress = 3; // per device on the network, so one device can't take every slot
 		private const int MaxNetworkRequests = 32;     // requests from the network being handled at once
@@ -195,14 +231,21 @@ namespace NOTacMap
 		// The event streams that came in over the network. This PC's own streams stay.
 		private void DropLanClients()
 		{
+			List<HttpListenerResponse> gone;
 			lock (clientsLock)
 			{
-				foreach (HttpListenerResponse client in lanClients.Keys)
+				gone = new List<HttpListenerResponse>(lanClients.Keys);
+				foreach (HttpListenerResponse client in gone)
 				{
-					try { client.OutputStream.Close(); } catch { }
 					clients.Remove(client);
+					writers.Remove(client);
 				}
 				lanClients.Clear();
+			}
+			// With Abort and off this thread: a closing write into a stuck socket could wait.
+			foreach (HttpListenerResponse client in gone)
+			{
+				AbortLater(client);
 			}
 		}
 
@@ -300,20 +343,23 @@ namespace NOTacMap
 				try { if (listener != null) listener.Stop(); } catch { }
 				try { if (lanListener != null) lanListener.Stop(); } catch { }
 			}
+			HttpListenerResponse[] open;
 			lock (clientsLock)
 			{
-				foreach (HttpListenerResponse client in clients)
-				{
-					try { client.OutputStream.Close(); } catch { }
-				}
+				open = clients.ToArray();
 				clients.Clear();
 				lanClients.Clear();
+				writers.Clear();
+			}
+			foreach (HttpListenerResponse client in open)
+			{
+				AbortLater(client);
 			}
 		}
 
 		public void Broadcast(string json)
 		{
-			WriteToClients(Encoding.UTF8.GetBytes($"data: {json}\n\n"));
+			WriteToClients(Encoding.UTF8.GetBytes($"data: {json}\n\n"), true);
 		}
 
 		// An SSE comment line: browsers ignore it, but writing it finds clients
@@ -321,56 +367,141 @@ namespace NOTacMap
 		// snapshot is sent while there's no aircraft (main menu, loading).
 		public void Ping()
 		{
-			WriteToClients(KeepAlive);
+			WriteToClients(KeepAlive, false);
 		}
 
 		private static readonly byte[] KeepAlive = Encoding.UTF8.GetBytes(": keepalive\n\n");
 
-		private void WriteToClients(byte[] payload)
+		// Every client has its own writer. A socket write can block for a long time (a phone that
+		// went out of wifi range without closing the connection), and when all clients were
+		// written one after another that froze the PC's own map too. Now a slow client only
+		// holds up itself: it gets the newest snapshot when it catches up, and a client that has
+		// been stuck in one write for StallLimit is dropped (the page reconnects by itself).
+		private sealed class ClientWriter
 		{
-			// Copy the client list under the lock, then write outside it.
-			// HasClients is checked from the main thread and needs the same lock, so
-			// a slow socket write inside it would stall the game.
+			public bool Busy;
+			public DateTime BusySince;
+			public byte[] Pending;
+		}
+
+		private static readonly TimeSpan StallLimit = TimeSpan.FromSeconds(5);
+		private readonly Dictionary<HttpListenerResponse, ClientWriter> writers = new Dictionary<HttpListenerResponse, ClientWriter>();
+
+		private void WriteToClients(byte[] payload, bool isSnapshot)
+		{
+			// Copy the client list under the lock, then hand out the work outside it.
+			// HasClients is checked from the main thread and needs the same lock.
 			HttpListenerResponse[] snapshot;
 			lock (clientsLock)
 			{
 				snapshot = clients.ToArray();
 			}
 
-			// One writer at a time: a snapshot and a keepalive ping arriving on
-			// different threads would otherwise interleave bytes on the stream.
-			List<HttpListenerResponse> failed = null;
-			lock (writeLock)
+			foreach (HttpListenerResponse client in snapshot)
 			{
-				foreach (HttpListenerResponse client in snapshot)
+				SendTo(client, payload, isSnapshot);
+			}
+		}
+
+		private void SendTo(HttpListenerResponse client, byte[] payload, bool isSnapshot)
+		{
+			ClientWriter writer;
+			lock (clientsLock)
+			{
+				if (!clients.Contains(client)) return;
+				if (!writers.TryGetValue(client, out writer))
 				{
-					try
-					{
-						client.OutputStream.Write(payload, 0, payload.Length);
-						client.OutputStream.Flush();
-					}
-					catch
-					{
-						(failed ?? (failed = new List<HttpListenerResponse>())).Add(client);
-					}
+					writers[client] = writer = new ClientWriter();
 				}
 			}
 
-			if (failed != null)
+			bool stalled = false;
+			lock (writer)
 			{
-				lock (clientsLock)
+				if (writer.Busy)
 				{
-					foreach (HttpListenerResponse client in failed)
-					{
-						clients.Remove(client);
-						lanClients.Remove(client);
-					}
+					// Still sending the last one. Keep only the newest snapshot for it; a
+					// keepalive is not worth waiting for.
+					if (isSnapshot) writer.Pending = payload;
+					stalled = DateTime.UtcNow - writer.BusySince > StallLimit;
+					if (!stalled) return;
 				}
-				foreach (HttpListenerResponse client in failed)
+				else
 				{
-					try { client.OutputStream.Close(); } catch { }
+					writer.Busy = true;
+					writer.BusySince = DateTime.UtcNow;
 				}
 			}
+
+			if (stalled)
+			{
+				Plugin.Log?.LogWarning("NOTacMap: dropped an event stream that stopped taking data (a phone out of range?). The page reconnects by itself.");
+				DropClient(client, true);
+				return;
+			}
+
+			ThreadPool.QueueUserWorkItem(_ => Pump(client, writer, payload));
+		}
+
+		// Writes to one client until it has caught up. Runs on a pool thread, one at a time per client.
+		private void Pump(HttpListenerResponse client, ClientWriter writer, byte[] first)
+		{
+			byte[] next = first;
+			while (next != null)
+			{
+				try
+				{
+					client.OutputStream.Write(next, 0, next.Length);
+					client.OutputStream.Flush();
+				}
+				catch
+				{
+					DropClient(client, false);
+					return;
+				}
+
+				lock (writer)
+				{
+					next = writer.Pending;
+					writer.Pending = null;
+					if (next == null)
+					{
+						writer.Busy = false;
+					}
+					else
+					{
+						writer.BusySince = DateTime.UtcNow;
+					}
+				}
+			}
+		}
+
+		// A stuck client is cut off with Abort, because a normal Close would try to write the end of
+		// the stream into the same full socket.
+		private void DropClient(HttpListenerResponse client, bool abort)
+		{
+			lock (clientsLock)
+			{
+				clients.Remove(client);
+				lanClients.Remove(client);
+				writers.Remove(client);
+			}
+			if (abort)
+			{
+				AbortLater(client);
+				return;
+			}
+			try { client.OutputStream.Close(); } catch { }
+		}
+
+		// Abort can wait for the write that is stuck on the same connection (seen in the game), so it
+		// never runs on the thread that sends the snapshots or holds a lock.
+		private static void AbortLater(HttpListenerResponse client)
+		{
+			ThreadPool.QueueUserWorkItem(_ =>
+			{
+				try { client.Abort(); } catch { }
+			});
 		}
 
 		private void AcceptLoop(HttpListener mine, bool isLan)
@@ -488,11 +619,7 @@ namespace NOTacMap
 					// Headers only go out with the first write. Sending one
 					// comment now lets the page see the connection open at
 					// once instead of waiting for the next snapshot or ping.
-					lock (writeLock)
-					{
-						response.OutputStream.Write(KeepAlive, 0, KeepAlive.Length);
-						response.OutputStream.Flush();
-					}
+					SendTo(response, KeepAlive, false);
 					// Response is left open; Broadcast()/Stop() write to and close it.
 					return;
 				}
@@ -542,11 +669,15 @@ namespace NOTacMap
 						context.Response.Close();
 						return;
 					}
-					string json = "{"
-						+ $"\"mapSizeX\":{MapImageCapture.MapSizeX.ToString(System.Globalization.CultureInfo.InvariantCulture)},"
-						+ $"\"mapSizeY\":{MapImageCapture.MapSizeY.ToString(System.Globalization.CultureInfo.InvariantCulture)},"
-						+ $"\"mapName\":\"{MapImageCapture.MapName}\""
-						+ "}";
+					// Built by the serializer, so a map name with a quote or a backslash can't break the JSON.
+					string json = Newtonsoft.Json.JsonConvert.SerializeObject(new
+					{
+						mapSizeX = MapImageCapture.MapSizeX,
+						mapSizeY = MapImageCapture.MapSizeY,
+						offsetX = MapImageCapture.OffsetX,
+						offsetY = MapImageCapture.OffsetY,
+						mapName = MapImageCapture.MapName
+					});
 					byte[] bytes = Encoding.UTF8.GetBytes(json);
 					context.Response.ContentType = "application/json";
 					context.Response.ContentLength64 = bytes.Length;
@@ -690,13 +821,13 @@ namespace NOTacMap
 							Reject(context, 400);
 							return;
 						}
-						File.WriteAllText(settingsPath, body);
+						WriteSettingsFile(settingsPath, body);
 						context.Response.StatusCode = 204;
 						context.Response.Close();
 						return;
 					}
 
-					string json = File.Exists(settingsPath) ? File.ReadAllText(settingsPath) : "{}";
+					string json = ReadSettingsFile(settingsPath);
 					byte[] bytes = Encoding.UTF8.GetBytes(json);
 					context.Response.ContentType = "application/json";
 					context.Response.ContentLength64 = bytes.Length;

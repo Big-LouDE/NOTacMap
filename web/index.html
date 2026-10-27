@@ -396,7 +396,7 @@
     </div>
     <div class="group">
       <h4>Map</h4>
-      <label>Map redraw rate (idle)
+      <label>Redraws per second when idle
         <select id="fpsSelect">
           <option value="5">5 fps (lightest)</option>
           <option value="8" selected>8 fps</option>
@@ -406,7 +406,7 @@
         </select>
       </label>
       <label><input type="checkbox" data-group="display" data-key="sharpCanvas">Sharp text and lines (uses more CPU on this device)</label>
-      <label><input type="checkbox" data-group="display" data-key="darkMode">Dark mode (night vision)</label>
+      <label><input type="checkbox" data-group="display" data-key="darkMode">Red HUD (night vision)</label>
     </div>
     <div class="group">
       <h4>Page</h4>
@@ -416,7 +416,7 @@
     <div class="group">
       <h4>Colors</h4>
       <div class="color-row" data-color-key="friend">
-        <span class="color-label">Friendly (you)</span>
+        <span class="color-label">Your team (human pilots)</span>
         <button type="button" class="color-swatch" title="Pick a color"></button>
         <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
       </div>
@@ -495,7 +495,7 @@
       </div>
       <div class="start-note" id="startLanNote" hidden>Access from other devices is switched on. Turn it off under DEVICES.</div>
       <div class="start-error" id="startError" hidden></div>
-      <label class="start-remember"><input type="checkbox" id="startRemember">Remember my choice</label>
+      <label class="start-remember"><input type="checkbox" id="startRemember" checked>Remember my choice</label>
       <div class="start-note">You can change this later under DEVICES.</div>
     </div>
     <div id="startDeviceView" hidden>
@@ -533,7 +533,7 @@
     <p>LEGEND (top left) lists every symbol.</p>
     <h3>Settings</h3>
     <p>FILTER: which unit types, weapon kinds, overlays and trails to show.</p>
-    <p>DISPLAY: text size, redraw rate, dark mode, names and colors.</p>
+    <p>DISPLAY: text size, redraw rate, red HUD, names and colors.</p>
     <h3>Phone or tablet</h3>
     <p>DEVICES (top right). Off by default, home network only. The QR code stays hidden until you show it.</p>
     <h3>Something wrong?</h3>
@@ -732,11 +732,13 @@ document.getElementById('recenterBtn').addEventListener('click', () => {
 // display.darkMode) in the DISPLAY panel, saved like everything else. There
 // are no URL options.
 function applyDarkMode() {
-  if (settings.display.darkMode) {
-    document.documentElement.setAttribute('data-theme', 'dark');
-  } else {
-    document.documentElement.removeAttribute('data-theme');
-  }
+	if (settings.display.darkMode) {
+		document.documentElement.setAttribute('data-theme', 'dark');
+	} else {
+		document.documentElement.removeAttribute('data-theme');
+	}
+	applyHudTextColor();
+	syncColorControls();
 }
 
 // --- Persistent filter settings ---
@@ -805,10 +807,17 @@ function rgbaStr(c, a) { return `rgba(${c.r},${c.g},${c.b},${a})`; }
 // fixed value. {r:-1,...} is the sentinel for "haven't opted into a custom
 // one", only then do we touch the CSS vars the theme fetch also writes to.
 function applyHudTextColor() {
-  const c = settings.colors.hudText;
-  if (c.r < 0) return; // following live theme, leave --hud-green/--hud-dim alone
-  document.documentElement.style.setProperty('--hud-green', rgbStr(c));
-  document.documentElement.style.setProperty('--hud-dim', rgbaStr(c, 0.55));
+	const c = settings.colors.hudText;
+	const root = document.documentElement;
+	// Following the live theme, or night vision on: no inline override, so the page's own colors
+	// apply. Night vision wins over a custom HUD color, so the dark mode switch always does something.
+	if (c.r < 0 || settings.display.darkMode) {
+		root.style.removeProperty('--hud-green');
+		root.style.removeProperty('--hud-dim');
+		return;
+	}
+	root.style.setProperty('--hud-green', rgbStr(c));
+	root.style.setProperty('--hud-dim', rgbaStr(c, 0.55));
 }
 
 function syncDisplayControls() {
@@ -839,9 +848,26 @@ function syncColorControls() {
   document.querySelectorAll('.color-row').forEach(syncColorRow);
 }
 
+// Typing in the RGB or hex boxes changes the color on every key press. The screen follows at once,
+// but the file is only saved a moment after the last change.
+let colorSaveTimer = null;
+function saveColorsSoon() {
+	clearTimeout(colorSaveTimer);
+	colorSaveTimer = setTimeout(() => { colorSaveTimer = null; saveSettings(); }, 400);
+}
+function flushColorSave() {
+	if (colorSaveTimer !== null) {
+		clearTimeout(colorSaveTimer);
+		colorSaveTimer = null;
+		saveSettings();
+	}
+}
+window.addEventListener('pagehide', flushColorSave);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushColorSave(); });
+
 function applyColorChange(key) {
-  if (key === 'hudText') applyHudTextColor();
-  saveSettings();
+	if (key === 'hudText') applyHudTextColor();
+	saveColorsSoon();
 }
 
 function resetColor(row) {
@@ -1719,15 +1745,15 @@ function classifyUnit(u) {
 // --- Grid reference system, ported from the decompiled GridLabels.cs ---
 // Default offsetX/offsetY (GridLabels' [SerializeField] defaults, 80000m).
 // Empirically validated: live column digits matched the in-cockpit map's
-// "Current: Hg95" readout exactly. A mission overriding the default would
-// need this adjusted.
-const GRID_OFFSET_X = 80000;
-const GRID_OFFSET_Y = 80000;
+// "Current: Hg95" readout exactly. These are the defaults. Every map sets its own
+// (the wider naval map has 120000 for x), so the plugin sends them in /mapinfo.
+let gridOffsetX = 80000;
+let gridOffsetY = 80000;
 const CELL = 10000; // 10km major cells, same as the game
 
 function gridRefFor(x, z) {
-  const vx = GRID_OFFSET_X + x;
-  const vz = GRID_OFFSET_Y - z;
+  const vx = gridOffsetX + x;
+  const vz = gridOffsetY - z;
   const majorCol = Math.floor(vx / CELL);
   const minorCol = Math.floor((vx - CELL * majorCol) / 1000);
   const majorRow = Math.floor(vz / CELL);
@@ -1783,13 +1809,16 @@ bgImage.onload = () => {
   bgCanvas = off;
   bgReady = true;
 };
-let mapInfo = null; // {mapSizeX, mapSizeY, mapName} from /mapinfo
+let mapInfo = null; // {mapSizeX, mapSizeY, mapName, offsetX, offsetY} from /mapinfo
 
 function loadMapImage() {
   fetch('/mapinfo').then(r => r.ok ? r.json() : Promise.reject())
     .then(info => {
       const isNewMap = !mapInfo || mapInfo.mapName !== info.mapName;
       mapInfo = info;
+      // An older plugin doesn't send the offsets, the default then.
+      gridOffsetX = Number.isFinite(info.offsetX) ? info.offsetX : 80000;
+      gridOffsetY = Number.isFinite(info.offsetY) ? info.offsetY : 80000;
       if (isNewMap) {
         bgReady = false;
         bgImage.src = '/mapimage.png?' + Date.now(); // cache-bust when the map changes
@@ -2021,12 +2050,12 @@ function drawGrid(originScreenX, originScreenY) {
   setFont(11);
   for (let i = startCol; i <= endCol; i++) {
     const x = originScreenX + i * majorPx;
-    const majorCol = Math.floor((GRID_OFFSET_X + i * CELL) / CELL);
+    const majorCol = Math.floor((gridOffsetX + i * CELL) / CELL);
     if (majorCol >= 0) ctx.fillText(String(majorCol), x + 3, 12);
   }
   for (let j = startRow; j <= endRow; j++) {
     const y = originScreenY + j * majorPx;
-    const majorRow = Math.floor((GRID_OFFSET_Y - (-j * CELL)) / CELL);
+    const majorRow = Math.floor((gridOffsetY - (-j * CELL)) / CELL);
     if (majorRow >= 0) ctx.fillText(String.fromCharCode(65 + (majorRow % 26)), 3, y + 12);
   }
 }
@@ -3113,10 +3142,10 @@ function connect() {
 }
 
 // ---- What the game PC shows first
-// With LAN access on, the PC asks whether the map is for this tab or for another
-// device. "Remember my choice" saves it as display.startMode: 'here' goes straight
-// to the map, 'device' goes straight to the QR code and link. Without LAN access
-// (the default), and on every other device, the map just starts.
+// The game PC asks whether the map is for this tab or for another device, the first time
+// (display.startMode is 'ask' until someone answers). "Remember my choice" is ticked by default,
+// so most people are asked once: 'here' then goes straight to the map and 'device' goes straight to
+// the QR code and link. Every other device (a phone or tablet) never sees the question, the map just starts.
 const startScreen = document.getElementById('startScreen');
 
 function startMap() {
@@ -3166,6 +3195,27 @@ function startError(message) {
   line.textContent = message || '';
   line.hidden = !message;
 }
+
+// While the map isn't running (the start question or the phone link screen is showing) nothing is
+// connected, so the page can't notice the game closing, and a tab that was opened in the background
+// stayed there. Ask the server now and then instead. Same rule as the live stream: a few misses in
+// a row, after the game has answered at least once, and only if "Close this tab when the game closes" is on.
+let idleWatchAlive = false;
+let idleWatchMisses = 0;
+setInterval(() => {
+  if (mapActive || asleep || !settings.display.closeOnGameExit) { idleWatchMisses = 0; return; }
+  fetch('/lan', { cache: 'no-store' })
+    .then(() => { idleWatchAlive = true; idleWatchMisses = 0; })
+    .catch(() => {
+      if (!idleWatchAlive || mapActive) return;
+      idleWatchMisses++;
+      if (idleWatchMisses >= CLOSE_AFTER_FAILURES) {
+        status.textContent = 'game closed, you can close this tab';
+        if (!startScreen.hidden) startError('The game has closed. You can close this tab.');
+        window.close();
+      }
+    });
+}, 3000);
 
 // "On another device" turns LAN access on first, after the prompt unless it was remembered.
 function pickStart(mode) {

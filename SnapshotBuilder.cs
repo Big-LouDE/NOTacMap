@@ -37,7 +37,7 @@ namespace NOTacMap
 		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string targetName;
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public uint targetId; // hasTarget only: lets the page match locks to a specific target instead of by name
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool targetDestroyed; // missile's target is dead/gone, a kill, not a lost lock
-		public float speedKmh; // real Rigidbody.velocity.magnitude, not a derived estimate
+		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public float speedKmh; // missiles only (real Rigidbody.velocity.magnitude): the page needs it for the ETA, and the game's own map shows no speed for any other unit
 		public float x;
 		public float y;
 		public float z;
@@ -106,7 +106,6 @@ namespace NOTacMap
 
 	internal class PlayerSnapshot
 	{
-		public bool inAircraft;
 		public string type; // same unitName used for other units' classification, so the client can tell a heli apart from a plane for its own icon too
 		public float speedKmh; // real Rigidbody.velocity.magnitude, see FlightHud.cs's own cockpitRB.velocity.magnitude
 		public float x;
@@ -142,28 +141,10 @@ namespace NOTacMap
 		// it every 0.2s snapshot tick for no benefit.
 		private static float lastWeaponRangeCalcTime;
 		private static float lastLiveMaxRange;
-		// One-time data collection for splitting plane/heli and tank/APC shapes. The C#
-		// side only has Aircraft and GroundVehicle as base types (no Helicopter, Tank
-		// or APC subclasses), so telling them apart needs real unit names. Logs each
-		// distinct unit type once per game session, with its C# base type, TypeIdentity
-		// and RoleIdentity. Look for "NOTacMap unit-type catalog" lines in
-		// BepInEx/LogOutput.log after a play session.
-		private static readonly HashSet<string> loggedTypeNames = new HashSet<string>();
-
-		private static void LogUnitTypeOnce(Unit unit)
-		{
-			string typeKey = unit.definition != null ? unit.definition.unitName : unit.GetType().Name;
-			if (!loggedTypeNames.Add(typeKey))
-			{
-				return;
-			}
-			TypeIdentity ti = unit.definition != null ? unit.definition.typeIdentity : default;
-			RoleIdentity ri = unit.definition != null ? unit.definition.roleIdentity : default;
-			Plugin.Log.LogInfo(
-				$"NOTacMap unit-type catalog: \"{typeKey}\" | C#Type={unit.GetType().Name} | " +
-				$"TypeIdentity(surface={ti.surface:0.00},air={ti.air:0.00},missile={ti.missile:0.00},radar={ti.radar:0.00},strategic={ti.strategic:0.00}) | " +
-				$"RoleIdentity(antiSurface={ri.antiSurface:0.00},antiAir={ri.antiAir:0.00},antiMissile={ri.antiMissile:0.00},antiRadar={ri.antiRadar:0.00})");
-		}
+		// Last heading sent for each tracked unit. The game's own map only turns an icon while the
+		// contact is observed, so for a contact that is no longer observed the heading stays at the
+		// last observed value instead of following the unit's real heading.
+		private static readonly Dictionary<uint, float> lastHeadings = new Dictionary<uint, float>();
 
 		private static string FactionString(FactionHQ hq)
 		{
@@ -201,7 +182,6 @@ namespace NOTacMap
 				GlobalPosition pos = playerAircraft.GlobalPosition();
 				snapshot.player = new PlayerSnapshot
 				{
-					inAircraft = true,
 					type = playerAircraft.definition != null ? playerAircraft.definition.unitName : playerAircraft.GetType().Name,
 					speedKmh = playerAircraft.rb != null ? playerAircraft.rb.velocity.magnitude * 3.6f : 0f,
 					x = pos.x,
@@ -276,9 +256,11 @@ namespace NOTacMap
 
 						if (targets.Count > 0 && prefabMissile != null)
 						{
-							if (Time.timeSinceLevelLoad - lastWeaponRangeCalcTime >= 1f)
+							// realtimeSinceStartup and not timeSinceLevelLoad: the level clock starts again at zero on a
+							// new mission, and then this waited until it caught up with the old value (the range froze).
+							if (Time.realtimeSinceStartup - lastWeaponRangeCalcTime >= 1f)
 							{
-								lastWeaponRangeCalcTime = Time.timeSinceLevelLoad;
+								lastWeaponRangeCalcTime = Time.realtimeSinceStartup;
 								Unit farTarget = null;
 								GlobalPosition farPos = default;
 								float farDist = 0f;
@@ -318,6 +300,7 @@ namespace NOTacMap
 			if (GameManager.GetLocalHQ(out FactionHQ localHq))
 			{
 				var seen = new HashSet<PersistentID>();
+				var builtIds = new HashSet<uint>();
 
 				// Missiles the local player's own RWR has already promoted from "unknown" to
 				// "known" (in range and line of sight, or gated by seeker mode / network
@@ -351,10 +334,9 @@ namespace NOTacMap
 						return;
 					}
 
-					LogUnitTypeOnce(unit);
-
 					GlobalPosition pos;
-					if (localHq.trackingDatabase.TryGetValue(id, out TrackingInfo trackingInfo))
+					bool hasTrack = localHq.trackingDatabase.TryGetValue(id, out TrackingInfo trackingInfo);
+					if (hasTrack)
 					{
 						pos = trackingInfo.GetPosition();
 					}
@@ -362,6 +344,20 @@ namespace NOTacMap
 					{
 						pos = unit.GlobalPosition();
 					}
+
+					// The same test the game's own map icon uses before it turns to the unit's heading.
+					bool observed = !hasTrack || trackingInfo.Observed();
+					float heading;
+					if (observed)
+					{
+						heading = Round1(unit.transform.eulerAngles.y);
+						lastHeadings[id.Id] = heading;
+					}
+					else if (!lastHeadings.TryGetValue(id.Id, out heading))
+					{
+						heading = 0f;
+					}
+					string faction = FactionString(unit.NetworkHQ);
 
 					var snap = new UnitSnapshot
 					{
@@ -374,16 +370,17 @@ namespace NOTacMap
 							: unit is Ship ? "ship"
 							: unit is PilotDismounted ? "pilot"
 							: "other",
-						faction = FactionString(unit.NetworkHQ),
-						isPlayer = unit is Aircraft occupiedAircraft && occupiedAircraft.Player != null,
+						faction = faction,
+						// Only your own side is shown as human or AI, so an enemy's is not sent.
+						isPlayer = faction == "friendly" && unit is Aircraft occupiedAircraft && occupiedAircraft.Player != null,
 						isIncomingMissile = incomingMissileIds.Contains(id),
 						// Rounded to a tenth: at map scale a tenth of a metre is
 						// invisible, but it keeps every number short in the JSON.
-						speedKmh = Round1(unit.rb != null ? unit.rb.velocity.magnitude * 3.6f : 0f),
+						speedKmh = unit is Missile && unit.rb != null ? Round1(unit.rb.velocity.magnitude * 3.6f) : 0f,
 						x = Round1(pos.x),
 						y = Round1(pos.y),
 						z = Round1(pos.z),
-						heading = Round1(unit.transform.eulerAngles.y)
+						heading = heading
 					};
 
 					if (unit is Missile missile)
@@ -427,6 +424,7 @@ namespace NOTacMap
 					}
 
 					snapshot.units.Add(snap);
+					builtIds.Add(id.Id);
 				}
 
 				foreach (KeyValuePair<PersistentID, TrackingInfo> entry in localHq.trackingDatabase)
@@ -443,6 +441,17 @@ namespace NOTacMap
 					// (an enemy-launched missile locked onto you isn't "your"
 					// unit), add it explicitly so it doesn't go missing.
 					AddUnit(id);
+				}
+
+				// Units that are gone no longer need a remembered heading.
+				if (lastHeadings.Count > builtIds.Count)
+				{
+					var gone = new List<uint>();
+					foreach (uint key in lastHeadings.Keys)
+					{
+						if (!builtIds.Contains(key)) gone.Add(key);
+					}
+					foreach (uint key in gone) lastHeadings.Remove(key);
 				}
 
 				foreach (Airbase airbase in localHq.GetAirbases())
