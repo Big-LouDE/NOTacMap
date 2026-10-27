@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.2.3
+
+Fixed
+- If the port is already in use (the NOX mod uses 8111), the log now says so in one clear line, and the game carries on without the map. Before, you got a long error
+- A phone that stops answering, out of wifi range for example, no longer freezes the map on the PC. Before, one stuck phone could stop every page from getting updates. Now each page is written to separately, and one that is stuck for 5 seconds is dropped. The page reconnects by itself
+- After changing to a new mission, the weapon range on the map froze at its last value until the new mission had run as long as the old one. It updates again right away
+- The grid reference on the map was wrong on the wide naval map (the cockpit said Hf120, the map said Hf80), because the grid offset was fixed. The mod now reads it from the game for every map
+- A short hitch every 2 seconds is gone. The check for a new map cost about 5 ms each time, and now looks again only every 30 seconds once the map is loaded
+- A map page that was left on the first question ("On this PC / On another device"), or on the phone link, never noticed that the game had closed and stayed open. It now closes itself there too, with the same rule as the map (the "Close this tab when the game closes" setting)
+- A game update that breaks one internal call no longer fills the log. The problem is logged once
+- Port and update interval in the config can't be set to nonsense values anymore
+- Two open tabs saving settings at the same moment can't damage settings.json anymore
+- A map name with a quote or a backslash no longer breaks the map picture
+- The phone link no longer shows in the F1 config window, where it could appear on a stream
+- With a custom HUD color picked, dark mode still turns the HUD red, and resetting the HUD color goes back to the game's own
+- Typing in the color boxes saves once, a moment after you stop
+- A contact you have lost keeps its last heading, the same as on the game's own map. The map no longer tells you which way it is turning
+- The mod no longer sends the real speed of units it doesn't show a speed for
+
+Changed
+- "Remember my choice" on the first question is ticked by default, so you are asked once
+- Clearer labels for the yellow color ("Your team (human pilots)"), dark mode ("Red HUD (night vision)") and the redraw rate ("Redraws per second when idle")
+
+Added
+- A detailed feature list in FEATURES.md
+- A note that the map works in multiplayer, and that it's made with HOTAS pilots in mind
+- Tips for keeping a phone screen on
+
 ## 1.2.2
 
 Fixed
