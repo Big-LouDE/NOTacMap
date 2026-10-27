@@ -158,6 +158,9 @@
   }
   #lanCopy:hover, .mini-btn:hover { color: var(--hud-green); border-color: var(--hud-green); }
   #devicesPanel .mini-btn { margin-top: 2px; }
+  .preset-row { display: flex; flex-wrap: wrap; gap: 4px; }
+  .mini-btn.active { color: var(--hud-green); border-color: var(--hud-green); }
+  .mini-btn[disabled] { opacity: 0.45; cursor: default; }
 
   /* Start screen: shown on the game PC when LAN access is on, before the map starts. */
   #startScreen, #lanConsent, #helpDialog {
@@ -214,8 +217,8 @@
   #cpBackdrop[hidden] { display: none; }
   #colorPicker {
     box-sizing: border-box; background: #060d06; border: 1px solid var(--hud-dim);
-    color: var(--hud-dim); padding: 10px; width: 330px; max-width: calc(100vw - 20px);
-    max-height: calc(100vh - 20px); overflow: auto;
+    color: var(--hud-dim); padding: 10px; width: 330px; max-width: calc(var(--vw, 100vw) - 20px);
+    max-height: calc(var(--vh, 100vh) - 20px); overflow: auto;
     font: calc(11px * var(--text-scale)) "Consolas", monospace;
   }
   .cp-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; color: var(--hud-green); text-transform: uppercase; letter-spacing: 0.05em; }
@@ -240,7 +243,7 @@
   .cp-preview { flex: none; width: 40px; height: 24px; border: 1px solid var(--hud-dim); }
 
   /* Panels never taller or wider than the screen, scrolling inside if needed. */
-  .panel { box-sizing: border-box; max-width: calc(100vw - 28px); overflow: auto; }
+  .panel { box-sizing: border-box; max-width: calc(var(--vw, 100vw) - 28px); overflow: auto; }
 
   /* Touch screens: bigger targets for fingers. */
   @media (pointer: coarse) {
@@ -254,13 +257,13 @@
   /* Short screens (a phone held sideways): the buttons go in a row so the panels get
      the height, and the color picker puts the numbers beside the honeycomb. */
   @media (max-height: 520px) {
-    #controls { flex-direction: row; flex-wrap: wrap; justify-content: flex-end; align-items: center; max-width: calc(100vw - 28px); }
-    #colorPicker { width: min(660px, calc(100vw - 20px)); max-height: calc(100vh - 12px); }
+    #controls { flex-direction: row; flex-wrap: wrap; justify-content: flex-end; align-items: center; max-width: calc(var(--vw, 100vw) - 28px); }
+    #colorPicker { width: min(660px, calc(var(--vw, 100vw) - 20px)); max-height: calc(var(--vh, 100vh) - 12px); }
     .cp-body { display: flex; gap: 14px; align-items: flex-start; }
-    .cp-left { flex: 0 0 auto; width: min(300px, calc((100vh - 110px) * 1.12)); }
+    .cp-left { flex: 0 0 auto; width: min(300px, calc((var(--vh, 100vh) - 110px) * 1.12)); }
     .cp-right { flex: 1 1 auto; min-width: 190px; }
   }
-  #legend .legend-rows { max-height: calc(100vh - 90px); overflow: auto; }
+  #legend .legend-rows { max-height: calc(var(--vh, 100vh) - 90px); overflow: auto; }
   /* The start screen on a short screen: the code beside the text, the two choices side by side. */
   @media (max-height: 520px) {
     .start-card { width: min(800px, 100%); padding: 10px 16px; }
@@ -271,12 +274,31 @@
     #startSecret canvas { margin: 0; }
   }
 
+  /* Turned sideways (the rotate button): the whole page is laid out as a landscape screen and rotated a quarter turn,
+     so the phone can stay locked upright in its settings and still be held sideways. --vw and --vh are the sideways
+     width and height, the sizes the page uses instead of 100vw and 100vh. */
+  html.rot body { position: fixed; top: 0; left: 0; width: var(--vw); height: var(--vh); transform-origin: 0 0; }
+  html.rot90 body { transform: translate(var(--pw), 0) rotate(90deg); }
+  html.rot270 body { transform: translate(0, var(--ph)) rotate(-90deg); }
+  /* The same as the short screen rules above, for a screen that is only short once it is turned. */
+  html.rot.eff-short #controls { flex-direction: row; flex-wrap: wrap; justify-content: flex-end; align-items: center; max-width: calc(var(--vw) - 28px); }
+  html.rot.eff-short #colorPicker { width: min(660px, calc(var(--vw) - 20px)); max-height: calc(var(--vh) - 12px); }
+  html.rot.eff-short .cp-body { display: flex; gap: 14px; align-items: flex-start; }
+  html.rot.eff-short .cp-left { flex: 0 0 auto; width: min(300px, calc((var(--vh) - 110px) * 1.12)); }
+  html.rot.eff-short .cp-right { flex: 1 1 auto; min-width: 190px; }
+  html.rot.eff-short .start-card { width: min(800px, 100%); padding: 10px 16px; }
+  html.rot.eff-short .start-card h2 { margin-bottom: 6px; }
+  html.rot.eff-short .start-choices { flex-direction: row; }
+  html.rot.eff-short .start-choices button { flex: 1 1 0; }
+  html.rot.eff-short #startSecret:not([hidden]) { display: grid; grid-template-columns: auto 1fr; column-gap: 18px; align-items: start; }
+  html.rot.eff-short #startSecret canvas { margin: 0; }
+
   /* Narrow screens (phones). */
   @media (max-width: 700px) {
     #controls { right: 8px; }
     #status { left: 8px; }
     #gridRef { right: 8px; }
-    #themeWarning { left: 8px; max-width: calc(100vw - 110px); }
+    #themeWarning { left: 8px; max-width: calc(var(--vw, 100vw) - 110px); }
   }
 </style>
 </head>
@@ -308,10 +330,22 @@
 <div id="controls">
   <button id="recenterBtn">&#8982; recenter on me</button>
   <button id="fullscreenBtn" hidden>&#9974; fullscreen</button>
+  <button id="rotateBtn" hidden title="Turns the page sideways, for a phone that stays locked upright. Tap again to turn it the other way, and once more to switch it off">&#8635; rotate</button>
   <button id="devicesBtn" hidden>&#9742; devices</button>
   <button id="displayBtn">&#9881; display</button>
   <button id="filterBtn">&#9776; filter</button>
   <div id="filterPanel" class="panel">
+    <div class="group">
+      <h4>Presets</h4>
+      <div class="preset-row">
+        <button type="button" class="mini-btn" data-preset="all">All</button>
+        <button type="button" class="mini-btn" data-preset="combatAll" title="Shows what all the weapons you carry can hit">Combat, all my weapons</button>
+        <button type="button" class="mini-btn" data-preset="combatSelected" title="Shows what the weapon you have selected can hit">Combat, selected weapon</button>
+        <button type="button" class="mini-btn" data-preset="minimal">Minimal</button>
+        <button type="button" class="mini-btn" data-preset="custom" title="Back to the boxes as you set them yourself">My choice</button>
+      </div>
+      <div class="note" id="presetNote"></div>
+    </div>
     <div class="group">
       <h4>Unit Types</h4>
       <label><input type="checkbox" data-group="unitTypes" data-key="plane" checked>Plane</label>
@@ -336,6 +370,8 @@
       <label><input type="checkbox" data-group="overlays" data-key="runwayGuides" checked>Runway approach guides</label>
       <label><input type="checkbox" data-group="overlays" data-key="weaponRange" checked>Weapon range</label>
       <label><input type="checkbox" data-group="overlays" data-key="grid" checked>Grid</label>
+      <label><input type="checkbox" data-group="overlays" data-key="rangeRings">Range rings around me</label>
+      <label><input type="checkbox" data-group="overlays" data-key="scaleBar" checked>Scale bar</label>
     </div>
     <details class="group">
       <summary>Trails</summary>
@@ -405,8 +441,28 @@
           <option value="30">30 fps (smoothest)</option>
         </select>
       </label>
+      <label>Range rings
+        <select id="ringSelect">
+          <option value="all" selected>5, 10, 20 and 40 km</option>
+          <option value="5">5 km only</option>
+          <option value="10">10 km only</option>
+          <option value="20">20 km only</option>
+          <option value="40">40 km only</option>
+        </select>
+      </label>
+      <label><input type="checkbox" data-group="display" data-key="showMissileEta" checked>Speed and time to impact on incoming missiles</label>
       <label><input type="checkbox" data-group="display" data-key="sharpCanvas">Sharp text and lines (uses more CPU on this device)</label>
       <label><input type="checkbox" data-group="display" data-key="darkMode">Red HUD (night vision)</label>
+    </div>
+    <div class="group">
+      <h4>Marked target in range</h4>
+      <label><input type="checkbox" data-group="display" data-key="cueFill" checked>Cone fills softly</label>
+      <label><input type="checkbox" data-group="display" data-key="cueBrackets" checked>Target brackets close in</label>
+      <label><input type="checkbox" data-group="display" data-key="cueNumber" checked>Range number lights up</label>
+      <label><input type="checkbox" data-group="display" data-key="cueFade" checked>One slow fade when it enters</label>
+      <label><input type="checkbox" data-group="display" data-key="cueSteer" checked>Arrows that show which way to turn</label>
+      <label><input type="checkbox" data-group="display" data-key="cueClosing" checked>Distance left until the target is in range</label>
+      <label><input type="checkbox" data-group="display" data-key="cueCount" checked>How many marked targets are in range</label>
     </div>
     <div class="group">
       <h4>Page</h4>
@@ -539,6 +595,7 @@
     <h3>Something wrong?</h3>
     <p>Is the game running? Does something else use port 8123? (You can change the port in the config.)</p>
     <p>Feedback and bugs: <a href="https://github.com/Big-LouDE/NOTacMap/issues" target="_blank" rel="noopener noreferrer">github.com/Big-LouDE/NOTacMap/issues</a></p>
+    <p id="helpVersion" class="help-version"></p>
     <div class="start-actions">
       <button type="button" id="helpClose">Close</button>
     </div>
@@ -607,10 +664,50 @@ const isRemoteViewer = !['localhost', '127.0.0.1', '[::1]', ''].includes(locatio
 // is capped lower than a phone, since it is the one running the game.
 let sharpCanvas = true;
 let pixelRatio = 1;
+// ---- Turning the page sideways
+// rotation is 0, 90 or 270 degrees. The page is laid out for a landscape screen (width and height swapped) and then
+// turned with CSS, so a phone that is locked upright can be held sideways. Touch positions are mapped back.
+let rotation = 0;
+function rotationActive() { return rotation !== 0 && window.innerWidth <= window.innerHeight; } // held sideways already: nothing to turn
+function effectiveSize() {
+  return rotationActive() ? { w: window.innerHeight, h: window.innerWidth } : { w: window.innerWidth, h: window.innerHeight };
+}
+function applyRotationClasses() {
+  const root = document.documentElement;
+  const on = rotationActive();
+  const eff = effectiveSize();
+  root.classList.toggle('rot', on);
+  root.classList.toggle('rot90', on && rotation === 90);
+  root.classList.toggle('rot270', on && rotation === 270);
+  root.classList.toggle('eff-short', on && eff.h <= 520);
+  if (on) {
+    root.style.setProperty('--vw', eff.w + 'px');
+    root.style.setProperty('--vh', eff.h + 'px');
+    root.style.setProperty('--pw', window.innerWidth + 'px');
+    root.style.setProperty('--ph', window.innerHeight + 'px');
+  } else {
+    ['--vw', '--vh', '--pw', '--ph'].forEach(k => root.style.removeProperty(k));
+  }
+}
+// A touch or mouse position (screen pixels) in the page's own coordinates.
+function pagePoint(e) {
+  if (!rotationActive()) return { x: e.clientX, y: e.clientY };
+  return rotation === 90
+    ? { x: e.clientY, y: window.innerWidth - e.clientX }
+    : { x: window.innerHeight - e.clientY, y: e.clientX };
+}
+// The top of an element in the page's own coordinates.
+function pageTop(el) {
+  const r = el.getBoundingClientRect();
+  if (!rotationActive()) return r.top;
+  return rotation === 90 ? window.innerWidth - r.right : r.left;
+}
 let viewWidth = window.innerWidth, viewHeight = window.innerHeight;
 function resize() {
-  viewWidth = window.innerWidth;
-  viewHeight = window.innerHeight;
+  applyRotationClasses();
+  const size = effectiveSize();
+  viewWidth = size.w;
+  viewHeight = size.h;
   const dpr = window.devicePixelRatio || 1;
   pixelRatio = sharpCanvas ? Math.min(dpr, isRemoteViewer ? 3 : 2) : 1;
   canvas.width = Math.round(viewWidth * pixelRatio);
@@ -658,18 +755,22 @@ function getViewOrigin() {
 // pinch-zoom. A gesture is (re)started whenever the number of pointers
 // changes, so lifting one finger of a pinch carries on as a pan.
 const pointers = new Map(); // pointerId -> { x, y } in client pixels
+const PAN_START_PX = 6;
 let gesture = null;
 
 function startGesture() {
   const pts = [...pointers.values()];
   if (pts.length === 1) {
-    gesture = { type: 'pan', x: pts[0].x, y: pts[0].y, origin: getViewOrigin() };
+    gesture = { type: 'pan', x: pts[0].x, y: pts[0].y, origin: getViewOrigin(), moved: false };
   } else if (pts.length >= 2) {
     const [a, b] = pts;
     const origin = getViewOrigin();
     const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
     gesture = {
       type: 'pinch',
+      // Following you when the pinch starts: then zooming keeps you in the center, wherever the
+      // fingers are. Only a view you have panned yourself zooms toward the fingers.
+      following: viewCenter === null,
       dist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
       scale,
       // The world point under the midpoint when the pinch starts. It stays
@@ -684,17 +785,22 @@ function startGesture() {
 
 canvas.addEventListener('pointerdown', e => {
   canvas.setPointerCapture(e.pointerId);
-  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  pointers.set(e.pointerId, pagePoint(e));
   startGesture();
   canvas.style.cursor = 'grabbing';
 });
 canvas.addEventListener('pointermove', e => {
   if (!pointers.has(e.pointerId)) return;
-  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  const pt = pagePoint(e);
+  pointers.set(e.pointerId, pt);
   if (!gesture) return;
   if (gesture.type === 'pan' && pointers.size === 1) {
-    const dx = e.clientX - gesture.x;
-    const dy = e.clientY - gesture.y;
+    const dx = pt.x - gesture.x;
+    const dy = pt.y - gesture.y;
+    // A finger that only rests or wobbles (for instance the one left after a pinch) must not take the
+    // view off you. It counts as a pan once it has moved a few pixels.
+    if (!gesture.moved && Math.hypot(dx, dy) < PAN_START_PX) return;
+    gesture.moved = true;
     // Derived from toScreen's formula so a drag of (dx,dy) screen pixels
     // moves the map exactly (dx,dy) pixels under the pointer, not some
     // scale-dependent fraction of that.
@@ -706,11 +812,13 @@ canvas.addEventListener('pointermove', e => {
     const [a, b] = [...pointers.values()];
     const dist = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
     scale = clampScale(gesture.scale * gesture.dist / dist);
-    const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
-    viewCenter = {
-      x: gesture.worldX - (midX - viewWidth / 2) * scale,
-      z: gesture.worldZ + (midY - viewHeight / 2) * scale
-    };
+    if (!gesture.following) {
+      const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
+      viewCenter = {
+        x: gesture.worldX - (midX - viewWidth / 2) * scale,
+        z: gesture.worldZ + (midY - viewHeight / 2) * scale
+      };
+    }
   }
 });
 function endPointer(e) {
@@ -750,8 +858,10 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false },
-  overlays: { runwayGuides: true, weaponRange: true, grid: true },
+  display: { rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true },
+  overlays: { runwayGuides: true, weaponRange: true, grid: true, rangeRings: false, scaleBar: true },
+  // Which preset is on ('custom' = the boxes as you set them), and the boxes as they were before a preset was switched on.
+  preset: { mode: 'custom', mine: null },
   trails: { friendlyAircraft: true, enemyAircraft: true, friendlyMissiles: true, enemyMissiles: true, other: true },
   // Every fixed (non-theme) color on the map, customizable. hudText is the
   // one exception: {r:-1,g:-1,b:-1} means "keep following the game's own
@@ -827,6 +937,8 @@ function syncDisplayControls() {
   if (fpsSel) fpsSel.value = String(settings.display.fps);
   const startSel = document.getElementById('startModeSelect');
   if (startSel) startSel.value = settings.display.startMode;
+  const ringSel = document.getElementById('ringSelect');
+  if (ringSel) ringSel.value = String(settings.display.ringKm);
   applyTextScale();
 }
 
@@ -1025,7 +1137,7 @@ const legendEl = document.getElementById('legend');
 function legendIsOpen() {
   const saved = settings.display.legendOpen;
   if (saved !== null && saved !== undefined) return !!saved;
-  return window.innerWidth >= 700 && !matchMedia('(pointer: coarse)').matches;
+  return effectiveSize().w >= 700 && !matchMedia('(pointer: coarse)').matches;
 }
 function applyLegendState() {
   legendEl.classList.toggle('open', legendIsOpen());
@@ -1044,8 +1156,18 @@ function closeHelp() {
   document.removeEventListener('keydown', onHelpKey);
 }
 function onHelpKey(e) { if (e.key === 'Escape') closeHelp(); }
+// The plugin version and, for a test release, its label ("beta1"). An older plugin has no /about: no line then.
+function loadAbout() {
+  fetch('/about', { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject())
+    .then(about => {
+      const label = about.label ? ' ' + about.label + ' (test version)' : '';
+      document.getElementById('helpVersion').textContent = 'NOTacMap ' + about.version + label;
+    })
+    .catch(() => { document.getElementById('helpVersion').textContent = ''; });
+}
 document.getElementById('helpBtn').addEventListener('click', e => {
   e.stopPropagation();
+  loadAbout();
   helpDialog.hidden = false;
   document.addEventListener('keydown', onHelpKey);
   helpDialog.scrollTop = 0;
@@ -1560,6 +1682,7 @@ document.getElementById('startModeSelect').addEventListener('change', e => {
 document.querySelectorAll('.panel input[type=checkbox][data-group]').forEach(cb => {
   cb.addEventListener('change', () => {
     settings[cb.dataset.group][cb.dataset.key] = cb.checked;
+    noteManualFilterChange(cb.dataset.group);
     saveSettings();
   });
 });
@@ -1578,6 +1701,138 @@ document.getElementById('fpsSelect').addEventListener('change', e => {
   settings.display.fps = parseInt(e.target.value, 10);
   saveSettings();
 });
+
+document.getElementById('ringSelect').addEventListener('change', e => {
+  settings.display.ringKm = e.target.value;
+  saveSettings();
+});
+
+// ---- Filter presets
+// All, Minimal and the two Combat views set the FILTER boxes for you. Combat reads your own weapon stations
+// (the plugin sends them in "loadout") and shows only what you can hit: "all my weapons" uses everything with ammo,
+// "selected weapon" follows the weapon you have selected. A preset never destroys your own choice: it is kept in
+// settings.preset.mine and "My choice" brings it back. Changing a box by hand switches to "My choice" again.
+const FILTER_GROUPS = ['unitTypes', 'weapons', 'overlays', 'trails'];
+const COMBAT_MIN_EFFECT = 0.3; // WeaponInfo.effectiveness (0 to 1) from which a weapon counts against that kind of target
+let lastLoadout = null; // the last loadout seen, so Combat keeps working on the spawn screen
+let combatKey = '';
+
+function snapshotFilters() {
+  const copy = {};
+  for (const g of FILTER_GROUPS) copy[g] = Object.assign({}, settings[g]);
+  return copy;
+}
+
+function applyFilterValues(values) {
+  for (const g of FILTER_GROUPS) {
+    if (values[g]) Object.assign(settings[g], values[g]);
+  }
+  syncFilterCheckboxes();
+}
+
+const PRESET_ALL = JSON.parse(JSON.stringify({
+  unitTypes: DEFAULT_SETTINGS.unitTypes, weapons: DEFAULT_SETTINGS.weapons, overlays: DEFAULT_SETTINGS.overlays, trails: DEFAULT_SETTINGS.trails
+}));
+const PRESET_MINIMAL = {
+  unitTypes: { plane: true, helicopter: true, tank: false, apc: false, radar: false, aa: false, ship: false, vehicle: false, building: false, pilot: false },
+  weapons: { air2air: true, air2ground: true, unlocked: true },
+  overlays: { runwayGuides: false, weaponRange: true, grid: false },
+  trails: { friendlyAircraft: false, enemyAircraft: false, friendlyMissiles: true, enemyMissiles: true, other: false }
+};
+
+// Which unit types your weapons can hit. null: nothing to go by (no weapon with ammo), the boxes stay as they are.
+function combatFromLoadout(loadout, selectedOnly) {
+  if (!loadout) return null;
+  let stations = loadout.filter(s => s.ammo > 0);
+  if (selectedOnly) stations = stations.filter(s => s.selected);
+  if (!stations.length) return null;
+  const air = stations.some(s => s.air >= COMBAT_MIN_EFFECT || s.gun);
+  const surface = stations.some(s => s.surface >= COMBAT_MIN_EFFECT || s.gun);
+  const radar = stations.some(s => s.radar >= COMBAT_MIN_EFFECT);
+  const bombs = stations.some(s => s.bomb);
+  return {
+    summary: [air && 'air targets', surface && 'ground and sea targets', radar && 'radars', bombs && 'buildings'].filter(Boolean).join(', ') || 'nothing',
+    values: {
+      unitTypes: {
+        plane: air, helicopter: air,
+        tank: surface, apc: surface, vehicle: surface, ship: surface,
+        aa: surface || radar, radar: surface || radar,
+        building: bombs, pilot: false
+      },
+      weapons: { air2air: true, air2ground: true, unlocked: true },
+      overlays: { weaponRange: true, runwayGuides: false },
+      trails: { friendlyAircraft: false, enemyAircraft: false, other: false, friendlyMissiles: true, enemyMissiles: true }
+    }
+  };
+}
+
+function updatePresetButtons(note) {
+  document.querySelectorAll('[data-preset]').forEach(b => b.classList.toggle('active', b.dataset.preset === settings.preset.mode));
+  document.getElementById('presetNote').textContent = note || '';
+  document.querySelector('[data-preset="custom"]').disabled = settings.preset.mode === 'custom' && !settings.preset.mine;
+}
+
+function setPreset(mode) {
+  if (mode === 'custom') {
+    if (settings.preset.mine) applyFilterValues(settings.preset.mine);
+    settings.preset.mode = 'custom';
+    updatePresetButtons();
+    saveSettings();
+    return;
+  }
+  if (settings.preset.mode === 'custom') settings.preset.mine = snapshotFilters();
+  settings.preset.mode = mode;
+  combatKey = '';
+  if (mode === 'all') applyFilterValues(PRESET_ALL);
+  else if (mode === 'minimal') applyFilterValues(PRESET_MINIMAL);
+  updatePresetButtons(mode === 'combatAll' || mode === 'combatSelected' ? 'Waiting for your weapons...' : '');
+  if (mode === 'combatAll' || mode === 'combatSelected') updateCombat(lastLoadout);
+  saveSettings();
+}
+
+// A box changed by hand: the preset is over and what is on screen is now "my choice".
+function noteManualFilterChange(group) {
+  if (!FILTER_GROUPS.includes(group) || settings.preset.mode === 'custom') return;
+  settings.preset.mode = 'custom';
+  settings.preset.mine = snapshotFilters();
+  updatePresetButtons();
+}
+
+// Called with every snapshot. In a Combat view the boxes follow the loadout (no save for each change, the next save carries them).
+function updateCombat(loadout) {
+  if (loadout) lastLoadout = loadout;
+  const mode = settings.preset.mode;
+  if (mode !== 'combatAll' && mode !== 'combatSelected') return;
+  const result = combatFromLoadout(lastLoadout, mode === 'combatSelected');
+  const key = mode + '|' + (result ? JSON.stringify(result.values) : 'none');
+  if (key === combatKey) return;
+  combatKey = key;
+  if (result) applyFilterValues(result.values);
+  updatePresetButtons(result ? 'Showing ' + result.summary + '.' : (lastLoadout ? 'No weapon with ammo to go by, the boxes stay as they are.' : 'Waiting for your weapons...'));
+}
+
+document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => setPreset(b.dataset.preset)));
+settingsReady.then(() => { updatePresetButtons(); });
+
+// The rotate button is for touch screens. It goes off, left (the top of the page at the right of the screen, so the phone
+// is turned to the left to read it), right, off. The choice is kept on the device.
+const rotateBtn = document.getElementById('rotateBtn');
+if (matchMedia('(pointer: coarse)').matches) rotateBtn.hidden = false;
+function rotateLabel() {
+  rotateBtn.textContent = '\u21bb rotate' + (rotation === 90 ? ': turn phone left' : rotation === 270 ? ': turn phone right' : '');
+  rotateBtn.classList.toggle('active', rotation !== 0);
+}
+rotateBtn.addEventListener('click', () => {
+  rotation = rotation === 0 ? 90 : rotation === 90 ? 270 : 0;
+  settings.display.rotate = rotation;
+  rotateLabel();
+  resize();
+  const open = document.querySelector('.panel.open');
+  if (open) fitPanelToScreen(open);
+  saveSettings();
+});
+settingsReady.then(() => { rotation = settings.display.rotate === 90 || settings.display.rotate === 270 ? settings.display.rotate : 0; rotateLabel(); resize(); });
+window.addEventListener('orientationchange', () => setTimeout(resize, 150));
 
 // Only one dropdown open at a time, both panels are absolutely positioned
 // under their own button, but the two buttons sit close together in the
@@ -1599,7 +1854,7 @@ function togglePanel(panel, btn) {
 // off the bottom of a phone screen.
 function fitPanelToScreen(panel) {
   panel.style.maxHeight = '';
-  const room = window.innerHeight - panel.getBoundingClientRect().top - 8;
+  const room = effectiveSize().h - pageTop(panel) - 8;
   panel.style.maxHeight = Math.max(120, room) + 'px';
 }
 window.addEventListener('resize', () => {
@@ -2151,6 +2406,156 @@ function formatRangeM(m) {
   return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : Math.round(m) + 'm';
 }
 
+// ---- A marked target inside the weapon cone
+// In range means: within the live range of the weapon (the figure the cone is drawn with) and inside the cone angle.
+// Same numbers as the cone, nothing extra from the game. Four cues, each a DISPLAY box: the cone fills, the target
+// brackets close in, the range number lights up, and one slow fade when a target comes into range.
+const IN_RANGE_BRACKET_MS = 450;
+const IN_RANGE_FADE_MS = 1200;
+const inRangeSince = new Map(); // marked target id -> performance.now() when it came into range
+let inRangeFadeStart = -1e9;
+let inRangeNow = new Set();
+
+// One entry per marked target that is still tracked: how far, how far off the nose (negative = to the left) and
+// whether it is inside the cone. Only filled while the cone is drawn (a weapon with a range and a target marked).
+let rangeInfo = [];
+const rangeInfoById = new Map();
+
+function computeInRange() {
+  const set = new Set();
+  rangeInfo = [];
+  rangeInfoById.clear();
+  const p = latest && latest.player, wr = latest && latest.weaponRange;
+  if (!p || !wr || !wr.armed) return set;
+  (latest.markedTargets || []).forEach(mt => {
+    if (mt.lost || mt.x === undefined) return;
+    const dx = mt.x - p.x, dz = mt.z - p.z, dy = (mt.y || 0) - p.y;
+    const dist = Math.hypot(dx, dy, dz);
+    const bearing = Math.atan2(dx, dz) * 180 / Math.PI;
+    const off = ((bearing - (p.heading || 0)) % 360 + 540) % 360 - 180;
+    const inR = dist <= wr.maxRange && Math.abs(off) <= (wr.minAlignment || 0);
+    const info = { id: mt.id, dist, off, inR };
+    rangeInfo.push(info);
+    rangeInfoById.set(mt.id, info);
+    if (inR) set.add(mt.id);
+  });
+  return set;
+}
+
+// Steer arrows: the first marked target is close enough but off to the side. Three small arrowheads on the cone
+// edge on that side point the way to turn. Still, no blinking.
+function drawSteerArrows(ctx, x, y, headingDeg, wr) {
+  const first = rangeInfo[0];
+  if (!first || first.dist > wr.maxRange || Math.abs(first.off) <= (wr.minAlignment || 0)) return;
+  const side = first.off > 0 ? 1 : -1;
+  const theta = ((headingDeg || 0) + side * (wr.minAlignment || 0)) * Math.PI / 180;
+  const ux = Math.sin(theta), uy = -Math.cos(theta); // along the cone edge
+  const tx = Math.cos(theta) * side, ty = Math.sin(theta) * side; // the way to turn
+  const r = wr.maxRange / scale;
+  ctx.save();
+  ctx.fillStyle = rgbStr(settings.colors.weaponRangeArmed);
+  [0.5, 0.62, 0.74].forEach((f, i) => {
+    const ax = x + ux * r * f + tx * (8 + i * 9), ay = y + uy * r * f + ty * (8 + i * 9);
+    ctx.globalAlpha = 0.95 - i * 0.28;
+    ctx.beginPath();
+    ctx.moveTo(ax + tx * 6, ay + ty * 6);
+    ctx.lineTo(ax - tx * 3.6 - ty * 4.8, ay - ty * 3.6 + tx * 4.8);
+    ctx.lineTo(ax - tx * 3.6 + ty * 4.8, ay - ty * 3.6 - tx * 4.8);
+    ctx.closePath();
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+// "2 of 3 in range": a small chip at the top, only with two or more marked targets.
+function drawInRangeCount(ctx) {
+  if (rangeInfo.length < 2) return;
+  const n = rangeInfo.filter(i => i.inR).length;
+  const text = `${n} of ${rangeInfo.length} in range`;
+  setFont(11, true);
+  const w = ctx.measureText(text).width + 12;
+  const x = viewWidth / 2 - w / 2, y = 10;
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.fillRect(x, y, w, 17);
+  ctx.strokeStyle = n > 0 ? '#ffffff' : rgbStr(settings.colors.weaponRangeArmed);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 16);
+  ctx.fillStyle = n > 0 ? '#ffffff' : rgbStr(settings.colors.weaponRangeArmed);
+  ctx.fillText(text, x + 6, y + 13);
+}
+
+function updateInRange() {
+  const now = performance.now();
+  inRangeNow = computeInRange();
+  let entered = false;
+  inRangeNow.forEach(id => { if (!inRangeSince.has(id)) { inRangeSince.set(id, now); entered = true; } });
+  for (const id of [...inRangeSince.keys()]) if (!inRangeNow.has(id)) inRangeSince.delete(id);
+  if (entered) inRangeFadeStart = now;
+}
+
+function inRangeAnimating() {
+  const now = performance.now();
+  if (now - inRangeFadeStart < IN_RANGE_FADE_MS) return true;
+  for (const since of inRangeSince.values()) if (now - since < IN_RANGE_BRACKET_MS) return true;
+  return false;
+}
+
+// Range rings around you (5, 10, 20 and 40 km, or one of them) and a scale bar. Drawn around your own icon, so they
+// follow you when you pan. A ring too small to see, or far bigger than the screen, is left out.
+const RING_KM = [5, 10, 20, 40];
+function drawRangeRings(ctx, x, y) {
+  const choice = settings.display.ringKm;
+  const radii = choice === 'all' || !choice ? RING_KM : RING_KM.filter(km => String(km) === String(choice));
+  const biggest = Math.hypot(viewWidth, viewHeight) * 2;
+  ctx.save();
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 6]);
+  ctx.strokeStyle = rgbaStr(settings.colors.weaponRange, 0.55);
+  radii.forEach(km => {
+    const r = km * 1000 / scale;
+    if (r < 12 || r > biggest) return;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+  ctx.restore();
+  ctx.fillStyle = rgbaStr(settings.colors.weaponRange, 0.9);
+  setFont(10);
+  radii.forEach(km => {
+    const r = km * 1000 / scale;
+    if (r < 12 || r > biggest) return;
+    tryDrawLabel(km + ' km', x + 4, y - r - 3);
+  });
+}
+
+// A round distance (1, 2 or 5 times a power of ten) that is between 60 and 150 pixels wide at this zoom.
+const SCALE_BAR_STEPS_M = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000];
+function scaleBarChoice() {
+  let best = SCALE_BAR_STEPS_M[0];
+  for (const m of SCALE_BAR_STEPS_M) {
+    if (m / scale <= 150) best = m;
+  }
+  return { meters: best, px: best / scale };
+}
+
+function drawScaleBar(ctx) {
+  const { meters, px } = scaleBarChoice();
+  if (px < 20) return;
+  const x = 14;
+  const y = viewHeight - 18;
+  ctx.save();
+  ctx.strokeStyle = col('--hud-dim');
+  ctx.lineWidth = 2;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(x, y - 4); ctx.lineTo(x, y); ctx.lineTo(x + px, y); ctx.lineTo(x + px, y - 4);
+  ctx.stroke();
+  ctx.fillStyle = col('--hud-dim');
+  setFont(10);
+  drawText(meters >= 1000 ? (meters / 1000) + ' km' : meters + ' m', x, y - 8);
+  ctx.restore();
+}
+
 // The selected weapon's max range around your aircraft. A full circle while
 // nothing is marked (maxRange is the static TargetRequirements value), and a
 // cone toward your heading once a target is marked and the server sends the
@@ -2176,12 +2581,36 @@ function drawWeaponRangeRing(ctx, x, y, headingDeg, wr) {
     const start = -Math.PI / 2 - halfArc;
     const end = -Math.PI / 2 + halfArc;
     ctx.strokeStyle = rgbStr(settings.colors.weaponRangeArmed);
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(radiusPx * Math.cos(start), radiusPx * Math.sin(start));
-    ctx.arc(0, 0, radiusPx, start, end);
-    ctx.lineTo(0, 0);
+    const conePath = () => {
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(radiusPx * Math.cos(start), radiusPx * Math.sin(start));
+      ctx.arc(0, 0, radiusPx, start, end);
+      ctx.lineTo(0, 0);
+    };
+    const anyInRange = inRangeNow.size > 0;
+    if (anyInRange && settings.display.cueFill) {
+      // A target is inside: the cone takes a soft tint of its own color and the dashed edge turns solid.
+      conePath();
+      ctx.fillStyle = rgbaStr(settings.colors.weaponRangeArmed, 0.16);
+      ctx.fill();
+      ctx.setLineDash([]);
+    }
+    conePath();
     ctx.stroke();
+    const fadeP = (performance.now() - inRangeFadeStart) / IN_RANGE_FADE_MS;
+    if (settings.display.cueFade && fadeP >= 0 && fadeP < 1) {
+      // One slow glow along the edge when a target comes into range, easing out. Never repeats.
+      ctx.save();
+      ctx.setLineDash([]);
+      ctx.shadowColor = rgbStr(settings.colors.weaponRangeArmed);
+      ctx.shadowBlur = 16 * (1 - fadeP);
+      ctx.globalAlpha = 0.7 * (1 - fadeP) * (1 - fadeP);
+      ctx.lineWidth = 5;
+      conePath();
+      ctx.stroke();
+      ctx.restore();
+    }
   }
   ctx.setLineDash([]);
   ctx.restore();
@@ -2196,7 +2625,23 @@ function drawWeaponRangeRing(ctx, x, y, headingDeg, wr) {
     const lx = x + (radiusPx + 14) * Math.cos(labelAngle);
     const ly = y + (radiusPx + 14) * Math.sin(labelAngle);
     ctx.fillStyle = rgbStr(settings.colors.weaponRangeArmed);
-    setFont(10);
+    if (inRangeNow.size > 0 && settings.display.cueNumber) {
+      // The number at the tip gets bold and white, with a short bar across the tip of the cone.
+      ctx.fillStyle = '#ffffff';
+      setFont(12, true);
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(headingRad);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(0, 0, radiusPx, -Math.PI / 2 - 0.08, -Math.PI / 2 + 0.08);
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      setFont(10);
+    }
     tryDrawLabel(formatRangeM(wr.maxRange), lx, ly);
   }
 }
@@ -2459,7 +2904,7 @@ const boostRendering = () => { boostUntil = performance.now() + 1500; };
 window.addEventListener('pointermove', e => { if (e.buttons) boostRendering(); }, { passive: true });
 
 function animationActive() {
-  if (incomingMissileActive || lockLosses.size > 0) return true;
+  if (incomingMissileActive || lockLosses.size > 0 || inRangeAnimating()) return true;
   const now = performance.now();
   for (const m of markedMemory.values()) {
     if (m.lostAt !== null) return true; // the LOST marker spins the whole time
@@ -2519,6 +2964,8 @@ function draw() {
       ? `LIVE · ${friendWeaponCount} friend weapon${friendWeaponCount === 1 ? '' : 's'}`
       : 'LIVE';
   }
+
+  updateInRange();
 
   const cx = viewWidth / 2;
   const cy = viewHeight / 2;
@@ -2719,7 +3166,8 @@ function draw() {
       }
       // Blinks faster once it is urgent (under 10s out), so the rate means
       // something.
-      const urgent = etaSeconds !== null && etaSeconds < 10;
+      const showEta = settings.display.showMissileEta !== false;
+      const urgent = showEta && etaSeconds !== null && etaSeconds < 10;
       const t = (Math.sin(performance.now() / 1000 * (urgent ? 20 : 12)) + 1) / 2;
       ctx.fillStyle = t > 0.5 ? '#ff2020' : '#ffe020';
       drawMissileShape(ctx, sx, sy, 8, u.heading);
@@ -2730,9 +3178,9 @@ function draw() {
 
       setFont(10, true);
       const label1 = 'MISSILE';
-      const label2 = `${spdText}  ETA ${etaText}`;
+      const label2 = showEta ? `${spdText}  ETA ${etaText}` : '';
       const boxW = Math.max(ctx.measureText(label1).width, ctx.measureText(label2).width) + 8;
-      const boxH = 26;
+      const boxH = showEta ? 26 : 15;
       // Every incoming missile is a live threat, never hidden, but if two
       // are close enough that their boxes would overlap, stack this one
       // below the others instead of drawing on top (the icon stays at its
@@ -2743,8 +3191,20 @@ function draw() {
       ctx.fillStyle = '#ffe020';
       ctx.fillText(label1, sx + 9, boxY + 11);
       setFont(10);
-      ctx.fillText(label2, sx + 9, boxY + 23);
+      if (showEta) ctx.fillText(label2, sx + 9, boxY + 23);
       placedLabels.push({ x: sx + 5, y: boxY, w: boxW, h: boxH });
+      return;
+    }
+
+    if (u.isMissile) {
+      // An enemy (or neutral) missile that the cockpit warning has not picked up as incoming. It has no
+      // type of its own for the unit filter, so it used to be drawn as a plane arrow. A small needle now,
+      // always shown like the other missiles, and without the speed and ETA box that is for incoming ones.
+      ctx.fillStyle = unitColor(u);
+      drawMissileShape(ctx, sx, sy, 4, u.heading);
+      ctx.fill();
+      setFont(9);
+      tryDrawLabel(u.name, sx + 8, sy + 3);
       return;
     }
 
@@ -2967,6 +3427,15 @@ function draw() {
         flash = 1 - (sinceFound - FOUND_SPIN_SECONDS) / (FOUND_ANIM_SECONDS - FOUND_SPIN_SECONDS);
       }
     }
+    const inRange = inRangeNow.has(mt.id);
+    if (inRange && settings.display.cueBrackets) {
+      // In range: the brackets start wide and close in once, then stay tight and bright.
+      const p = Math.min(1, (performance.now() - inRangeSince.get(mt.id)) / IN_RANGE_BRACKET_MS);
+      const ease = 1 - Math.pow(1 - p, 3);
+      r *= 1.9 - 1.1 * ease;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = (mt.isPrimary ? 1.5 : 1) + 1;
+    }
     ctx.save();
     ctx.translate(tx, ty);
     ctx.rotate(angle);
@@ -2982,9 +3451,17 @@ function draw() {
       drawMarkReticle(ctx, tx, ty, r + 2);
       ctx.globalAlpha = 1;
     }
-    ctx.fillStyle = color;
+    ctx.fillStyle = inRange && settings.display.cueNumber ? '#ffffff' : color;
     setFont(10, mt.isPrimary);
     tryDrawLabel(mt.isPrimary ? `TGT: ${mt.name.trim()}` : mt.name.trim(), tx + 14, ty + 3);
+    const rangeEntry = rangeInfoById.get(mt.id);
+    if (settings.display.cueClosing && rangeEntry && latest.weaponRange && !rangeEntry.inR
+        && Math.abs(rangeEntry.off) <= (latest.weaponRange.minAlignment || 0) && rangeEntry.dist > latest.weaponRange.maxRange) {
+      // Pointing the right way but still too far: how much is left.
+      ctx.fillStyle = rgbStr(settings.colors.weaponRangeArmed);
+      setFont(10, true);
+      drawText(`in range in ${((rangeEntry.dist - latest.weaponRange.maxRange) / 1000).toFixed(1)} km`, tx + 14, ty + 16);
+    }
   });
 
   if (latest.player) {
@@ -2993,8 +3470,11 @@ function draw() {
     // your icon there while panning.
     const [sx, sy] = toScreen(latest.player.x, latest.player.z);
 
+    if (settings.overlays.rangeRings) drawRangeRings(ctx, sx, sy);
+
     if (settings.overlays.weaponRange && latest.weaponRange) {
       drawWeaponRangeRing(ctx, sx, sy, latest.player.heading, latest.weaponRange);
+      if (settings.display.cueSteer && latest.weaponRange.armed) drawSteerArrows(ctx, sx, sy, latest.player.heading, latest.weaponRange);
     }
 
     // Matches the real game's MapIcon.HighlightIcon(): the local player's
@@ -3025,6 +3505,10 @@ function draw() {
     ctx.fillStyle = col('--hud-green');
     stats.lines.forEach((line, i) => ctx.fillText(line, stats.textX, stats.textY + i * 13));
   }
+
+  if (settings.overlays.weaponRange && latest.weaponRange && latest.weaponRange.armed && settings.display.cueCount) drawInRangeCount(ctx);
+
+  if (settings.overlays.scaleBar) drawScaleBar(ctx);
 }
 
 // SPD/ALT/HDG block under your icon. Shared between the early space
@@ -3115,6 +3599,7 @@ function connect() {
   };
   source.onmessage = e => {
     latest = JSON.parse(e.data);
+    updateCombat(latest.loadout);
     incomingMissileActive = (latest.units || []).some(u => u.isIncomingMissile);
     updateTrails(latest);
     updateMarked(latest);
@@ -3203,11 +3688,12 @@ function startError(message) {
 let idleWatchAlive = false;
 let idleWatchMisses = 0;
 setInterval(() => {
-  if (mapActive || asleep || !settings.display.closeOnGameExit) { idleWatchMisses = 0; return; }
+  // A tab that is hidden has put its stream to sleep too, so it is watched the same way: nothing is connected.
+  if ((mapActive && !asleep) || !settings.display.closeOnGameExit) { idleWatchMisses = 0; return; }
   fetch('/lan', { cache: 'no-store' })
     .then(() => { idleWatchAlive = true; idleWatchMisses = 0; })
     .catch(() => {
-      if (!idleWatchAlive || mapActive) return;
+      if (!idleWatchAlive || (mapActive && !asleep)) return;
       idleWatchMisses++;
       if (idleWatchMisses >= CLOSE_AFTER_FAILURES) {
         status.textContent = 'game closed, you can close this tab';
