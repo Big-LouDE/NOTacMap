@@ -24,7 +24,7 @@ namespace NOTacMap
 		public const string PluginVersion = "1.3.0";
 		// Shown in the log and in Help. "dev" while building, "beta1", "beta2" for the test releases, empty for the real 1.3.0.
 		// It is not part of PluginVersion: BepInEx can only read a plain number there.
-		internal const string BuildLabel = "dev";
+		internal const string BuildLabel = "beta1";
 
 		internal static ManualLogSource Log;
 
