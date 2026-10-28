@@ -2748,6 +2748,18 @@ function draw() {
       return;
     }
 
+    if (u.isMissile) {
+      // An enemy (or neutral) missile that the cockpit warning has not picked up as incoming. It has no
+      // type of its own for the unit filter, so it used to be drawn as a plane arrow. A small needle now,
+      // always shown like the other missiles, and without the speed and ETA box that is for incoming ones.
+      ctx.fillStyle = unitColor(u);
+      drawMissileShape(ctx, sx, sy, 4, u.heading);
+      ctx.fill();
+      setFont(9);
+      tryDrawLabel(u.name, sx + 8, sy + 3);
+      return;
+    }
+
     const category = classifyUnit(u);
     if (!unitTypeVisible(category)) return;
     ctx.fillStyle = unitColor(u);
@@ -3203,11 +3215,12 @@ function startError(message) {
 let idleWatchAlive = false;
 let idleWatchMisses = 0;
 setInterval(() => {
-  if (mapActive || asleep || !settings.display.closeOnGameExit) { idleWatchMisses = 0; return; }
+  // A tab that is hidden has put its stream to sleep too, so it is watched the same way: nothing is connected.
+  if ((mapActive && !asleep) || !settings.display.closeOnGameExit) { idleWatchMisses = 0; return; }
   fetch('/lan', { cache: 'no-store' })
     .then(() => { idleWatchAlive = true; idleWatchMisses = 0; })
     .catch(() => {
-      if (!idleWatchAlive || mapActive) return;
+      if (!idleWatchAlive || (mapActive && !asleep)) return;
       idleWatchMisses++;
       if (idleWatchMisses >= CLOSE_AFTER_FAILURES) {
         status.textContent = 'game closed, you can close this tab';
