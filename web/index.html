@@ -441,13 +441,21 @@
           <option value="30">30 fps (smoothest)</option>
         </select>
       </label>
+      <label>Units
+        <select id="unitsSelect">
+          <option value="game" selected>Auto</option>
+          <option value="metric">Meters</option>
+          <option value="imperial">Feet</option>
+        </select>
+      </label>
+      <div class="note">Auto follows the unit setting in the game. Meters: m, km, km/h. Feet: ft, nm, kt.</div>
       <label>Which rings
         <select id="ringSelect">
           <option value="all" selected>All four</option>
-          <option value="5">5 km only</option>
-          <option value="10">10 km only</option>
-          <option value="20">20 km only</option>
-          <option value="40">40 km only</option>
+          <option value="0">5 km only</option>
+          <option value="1">10 km only</option>
+          <option value="2">20 km only</option>
+          <option value="3">40 km only</option>
         </select>
       </label>
       <label><input type="checkbox" data-group="display" data-key="showMissileEta" checked>Missile warning shows speed and ETA</label>
@@ -861,7 +869,7 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true },
+  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true },
   overlays: { runwayGuides: true, weaponRange: true, grid: true, rangeRings: false, scaleBar: true },
   // Which preset is on ('custom' = the boxes as you set them), and the boxes as they were before a preset was switched on.
   preset: { mode: 'custom', mine: null },
@@ -940,8 +948,9 @@ function syncDisplayControls() {
   if (fpsSel) fpsSel.value = String(settings.display.fps);
   const startSel = document.getElementById('startModeSelect');
   if (startSel) startSel.value = settings.display.startMode;
-  const ringSel = document.getElementById('ringSelect');
-  if (ringSel) ringSel.value = String(settings.display.ringKm);
+  const unitsSel = document.getElementById('unitsSelect');
+  if (unitsSel) unitsSel.value = String(settings.display.units);
+  updateRingOptions();
   applyTextScale();
 }
 
@@ -1710,6 +1719,12 @@ document.getElementById('ringSelect').addEventListener('change', e => {
   saveSettings();
 });
 
+document.getElementById('unitsSelect').addEventListener('change', e => {
+  settings.display.units = e.target.value;
+  updateRingOptions();
+  saveSettings();
+});
+
 // ---- Filter presets
 // All, Minimal and the two Combat views set the FILTER boxes for you. Combat reads your own weapon stations
 // (the plugin sends them in "loadout") and shows only what you can hit: "all my weapons" uses everything with ammo,
@@ -2406,7 +2421,7 @@ function drawMarkReticle(ctx, x, y, r) {
 }
 
 function formatRangeM(m) {
-  return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : Math.round(m) + 'm';
+  return fmtDistance(m);
 }
 
 // ---- A marked target inside the weapon cone
@@ -2503,19 +2518,54 @@ function inRangeAnimating() {
   return false;
 }
 
-// Range rings around you (5, 10, 20 and 40 km, or one of them) and a scale bar. Drawn around your own icon, so they
-// follow you when you pan. A ring too small to see, or far bigger than the screen, is left out.
-const RING_KM = [5, 10, 20, 40];
-function drawRangeRings(ctx, x, y) {
+// ---- Units. "Auto" follows the game's own Gameplay setting (Metric or Imperial), which the plugin sends with every snapshot,
+// so it also follows a change made in the game's menu. Metric and Imperial are fixed choices. Imperial reads like the game's
+// cockpit: feet, knots, yards under 1000 and nautical miles above.
+function unitsInUse() {
+  const choice = settings.display.units;
+  if (choice === 'metric' || choice === 'imperial') return choice;
+  return latest && latest.unitSystem === 'imperial' ? 'imperial' : 'metric';
+}
+function fmtAltitude(m) { return unitsInUse() === 'imperial' ? Math.round(m * 3.28084) + 'ft' : Math.round(m) + 'm'; }
+function fmtSpeed(kmh) { return unitsInUse() === 'imperial' ? Math.round(kmh * 0.539957) + 'kt' : Math.round(kmh) + 'km/h'; }
+function fmtDistance(m) {
+  if (unitsInUse() === 'imperial') {
+    const yd = m * 1.09361;
+    return yd < 1000 ? Math.round(yd) + 'yd' : (m * 0.000539957).toFixed(1) + 'nm';
+  }
+  return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : Math.round(m) + 'm';
+}
+
+// Range rings around you, and a scale bar. Drawn around your own icon, so they follow you when you pan. A ring too
+// small to see, or far bigger than the screen, is left out.
+const RING_SETS = {
+  metric: [{ m: 5000, l: '5 km' }, { m: 10000, l: '10 km' }, { m: 20000, l: '20 km' }, { m: 40000, l: '40 km' }],
+  imperial: [{ m: 3704, l: '2 nm' }, { m: 9260, l: '5 nm' }, { m: 18520, l: '10 nm' }, { m: 37040, l: '20 nm' }]
+};
+function ringsInUse() {
+  const set = RING_SETS[unitsInUse()];
   const choice = settings.display.ringKm;
-  const radii = choice === 'all' || !choice ? RING_KM : RING_KM.filter(km => String(km) === String(choice));
+  return choice === 'all' || choice === undefined || choice === null ? set : set.filter((r, i) => String(i) === String(choice));
+}
+let ringOptionsFor = '';
+function updateRingOptions() {
+  const set = RING_SETS[unitsInUse()];
+  const sel = document.getElementById('ringSelect');
+  if (!sel) return;
+  ringOptionsFor = unitsInUse();
+  sel.options[0].textContent = 'All four';
+  set.forEach((r, i) => { sel.options[i + 1].value = String(i); sel.options[i + 1].textContent = r.l + ' only'; });
+  sel.value = String(settings.display.ringKm);
+}
+function drawRangeRings(ctx, x, y) {
+  const radii = ringsInUse();
   const biggest = Math.hypot(viewWidth, viewHeight) * 2;
   ctx.save();
   ctx.lineWidth = 1;
   ctx.setLineDash([2, 6]);
   ctx.strokeStyle = rgbaStr(settings.colors.weaponRange, 0.55);
-  radii.forEach(km => {
-    const r = km * 1000 / scale;
+  radii.forEach(ring => {
+    const r = ring.m / scale;
     if (r < 12 || r > biggest) return;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -2524,25 +2574,31 @@ function drawRangeRings(ctx, x, y) {
   ctx.restore();
   ctx.fillStyle = rgbaStr(settings.colors.weaponRange, 0.9);
   setFont(10);
-  radii.forEach(km => {
-    const r = km * 1000 / scale;
+  radii.forEach(ring => {
+    const r = ring.m / scale;
     if (r < 12 || r > biggest) return;
-    tryDrawLabel(km + ' km', x + 4, y - r - 3);
+    tryDrawLabel(ring.l, x + 4, y - r - 3);
   });
 }
 
-// A round distance (1, 2 or 5 times a power of ten) that is between 60 and 150 pixels wide at this zoom.
-const SCALE_BAR_STEPS_M = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000];
+// A round distance that is between 60 and 150 pixels wide at this zoom.
+const SCALE_BAR_STEPS = {
+  metric: [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000].map(m => ({ m, l: m >= 1000 ? (m / 1000) + ' km' : m + ' m' })),
+  imperial: [{ m: 9.144, l: '10 yd' }, { m: 18.288, l: '20 yd' }, { m: 45.72, l: '50 yd' }, { m: 91.44, l: '100 yd' }, { m: 182.88, l: '200 yd' },
+    { m: 457.2, l: '500 yd' }, { m: 926, l: '0.5 nm' }, { m: 1852, l: '1 nm' }, { m: 3704, l: '2 nm' }, { m: 9260, l: '5 nm' },
+    { m: 18520, l: '10 nm' }, { m: 37040, l: '20 nm' }, { m: 92600, l: '50 nm' }, { m: 185200, l: '100 nm' }]
+};
 function scaleBarChoice() {
-  let best = SCALE_BAR_STEPS_M[0];
-  for (const m of SCALE_BAR_STEPS_M) {
-    if (m / scale <= 150) best = m;
+  const steps = SCALE_BAR_STEPS[unitsInUse()];
+  let best = steps[0];
+  for (const step of steps) {
+    if (step.m / scale <= 150) best = step;
   }
-  return { meters: best, px: best / scale };
+  return { meters: best.m, label: best.l, px: best.m / scale };
 }
 
 function drawScaleBar(ctx) {
-  const { meters, px } = scaleBarChoice();
+  const { label, px } = scaleBarChoice();
   if (px < 20) return;
   const x = 14;
   const y = viewHeight - 18;
@@ -2555,7 +2611,7 @@ function drawScaleBar(ctx) {
   ctx.stroke();
   ctx.fillStyle = col('--hud-dim');
   setFont(10);
-  drawText(meters >= 1000 ? (meters / 1000) + ' km' : meters + ' m', x, y - 8);
+  drawText(label, x, y - 8);
   ctx.restore();
 }
 
@@ -2969,6 +3025,7 @@ function draw() {
   }
 
   updateInRange();
+  if (ringOptionsFor !== unitsInUse()) updateRingOptions();
 
   const cx = viewWidth / 2;
   const cy = viewHeight / 2;
@@ -3177,7 +3234,7 @@ function draw() {
       ctx.fill();
 
       const etaText = etaSeconds !== null ? etaSeconds.toFixed(1) + 's' : '...';
-      const spdText = spd ? Math.round(spd) + 'km/h' : '...';
+      const spdText = spd ? fmtSpeed(spd) : '...';
 
       setFont(10, true);
       const label1 = 'MISSILE';
@@ -3463,7 +3520,7 @@ function draw() {
       // Pointing the right way but still too far: how much is left.
       ctx.fillStyle = rgbStr(settings.colors.weaponRangeArmed);
       setFont(10, true);
-      drawText(`in range in ${((rangeEntry.dist - latest.weaponRange.maxRange) / 1000).toFixed(1)} km`, tx + 14, ty + 16);
+      drawText(`in range in ${fmtDistance(rangeEntry.dist - latest.weaponRange.maxRange)}`, tx + 14, ty + 16);
     }
   });
 
@@ -3520,8 +3577,8 @@ function playerStatBlock(sx, sy) {
   const prevFont = ctx.font;
   setFont(11);
   const lines = [
-    `SPD ${Math.round(latest.player.speedKmh)}km/h`,
-    `ALT ${Math.round(latest.player.y)}m`, // latest.player, not origin, origin.y is undefined while panned (view center is {x,z} only)
+    `SPD ${fmtSpeed(latest.player.speedKmh)}`,
+    `ALT ${fmtAltitude(latest.player.y)}`, // latest.player, not origin, origin.y is undefined while panned (view center is {x,z} only)
     `HDG ${Math.round(latest.player.heading)}°`
   ];
   const textW = Math.max(...lines.map(l => ctx.measureText(l).width));

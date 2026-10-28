@@ -135,6 +135,7 @@ namespace NOTacMap
 		// gets its events batched and throttled, so the arrival time on the client is
 		// not a reliable measure of the time between two snapshots. Use deltas of this.
 		public double t;
+		public string unitSystem; // the game's own Gameplay setting: "metric" or "imperial"
 		public PlayerSnapshot player;
 		public List<UnitSnapshot> units = new List<UnitSnapshot>();
 		public List<AirbaseSnapshot> airbases = new List<AirbaseSnapshot>();
@@ -191,6 +192,7 @@ namespace NOTacMap
 
 			var snapshot = new MapSnapshot();
 			snapshot.t = Time.realtimeSinceStartupAsDouble;
+			snapshot.unitSystem = PlayerSettings.unitSystem == PlayerSettings.UnitSystem.Metric ? "metric" : "imperial";
 			Aircraft playerAircraft = null;
 
 			if (GameManager.GetLocalPlayer<Player>(out var localPlayer) && localPlayer.Aircraft != null && !localPlayer.Aircraft.disabled)
