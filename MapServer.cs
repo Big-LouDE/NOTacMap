@@ -676,6 +676,21 @@ namespace NOTacMap
 					return;
 				}
 
+				if (path == "/mapwater.png")
+				{
+					if (MapImageCapture.WaterPng == null)
+					{
+						context.Response.StatusCode = 404;
+						context.Response.Close();
+						return;
+					}
+					context.Response.ContentType = "image/png";
+					context.Response.ContentLength64 = MapImageCapture.WaterPng.Length;
+					context.Response.OutputStream.Write(MapImageCapture.WaterPng, 0, MapImageCapture.WaterPng.Length);
+					context.Response.Close();
+					return;
+				}
+
 				if (path == "/mapinfo")
 				{
 					if (MapImageCapture.Png == null)

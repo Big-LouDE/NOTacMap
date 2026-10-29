@@ -26,6 +26,7 @@ namespace NOTacMap
     internal static class MapImageCapture
     {
         public static byte[] Png = null;
+        public static byte[] WaterPng = null;
         public static float MapSizeX = 0, MapSizeY = 0;
         public static string MapName = "";
         public static int OffsetX = 80000, OffsetY = 80000;
@@ -478,6 +479,14 @@ internal static class Program
             Check("H mapinfo gives the name back unchanged", info != null && (string)info["mapName"] == MapImageCapture.MapName);
             Check("H mapinfo sizes are right", info != null && (float)info["mapSizeX"] == 12345.5f && (float)info["mapSizeY"] == 6789f);
             Check("H mapinfo carries the grid offsets of the map", info != null && (int)info["offsetX"] == 120000 && (int)info["offsetY"] == 80000);
+            // the ocean depth map: 404 on a map without one, the bytes when there is one
+            r = await Send("GET", H + "/mapwater.png");
+            Check("H /mapwater.png is a 404 when the map has no ocean depth map", (int)r.StatusCode == 404);
+            MapImageCapture.WaterPng = new byte[] { 9, 8, 7, 6 };
+            r = await Send("GET", H + "/mapwater.png");
+            byte[] waterBytes = await r.Content.ReadAsByteArrayAsync();
+            Check("H /mapwater.png gives the depth map as a png", (int)r.StatusCode == 200 && r.Content.Headers.ContentType.MediaType == "image/png" && waterBytes.Length == 4 && waterBytes[0] == 9);
+            MapImageCapture.WaterPng = null;
             MapImageCapture.OffsetX = 80000;
             MapImageCapture.Png = null;
             MapImageCapture.MapName = "";

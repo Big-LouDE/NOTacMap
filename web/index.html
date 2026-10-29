@@ -41,7 +41,7 @@
      two fingers pinch instead of the browser scrolling or zooming the page. */
   canvas { display: block; touch-action: none; -webkit-user-select: none; user-select: none; }
   #status {
-    position: absolute; top: 10px; left: 14px;
+    position: absolute; top: 26px; left: 14px;
     color: var(--hud-dim); font-size: calc(11px * var(--text-scale)); letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -52,7 +52,7 @@
     text-shadow: 0 0 4px rgba(63,219,94,0.5);
   }
   #themeWarning {
-    position: absolute; bottom: 10px; left: 14px;
+    position: absolute; bottom: 44px; left: 14px;
     color: var(--hostile); font-size: calc(11px * var(--text-scale));
     display: none; max-width: 60%;
   }
@@ -65,7 +65,7 @@
      never overlapping a sibling button the way anchoring to just one
      button's own row would once that panel grows taller than the gap. */
   #controls {
-    position: absolute; top: 10px; right: 14px;
+    position: absolute; top: 26px; right: 14px;
     display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
   }
   #controls button {
@@ -117,7 +117,7 @@
   }
   .color-reset:hover { color: var(--hud-green); border-color: var(--hud-green); }
   #legend {
-    position: absolute; top: 34px; left: 14px;
+    position: absolute; top: 50px; left: 14px;
     display: flex; flex-direction: column; gap: 3px;
     color: var(--hud-dim); font-size: calc(10px * var(--text-scale)); letter-spacing: 0.03em;
     cursor: pointer; user-select: none; -webkit-user-select: none;
@@ -265,7 +265,7 @@
     .cp-left { flex: 0 0 auto; width: min(300px, calc((var(--vh, 100vh) - 110px) * 1.12)); }
     .cp-right { flex: 1 1 auto; min-width: 190px; }
   }
-  #legend .legend-rows { max-height: calc(var(--vh, 100vh) - 90px); overflow: auto; }
+  #legend .legend-rows { max-height: calc(var(--vh, 100vh) - 106px); overflow: auto; }
   /* The start screen on a short screen: the code beside the text, the two choices side by side. */
   @media (max-height: 520px) {
     .start-card { width: min(800px, 100%); padding: 10px 16px; }
@@ -300,7 +300,7 @@
   /* Narrow screens (phones). */
   @media (max-width: 700px) {
     #controls { right: 8px; }
-    #status { left: 8px; }
+    #status { left: 14px; }
     #gridRef { right: 8px; }
     #themeWarning { left: 8px; max-width: calc(var(--vw, 100vw) - 110px); }
   }
@@ -327,10 +327,9 @@
   <div class="row"><svg viewBox="0 0 16 16" style="color:#ffb020"><path d="M2,5 L2,2 L5,2"/><path d="M11,2 L14,2 L14,5"/><path d="M14,11 L14,14 L11,14"/><path d="M5,14 L2,14 L2,11"/></svg>Marked target (yours)</div>
   <div class="row"><svg viewBox="0 0 16 16"><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/></svg>Pilot (ejected, hidden by default)</div>
 </div>
-<div id="gridRef"></div>
-<div id="themeWarning">Live theme not loaded yet - showing fallback palette. It will switch over by itself once you're in a mission.
-  </div>
 </div>
+<div id="gridRef"></div>
+<div id="themeWarning">Live theme not loaded yet - showing fallback palette. It will switch over by itself once you're in a mission.</div>
 <div id="controls">
   <button id="recenterBtn">&#8982; recenter on me</button>
   <button id="fullscreenBtn" hidden>&#9974; fullscreen</button>
@@ -2056,15 +2055,17 @@ function gridRefFor(x, z) {
 const bgImage = new Image();
 let bgReady = false;
 let bgCanvas = null; // processed copy of bgImage, the land with the sea cut out, see below
-// The map texture draws open sea as one flat color (tan, orange or, on a land-locked map, a green close to the land), which
-// looks bad as a backdrop and does not look like water. The sea is found by its color, the four corners are open sea on any
-// map with land in the middle, so sampling them gives the sea color of this map. It is painted in the Water color (deep blue
-// by default, the swatch is in DISPLAY). A land pixel that only happens to have almost the same color is no sea: a pixel
-// counts as sea only if most of its 7 x 7 neighbourhood does too, so stray patches of land keep their own color.
+// The map texture draws open sea as a flat color, which looks bad as a backdrop and does not look like water. The sea is
+// painted in the Water color instead (deep blue by default, the swatch is in DISPLAY). Where the sea is comes from the game's
+// own ocean depth map when the plugin sends one (/mapwater.png: dark is deep sea, white is land). A map without one falls back
+// to the sea color: the four corners are open sea on a map with land in the middle, so sampling them gives that color. That
+// only works when the sea is one color on that map, and a land pixel that happens to have almost the same color is no sea:
+// a pixel counts as sea only if most of its 7 x 7 neighbourhood does too, so stray patches of land keep their own color.
 let bgWaterMask = null;   // 1 where the texture is sea, after the cleanup
 let waterCanvas = null;   // the sea in the Water color, drawn above the land
 const SEA_NEIGHBOURHOOD = 3;  // radius in texture pixels (a pixel is about 80 m on the standard maps)
 const SEA_SHARE = 0.6;        // how much of the neighbourhood has to look like sea
+const DEPTH_SEA_BELOW = 210;  // ocean depth map (0 deep sea, about 215 to 255 land, depends on the map): darker than this is sea
 
 function cleanSeaMask(match, w, h) {
   const r = SEA_NEIGHBOURHOOD;
@@ -2105,7 +2106,37 @@ function paintWater() {
   waterCanvas = c;
 }
 
+// The sea mask from the ocean depth map, or null when the plugin has none (an older plugin, or a map without one).
+function loadDepthMask(w, h) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const x = c.getContext('2d', { willReadFrequently: true });
+      x.drawImage(img, 0, 0, w, h);
+      const d = x.getImageData(0, 0, w, h).data;
+      const mask = new Uint8Array(w * h);
+      for (let p = 0, i = 0; p < mask.length; p++, i += 4) if (d[i] < DEPTH_SEA_BELOW) mask[p] = 1;
+      // The four corners of a map are open sea. If they are not in this depth map, it is not made the way this was
+      // tested with, and the sea color is used instead.
+      const corners = [0, w - 1, (h - 1) * w, h * w - 1];
+      resolve(corners.every(k => mask[k]) ? mask : null);
+    };
+    img.onerror = () => resolve(null);
+    img.src = '/mapwater.png?' + Date.now();
+  });
+}
+
 bgImage.onload = () => {
+  const src = bgImage.src;
+  loadDepthMask(bgImage.naturalWidth, bgImage.naturalHeight).then(depthMask => {
+    if (bgImage.src !== src) return;   // the map changed while the depth map was loading
+    processMapImage(depthMask);
+  });
+};
+
+function processMapImage(depthMask) {
   const off = document.createElement('canvas');
   off.width = bgImage.naturalWidth;
   off.height = bgImage.naturalHeight;
@@ -2114,26 +2145,30 @@ bgImage.onload = () => {
   const imgData = octx.getImageData(0, 0, off.width, off.height);
   const d = imgData.data;
 
-  function pixelAt(x, y) {
-    const i = (y * off.width + x) * 4;
-    return [d[i], d[i + 1], d[i + 2]];
-  }
-  const corners = [
-    pixelAt(0, 0), pixelAt(off.width - 1, 0),
-    pixelAt(0, off.height - 1), pixelAt(off.width - 1, off.height - 1)
-  ];
-  const key = c => c.join(',');
-  const counts = {};
-  corners.forEach(c => { counts[key(c)] = (counts[key(c)] || 0) + 1; });
-  const bestKey = Object.keys(counts).reduce((a, b) => counts[a] >= counts[b] ? a : b);
-  const [or_, og, ob] = bestKey.split(',').map(Number);
+  if (depthMask) {
+    bgWaterMask = depthMask;
+  } else {
+    function pixelAt(x, y) {
+      const i = (y * off.width + x) * 4;
+      return [d[i], d[i + 1], d[i + 2]];
+    }
+    const corners = [
+      pixelAt(0, 0), pixelAt(off.width - 1, 0),
+      pixelAt(0, off.height - 1), pixelAt(off.width - 1, off.height - 1)
+    ];
+    const key = c => c.join(',');
+    const counts = {};
+    corners.forEach(c => { counts[key(c)] = (counts[key(c)] || 0) + 1; });
+    const bestKey = Object.keys(counts).reduce((a, b) => counts[a] >= counts[b] ? a : b);
+    const [or_, og, ob] = bestKey.split(',').map(Number);
 
-  const TOLERANCE = 12; // slack for PNG/compression noise, not enough to eat real coastline colors
-  const match = new Uint8Array(off.width * off.height);
-  for (let p = 0, i = 0; p < match.length; p++, i += 4) {
-    if (Math.abs(d[i] - or_) <= TOLERANCE && Math.abs(d[i + 1] - og) <= TOLERANCE && Math.abs(d[i + 2] - ob) <= TOLERANCE) match[p] = 1;
+    const TOLERANCE = 12; // slack for PNG/compression noise, not enough to eat real coastline colors
+    const match = new Uint8Array(off.width * off.height);
+    for (let p = 0, i = 0; p < match.length; p++, i += 4) {
+      if (Math.abs(d[i] - or_) <= TOLERANCE && Math.abs(d[i + 1] - og) <= TOLERANCE && Math.abs(d[i + 2] - ob) <= TOLERANCE) match[p] = 1;
+    }
+    bgWaterMask = cleanSeaMask(match, off.width, off.height);
   }
-  bgWaterMask = cleanSeaMask(match, off.width, off.height);
   // the land layer: the texture with the sea cut out, the sea comes from the Water color
   for (let p = 0, i = 3; p < bgWaterMask.length; p++, i += 4) {
     if (bgWaterMask[p]) d[i] = 0;
@@ -2142,7 +2177,7 @@ bgImage.onload = () => {
   bgCanvas = off;
   paintWater();
   bgReady = true;
-};
+}
 let mapInfo = null; // {mapSizeX, mapSizeY, mapName, offsetX, offsetY} from /mapinfo
 
 function loadMapImage() {
