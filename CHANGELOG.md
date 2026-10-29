@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.4
+
+Fixed
+- An enemy missile that your cockpit warning had not picked up yet was drawn as a plane arrow. It is a small missile needle now, like the other missiles. The feature list on GitHub already claimed this, which was wrong for 1.2.3
+- A browser tab that was hidden when the game closed (the map, the first question or the phone link screen) stayed open. It closes now too (a hidden tab can take a minute or two to react), with the same setting as before ("Close this tab when the game closes")
+
 ## 1.2.3
 
 Fixed

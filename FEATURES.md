@@ -207,4 +207,4 @@ The phone link isn't encrypted. It's plain HTTP on your home network.
 
 If Windows won't let the game listen on the network, the page and the log both say so, and the map keeps working on the PC.
 
-Enemy missiles that your cockpit warning hasn't picked up yet are still drawn as a missile needle, just without the speed and ETA box. The speed and the ETA on the box are worked out by the mod from the missile's position, the cockpit itself only gives a tone and arrows.
+Enemy missiles that your cockpit warning hasn't picked up yet are still drawn as a missile needle, just without the speed and ETA box. No unit filter hides them, the same as the incoming ones. The speed and the ETA on the box are worked out by the mod from the missile's position, the cockpit itself only gives a tone and arrows.
