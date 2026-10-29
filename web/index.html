@@ -2005,12 +2005,14 @@ function matchesAny(text, keywords) {
   return keywords.some(k => text.includes(k));
 }
 
-// Name-based keyword match first (specific and known-correct); falls back to
+// The game's own answer first when the plugin sends one (isHelicopter, from the aircraft's pilot type, so a modded helicopter is
+// right too). Then a name-based keyword match (specific and known-correct); falls back to
 // the server's plain C# type check (baseType) when a name isn't in any list
 // above, so a not-yet-catalogued mod aircraft still gets a plane-ish shape
 // instead of the same neutral icon as an unclassified building.
 function classifyUnit(u) {
   const t = u.type || '';
+  if (u.isHelicopter) return 'helicopter';
   if (matchesAny(t, HELICOPTER_KEYWORDS)) return 'helicopter';
   if (matchesAny(t, PLANE_KEYWORDS)) return 'plane';
   if (matchesAny(t, TANK_KEYWORDS)) return 'tank';
@@ -3642,7 +3644,7 @@ function draw() {
     // as-is. A helicopter's real glyph (circle+rotor-cross) has no point
     // to rotate, so draw the heli shape instead of a plane chevron, plus a
     // short tick line for heading.
-    if (classifyUnit({ type: latest.player.type, baseType: 'aircraft' }) === 'helicopter') {
+    if (classifyUnit({ type: latest.player.type, baseType: 'aircraft', isHelicopter: latest.player.isHelicopter }) === 'helicopter') {
       drawUnitIcon(ctx, 'helicopter', sx, sy, 8, 0);
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;

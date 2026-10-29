@@ -24,6 +24,7 @@ namespace NOTacMap
 		// a lock (ShouldSerialize below), so a real 0 can never go missing.
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isPlayer; // human-piloted aircraft, vs. an AI/structure on the same faction
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isIncomingMissile; // locked onto the local player's own aircraft right now
+		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isHelicopter; // the game's own pilot type of the aircraft is Helo, so a modded helicopter is no plane even if its name is not in the page's list
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isMissile; // any missile or bomb, any faction, lets the client tell enemy ones apart for trail filtering
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isMyMissile; // a missile the local player personally launched
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isFriendlyMissile; // any friendly-faction missile, mine or a teammate's
@@ -122,6 +123,7 @@ namespace NOTacMap
 	internal class PlayerSnapshot
 	{
 		public string type; // same unitName used for other units' classification, so the client can tell a heli apart from a plane for its own icon too
+		public bool isHelicopter; // see UnitSnapshot.isHelicopter
 		public float speedKmh; // real Rigidbody.velocity.magnitude, see FlightHud.cs's own cockpitRB.velocity.magnitude
 		public float x;
 		public float y;
@@ -148,6 +150,27 @@ namespace NOTacMap
 
 	internal static class SnapshotBuilder
 	{
+		// The game's own pilot type of an aircraft (the AI picks its helicopter flying from it, so a modded helicopter has it set
+		// right). Tiltwing and VTOL stay planes. The first time a kind of aircraft is seen its type goes in the log, so a
+		// wrong guess is easy to find.
+		private static readonly System.Collections.Generic.HashSet<string> loggedPilotTypes = new System.Collections.Generic.HashSet<string>();
+
+		private static bool IsHelicopter(Aircraft aircraft)
+		{
+			Pilot[] pilots = aircraft.pilots;
+			if (pilots == null || pilots.Length == 0 || pilots[0] == null)
+			{
+				return false;
+			}
+			Pilot.PilotType pilotType = pilots[0].pilotType;
+			string name = aircraft.definition != null ? aircraft.definition.unitName : aircraft.GetType().Name;
+			if (loggedPilotTypes.Add(name))
+			{
+				Plugin.Log.LogInfo($"NOTacMap: aircraft '{name}' has pilot type {pilotType}.");
+			}
+			return pilotType == Pilot.PilotType.Helo;
+		}
+
 		private static float Round1(float value)
 		{
 			return Mathf.Round(value * 10f) / 10f;
@@ -202,6 +225,7 @@ namespace NOTacMap
 				snapshot.player = new PlayerSnapshot
 				{
 					type = playerAircraft.definition != null ? playerAircraft.definition.unitName : playerAircraft.GetType().Name,
+					isHelicopter = IsHelicopter(playerAircraft),
 					speedKmh = playerAircraft.rb != null ? playerAircraft.rb.velocity.magnitude * 3.6f : 0f,
 					x = pos.x,
 					y = pos.y,
@@ -410,6 +434,7 @@ namespace NOTacMap
 						id = id.Id,
 						name = unit.unitName,
 						type = unit.definition != null ? unit.definition.unitName : unit.GetType().Name,
+						isHelicopter = unit is Aircraft heloCheck && IsHelicopter(heloCheck),
 						baseType = unit is Aircraft ? "aircraft"
 							: unit is GroundVehicle ? "groundvehicle"
 							: unit is Building ? "building"
