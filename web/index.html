@@ -534,6 +534,11 @@
         <button type="button" class="color-swatch" title="Pick a color"></button>
         <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
       </div>
+      <div class="color-row" data-color-key="water">
+        <span class="color-label">Water</span>
+        <button type="button" class="color-swatch" title="Pick a color"></button>
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
       <div class="color-row" data-color-key="hudText">
         <span class="color-label">HUD text</span>
         <button type="button" class="color-swatch" title="Pick a color"></button>
@@ -894,6 +899,7 @@ const DEFAULT_SETTINGS = {
     runwayGuide: { r: 120, g: 200, b: 190 },
     weaponRange: { r: 90, g: 130, b: 150 },
     weaponRangeArmed: { r: 255, g: 120, b: 0 },
+    water: { r: 18, g: 52, b: 96 },
     hudText: { r: -1, g: -1, b: -1 }
   }
 };
@@ -995,6 +1001,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 
 function applyColorChange(key) {
 	if (key === 'hudText') applyHudTextColor();
+	if (key === 'water') paintWater();
 	saveColorsSoon();
 }
 
@@ -2048,12 +2055,57 @@ function gridRefFor(x, z) {
 // per-map calibration.
 const bgImage = new Image();
 let bgReady = false;
-let bgCanvas = null; // processed copy of bgImage, flat ocean/void recolored to black, see below
+let bgCanvas = null; // processed copy of bgImage, the land with the sea cut out, see below
+// The map texture draws open sea as one flat color (tan, orange or, on a land-locked map, a green close to the land), which
+// looks bad as a backdrop and does not look like water. The sea is found by its color, the four corners are open sea on any
+// map with land in the middle, so sampling them gives the sea color of this map. It is painted in the Water color (deep blue
+// by default, the swatch is in DISPLAY). A land pixel that only happens to have almost the same color is no sea: a pixel
+// counts as sea only if most of its 7 x 7 neighbourhood does too, so stray patches of land keep their own color.
+let bgWaterMask = null;   // 1 where the texture is sea, after the cleanup
+let waterCanvas = null;   // the sea in the Water color, drawn above the land
+const SEA_NEIGHBOURHOOD = 3;  // radius in texture pixels (a pixel is about 80 m on the standard maps)
+const SEA_SHARE = 0.6;        // how much of the neighbourhood has to look like sea
+
+function cleanSeaMask(match, w, h) {
+  const r = SEA_NEIGHBOURHOOD;
+  const sum = new Int32Array((w + 1) * (h + 1));
+  for (let y = 0; y < h; y++) {
+    let row = 0;
+    for (let x = 0; x < w; x++) {
+      row += match[y * w + x];
+      sum[(y + 1) * (w + 1) + x + 1] = sum[y * (w + 1) + x + 1] + row;
+    }
+  }
+  const mask = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    const y0 = Math.max(0, y - r), y1 = Math.min(h - 1, y + r);
+    for (let x = 0; x < w; x++) {
+      if (!match[y * w + x]) continue;
+      const x0 = Math.max(0, x - r), x1 = Math.min(w - 1, x + r);
+      const count = sum[(y1 + 1) * (w + 1) + x1 + 1] - sum[y0 * (w + 1) + x1 + 1] - sum[(y1 + 1) * (w + 1) + x0] + sum[y0 * (w + 1) + x0];
+      if (count >= SEA_SHARE * (x1 - x0 + 1) * (y1 - y0 + 1)) mask[y * w + x] = 1;
+    }
+  }
+  return mask;
+}
+
+// The sea layer in the current Water color. Called when the map loads and when the color changes.
+function paintWater() {
+  if (!bgWaterMask || !bgCanvas) return;
+  const w = bgCanvas.width, h = bgCanvas.height;
+  const c = waterCanvas || document.createElement('canvas');
+  c.width = w; c.height = h;
+  const cctx = c.getContext('2d');
+  const img = cctx.createImageData(w, h);
+  const col = settings.colors.water || DEFAULT_SETTINGS.colors.water;
+  for (let p = 0, i = 0; p < bgWaterMask.length; p++, i += 4) {
+    if (bgWaterMask[p]) { img.data[i] = col.r; img.data[i + 1] = col.g; img.data[i + 2] = col.b; img.data[i + 3] = 255; }
+  }
+  cctx.putImageData(img, 0, 0);
+  waterCanvas = c;
+}
+
 bgImage.onload = () => {
-  // On a naval or archipelago map the captured texture draws open ocean as one
-  // flat color (often tan or orange), which looks bad as a backdrop. Recolor it
-  // to black. The four corners are open ocean on any map with land in the middle,
-  // so sampling them gives the background color for this map.
   const off = document.createElement('canvas');
   off.width = bgImage.naturalWidth;
   off.height = bgImage.naturalHeight;
@@ -2077,13 +2129,18 @@ bgImage.onload = () => {
   const [or_, og, ob] = bestKey.split(',').map(Number);
 
   const TOLERANCE = 12; // slack for PNG/compression noise, not enough to eat real coastline colors
-  for (let i = 0; i < d.length; i += 4) {
-    if (Math.abs(d[i] - or_) <= TOLERANCE && Math.abs(d[i + 1] - og) <= TOLERANCE && Math.abs(d[i + 2] - ob) <= TOLERANCE) {
-      d[i] = 0; d[i + 1] = 0; d[i + 2] = 0;
-    }
+  const match = new Uint8Array(off.width * off.height);
+  for (let p = 0, i = 0; p < match.length; p++, i += 4) {
+    if (Math.abs(d[i] - or_) <= TOLERANCE && Math.abs(d[i + 1] - og) <= TOLERANCE && Math.abs(d[i + 2] - ob) <= TOLERANCE) match[p] = 1;
+  }
+  bgWaterMask = cleanSeaMask(match, off.width, off.height);
+  // the land layer: the texture with the sea cut out, the sea comes from the Water color
+  for (let p = 0, i = 3; p < bgWaterMask.length; p++, i += 4) {
+    if (bgWaterMask[p]) d[i] = 0;
   }
   octx.putImageData(imgData, 0, 0);
   bgCanvas = off;
+  paintWater();
   bgReady = true;
 };
 let mapInfo = null; // {mapSizeX, mapSizeY, mapName, offsetX, offsetY} from /mapinfo
@@ -2288,6 +2345,7 @@ function drawBackground(origin) {
   ctx.globalAlpha = 0.55;
   ctx.drawImage(bgCanvas, sx0, sy0, sx1 - sx0, sy1 - sy0);
   ctx.globalAlpha = 1;
+  if (waterCanvas) ctx.drawImage(waterCanvas, sx0, sy0, sx1 - sx0, sy1 - sy0);
 }
 
 function drawGrid(originScreenX, originScreenY) {
