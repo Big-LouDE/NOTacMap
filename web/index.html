@@ -257,7 +257,9 @@
   /* Short screens (a phone held sideways): the buttons go in a row so the panels get
      the height, and the color picker puts the numbers beside the honeycomb. */
   @media (max-height: 520px) {
-    #controls { flex-direction: row; flex-wrap: wrap; justify-content: flex-end; align-items: center; max-width: calc(var(--vw, 100vw) - 28px); }
+    #controls { flex-direction: row; flex-wrap: wrap; justify-content: flex-end; align-items: center; max-width: calc(var(--vw, 100vw) - 28px - 250px); }
+    #controls button { padding: 5px 9px; }
+    #status { max-width: 230px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #colorPicker { width: min(660px, calc(var(--vw, 100vw) - 20px)); max-height: calc(var(--vh, 100vh) - 12px); }
     .cp-body { display: flex; gap: 14px; align-items: flex-start; }
     .cp-left { flex: 0 0 auto; width: min(300px, calc((var(--vh, 100vh) - 110px) * 1.12)); }
@@ -281,7 +283,9 @@
   html.rot90 body { transform: translate(var(--pw), 0) rotate(90deg); }
   html.rot270 body { transform: translate(0, var(--ph)) rotate(-90deg); }
   /* The same as the short screen rules above, for a screen that is only short once it is turned. */
-  html.rot.eff-short #controls { flex-direction: row; flex-wrap: wrap; justify-content: flex-end; align-items: center; max-width: calc(var(--vw) - 28px); }
+  html.rot.eff-short #controls { flex-direction: row; flex-wrap: wrap; justify-content: flex-end; align-items: center; max-width: calc(var(--vw) - 28px - 250px); }
+  html.rot.eff-short #controls button { padding: 5px 9px; }
+  html.rot.eff-short #status { max-width: 230px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   html.rot.eff-short #colorPicker { width: min(660px, calc(var(--vw) - 20px)); max-height: calc(var(--vh) - 12px); }
   html.rot.eff-short .cp-body { display: flex; gap: 14px; align-items: flex-start; }
   html.rot.eff-short .cp-left { flex: 0 0 auto; width: min(300px, calc((var(--vh) - 110px) * 1.12)); }
