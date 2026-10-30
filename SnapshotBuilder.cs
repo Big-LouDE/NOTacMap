@@ -27,6 +27,7 @@ namespace NOTacMap
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isHelicopter; // the game's own pilot type of the aircraft is Helo, so a modded helicopter is no plane even if its name is not in the page's list
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool jammed; // the unit's radar is jammed right now (Radar.IsJammed), the same flag the game's own map shows as JAMMED
 		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public uint? jammedBy; // the unit that jammed it last, only sent when that unit is in this snapshot too (the game's map draws the line only then)
+		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public uint? shooterId; // an incoming missile only: the unit that fired it, sent only when that unit is in this snapshot too
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isMissile; // any missile or bomb, any faction, lets the client tell enemy ones apart for trail filtering
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isMyMissile; // a missile the local player personally launched
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isFriendlyMissile; // any friendly-faction missile, mine or a teammate's
@@ -550,6 +551,10 @@ namespace NOTacMap
 						// there's no separate in-game privacy boundary to respect here, so
 						// no opt-in/sharing system is needed, just widen the same detection.
 						snap.isFriendlyMissile = snap.faction == "friendly";
+						if (snap.isIncomingMissile && missile.owner != null)
+						{
+							snap.shooterId = missile.owner.persistentID.Id;
+						}
 						if (snap.isFriendlyMissile && missile.owner is Aircraft ownerAircraft && ownerAircraft.Player != null)
 						{
 							snap.ownerName = ownerAircraft.Player.GetDisplayName(PlayerNameContext.Other);
@@ -600,6 +605,15 @@ namespace NOTacMap
 					// (an enemy-launched missile locked onto you isn't "your"
 					// unit), add it explicitly so it doesn't go missing.
 					AddUnit(id);
+				}
+
+				// A shooter that is not in this snapshot cannot be marked.
+				foreach (UnitSnapshot incoming in snapshot.units)
+				{
+					if (incoming.shooterId.HasValue && !builtIds.Contains(incoming.shooterId.Value))
+					{
+						incoming.shooterId = null;
+					}
 				}
 
 				// A jammer that is not in this snapshot gets no line, like on the game's own map.

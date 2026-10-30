@@ -468,6 +468,7 @@
       </label>
       <label><input type="checkbox" data-group="display" data-key="showMissileEta" checked>Missile warning shows speed and ETA</label>
       <div class="note">Beyond the warning tone and the arrows, this is extra information from the map.</div>
+      <label><input type="checkbox" data-group="display" data-key="threatFocus" checked>Mark who fired a missile at you (ATTACKER)</label>
       <label><input type="checkbox" data-group="display" data-key="sharpCanvas">Sharp text and lines (uses more CPU on this device)</label>
       <label><input type="checkbox" data-group="display" data-key="darkMode">Red HUD (night vision)</label>
     </div>
@@ -953,7 +954,7 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, pulse: false, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true },
+  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true },
   overlays: { runwayGuides: true, weaponRange: true, grid: true, rangeRings: false, scaleBar: true },
   // Which preset is on ('custom' = the boxes as you set them), and the boxes as they were before a preset was switched on.
   preset: { mode: 'custom', mine: null },
@@ -3752,6 +3753,7 @@ function draw() {
   if (settings.overlays.weaponRange && latest.weaponRange && latest.weaponRange.armed && settings.display.cueCount) drawInRangeCount(ctx);
 
   drawJamming(ctx, toScreen);
+  drawAttackers(ctx, toScreen);
   drawInfoCard(ctx, toScreen);
   drawEdgePulse(ctx);
 
@@ -3803,6 +3805,29 @@ function drawEdgePulse(ctx) {
   edge(0, 0, depth, 0, 0, 0, depth, H);
   edge(W, 0, W - depth, 0, W - depth, 0, depth, H);
   ctx.restore();
+}
+
+// Threat focus: the aircraft that fired a missile that is heading at you gets a red ring and the chip ATTACKER, when it is on your map.
+// Your cockpit does not tell you who fired, so Fair play hides it.
+function drawAttackers(ctx, toScreen) {
+  if (settings.display.threatFocus === false || fairPlay()) return;
+  const units = latest.units || [];
+  const byId = new Map(units.map(u => [u.id, u]));
+  const done = new Set();
+  for (const m of units) {
+    if (!m.isIncomingMissile || !m.shooterId || done.has(m.shooterId)) continue;
+    done.add(m.shooterId);
+    const s = byId.get(m.shooterId);
+    if (!s) continue;
+    const [sx, sy] = toScreen(s.x, s.z);
+    if (sx < -100 || sx > viewWidth + 100 || sy < -100 || sy > viewHeight + 100) continue;
+    ctx.save();
+    ctx.strokeStyle = '#ff2020';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(sx, sy, 13, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+    jamChip('ATTACKER', sx + 16, sy - 14, 'left', '#ff2020');
+  }
 }
 
 // The card of the tapped or hovered unit. For a unit of your own side: name, type, distance and bearing from you, altitude, heading
@@ -3866,16 +3891,17 @@ const JAM_ME_THRESHOLD = 0.05;   // below this the cockpit effect is gone
 const JAM_ME_HOLD_MS = 1000;     // the chip stays this long after the last jam, so it does not flicker between two pulses
 let jamMeSeenAt = -1e9;
 
-function jamChip(text, x, y, align) {
+function jamChip(text, x, y, align, color) {
+  color = color || JAM_COLOR;
   setFont(11, true);
   const w = ctx.measureText(text).width + 12;
   const left = align === 'center' ? x - w / 2 : x;
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
   ctx.fillRect(left, y - 12, w, 17);
-  ctx.strokeStyle = JAM_COLOR;
+  ctx.strokeStyle = color;
   ctx.lineWidth = 1;
   ctx.strokeRect(left + 0.5, y - 11.5, w - 1, 16);
-  ctx.fillStyle = JAM_COLOR;
+  ctx.fillStyle = color;
   ctx.fillText(text, left + 6, y + 1);
 }
 
