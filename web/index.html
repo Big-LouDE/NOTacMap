@@ -482,6 +482,11 @@
       <label><input type="checkbox" data-group="display" data-key="cueCount" checked>Count of targets in range</label>
     </div>
     <div class="group">
+      <h4>Info card</h4>
+      <label><input type="checkbox" data-group="display" data-key="infoCard" checked>Info card when you tap or hover a unit</label>
+      <div class="note">Name, type, side, and distance and bearing from you. Speed, altitude and heading only for your own side.</div>
+    </div>
+    <div class="group">
       <h4>Jamming</h4>
       <label><input type="checkbox" data-group="display" data-key="jamTag" checked>JAMMED tag on a unit</label>
       <label><input type="checkbox" data-group="display" data-key="jamLine" checked>Line to the jammer</label>
@@ -794,6 +799,21 @@ canvas.addEventListener('wheel', e => {
   }
 });
 
+// Info card: the units drawn this frame (collected by draw()) are what can be picked. A tap pins a card, a mouse hover shows one.
+let infoPicks = [];
+let infoPinnedId = null;
+let infoHoverId = null;
+const INFO_PICK_PX = 16;
+function pickUnitAt(pt) {
+  if (settings.display.infoCard === false) return null;
+  let best = null, bestD = INFO_PICK_PX;
+  for (const c of infoPicks) {
+    const d = Math.hypot(c.x - pt.x, c.y - pt.y);
+    if (d <= bestD) { best = c; bestD = d; }
+  }
+  return best ? best.id : null;
+}
+
 // Free pan: null means "follow the player" (default); dragging sets an
 // explicit world-space point instead, which sticks until you hit recenter.
 let viewCenter = null;
@@ -814,7 +834,7 @@ let gesture = null;
 function startGesture() {
   const pts = [...pointers.values()];
   if (pts.length === 1) {
-    gesture = { type: 'pan', x: pts[0].x, y: pts[0].y, origin: getViewOrigin(), moved: false };
+    gesture = { type: 'pan', x: pts[0].x, y: pts[0].y, origin: getViewOrigin(), moved: false, t0: performance.now() };
   } else if (pts.length >= 2) {
     const [a, b] = pts;
     const origin = getViewOrigin();
@@ -843,7 +863,11 @@ canvas.addEventListener('pointerdown', e => {
   canvas.style.cursor = 'grabbing';
 });
 canvas.addEventListener('pointermove', e => {
-  if (!pointers.has(e.pointerId)) return;
+  if (!pointers.has(e.pointerId)) {
+    // a mouse that is only moving over the map: show the card of the unit under it
+    if (e.pointerType === 'mouse' && pointers.size === 0) infoHoverId = pickUnitAt(pagePoint(e));
+    return;
+  }
   const pt = pagePoint(e);
   pointers.set(e.pointerId, pt);
   if (!gesture) return;
@@ -879,6 +903,19 @@ function endPointer(e) {
   startGesture();
   if (pointers.size === 0) canvas.style.cursor = 'grab';
 }
+// A tap (a finger or a mouse click that did not move or follow a pinch) pins the card of the unit under it, a tap
+// anywhere else closes it. A drag and a pinch never count as a tap.
+let lastPinchAt = -1e9;
+canvas.addEventListener('pointerup', e => {
+  if (pointers.size >= 2) lastPinchAt = performance.now();
+  const now = performance.now();
+  if (gesture && gesture.type === 'pan' && !gesture.moved && pointers.size === 1 && now - gesture.t0 < 600 && now - lastPinchAt > 700) {
+    const id = pickUnitAt(pagePoint(e));
+    infoPinnedId = (id !== null && id !== infoPinnedId) ? id : null;
+  }
+});
+canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') infoHoverId = null; });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') infoPinnedId = null; });
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
 // A long press on a touch screen would open a context menu mid-gesture.
@@ -911,7 +948,7 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true },
+  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true },
   overlays: { runwayGuides: true, weaponRange: true, grid: true, rangeRings: false, scaleBar: true },
   // Which preset is on ('custom' = the boxes as you set them), and the boxes as they were before a preset was switched on.
   preset: { mode: 'custom', mine: null },
@@ -3282,6 +3319,7 @@ function draw() {
       .map(u => u.targetName)
   );
 
+  infoPicks = [];
   // Trails go under every icon, and follow the same filters the icons do,
   // so a hidden unit type or filtered-out weapon doesn't leave a line behind.
   const tf = settings.trails;
@@ -3409,6 +3447,7 @@ function draw() {
 
     const category = classifyUnit(u);
     if (!unitTypeVisible(category)) return;
+    infoPicks.push({ id: u.id, x: sx, y: sy });
     ctx.fillStyle = unitColor(u);
     drawUnitIcon(ctx, category, sx, sy, 6, u.heading);
     // Label matches its icon's faction color (not a flat dim theme color)
@@ -3708,8 +3747,61 @@ function draw() {
   if (settings.overlays.weaponRange && latest.weaponRange && latest.weaponRange.armed && settings.display.cueCount) drawInRangeCount(ctx);
 
   drawJamming(ctx, toScreen);
+  drawInfoCard(ctx, toScreen);
 
   if (settings.overlays.scaleBar) drawScaleBar(ctx);
+}
+
+// The card of the tapped or hovered unit. For a unit of your own side: name, type, distance and bearing from you, altitude, heading
+// and speed. For any other side only what the game's own tooltip shows an enemy anyway (the name and the type) plus the distance and
+// bearing from you, which your map already shows.
+function drawInfoCard(ctx, toScreen) {
+  const id = infoPinnedId !== null ? infoPinnedId : infoHoverId;
+  if (id === null || settings.display.infoCard === false) return;
+  const u = (latest.units || []).find(x => x.id === id);
+  if (!u) { if (infoPinnedId === id) infoPinnedId = null; return; }
+  const [sx, sy] = toScreen(u.x, u.z);
+  const own = u.faction === 'friendly';
+  const side = own ? 'FRIENDLY' : u.faction === 'enemy' ? 'ENEMY' : u.faction === 'neutral' ? 'NEUTRAL' : String(u.faction || '').toUpperCase();
+  const lines = [{ text: (u.name || '').trim(), bold: true }];
+  const type = (u.type || '').trim();
+  if (type && type !== (u.name || '').trim()) lines.push({ text: type });
+  lines.push({ text: side, side: true });
+  const p = latest.player;
+  if (p) {
+    const dx = u.x - p.x, dz = u.z - p.z;
+    const brg = (Math.atan2(dx, dz) * 180 / Math.PI + 360) % 360;
+    lines.push({ text: `${fmtDistance(Math.hypot(dx, dz))}  BRG ${String(Math.round(brg)).padStart(3, '0')}\u00b0` });
+  }
+  if (own && u.baseType === 'aircraft') {
+    const bits = [`ALT ${fmtAltitude(u.y)}`, `HDG ${Math.round(u.heading)}\u00b0`];
+    if (u.speedKmh) bits.unshift(`SPD ${fmtSpeed(u.speedKmh)}`);
+    lines.push({ text: bits.join('  ') });
+  }
+  ctx.save();
+  // a ring around the unit, so it is clear which one the card is about
+  ctx.strokeStyle = infoPinnedId === id ? '#ffffff' : col('--hud-dim');
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(sx, sy, 11, 0, Math.PI * 2); ctx.stroke();
+  let w = 0;
+  lines.forEach(l => { setFont(11, l.bold); w = Math.max(w, ctx.measureText(l.text).width); });
+  const lineH = Math.round(14 * settings.display.textScale);
+  const boxW = w + 14, boxH = lines.length * lineH + 8;
+  let bx = sx + 16, by = sy + 16;
+  if (bx + boxW > viewWidth - 6) bx = sx - 16 - boxW;
+  if (by + boxH > viewHeight - 6) by = sy - 16 - boxH;
+  bx = Math.max(6, bx); by = Math.max(6, by);
+  ctx.fillStyle = 'rgba(0,0,0,0.93)';
+  ctx.fillRect(bx, by, boxW, boxH);
+  ctx.strokeStyle = infoPinnedId === id ? col('--hud-green') : col('--hud-dim');
+  ctx.lineWidth = 1;
+  ctx.strokeRect(bx + 0.5, by + 0.5, boxW - 1, boxH - 1);
+  lines.forEach((l, i) => {
+    setFont(11, l.bold);
+    ctx.fillStyle = l.bold ? col('--hud-green') : l.side ? unitColor(u) : col('--hud-dim');
+    ctx.fillText(l.text, bx + 7, by + i * lineH + lineH - 1);
+  });
+  ctx.restore();
 }
 
 // Jamming, the way the game's own map shows it: a JAMMED tag on a unit whose radar is jammed, a dashed line to the unit that

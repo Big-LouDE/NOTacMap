@@ -534,7 +534,7 @@ namespace NOTacMap
 						isIncomingMissile = incomingMissileIds.Contains(id),
 						// Rounded to a tenth: at map scale a tenth of a metre is
 						// invisible, but it keeps every number short in the JSON.
-						speedKmh = unit is Missile && unit.rb != null ? Round1(unit.rb.velocity.magnitude * 3.6f) : 0f,
+						speedKmh = (unit is Missile || (faction == "friendly" && unit is Aircraft)) && unit.rb != null ? Round1(unit.rb.velocity.magnitude * 3.6f) : 0f,
 						x = Round1(pos.x),
 						y = Round1(pos.y),
 						z = Round1(pos.z),
