@@ -482,6 +482,15 @@
       <label><input type="checkbox" data-group="display" data-key="cueCount" checked>Count of targets in range</label>
     </div>
     <div class="group">
+      <h4>Jamming</h4>
+      <label><input type="checkbox" data-group="display" data-key="jamTag" checked>JAMMED tag on a unit</label>
+      <label><input type="checkbox" data-group="display" data-key="jamLine" checked>Line to the jammer</label>
+      <label><input type="checkbox" data-group="display" data-key="jamMine" checked>Your jammer is on</label>
+      <label><input type="checkbox" data-group="display" data-key="jamMe" checked>You are jammed</label>
+      <label><input type="checkbox" data-group="display" data-key="jamName" checked>Who jams you</label>
+      <div class="note">The same as the jamming on the game's own map, for the units your side can see.</div>
+    </div>
+    <div class="group">
       <h4>Page</h4>
       <label><input type="checkbox" data-group="display" data-key="closeOnGameExit" checked>Close this tab when the game closes</label>
       <label><input type="checkbox" data-group="display" data-key="sleepWhenHidden" checked>Pause the feed while this tab is hidden (saves FPS)</label>
@@ -902,7 +911,7 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true },
+  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true },
   overlays: { runwayGuides: true, weaponRange: true, grid: true, rangeRings: false, scaleBar: true },
   // Which preset is on ('custom' = the boxes as you set them), and the boxes as they were before a preset was switched on.
   preset: { mode: 'custom', mine: null },
@@ -3698,7 +3707,108 @@ function draw() {
 
   if (settings.overlays.weaponRange && latest.weaponRange && latest.weaponRange.armed && settings.display.cueCount) drawInRangeCount(ctx);
 
+  drawJamming(ctx, toScreen);
+
   if (settings.overlays.scaleBar) drawScaleBar(ctx);
+}
+
+// Jamming, the way the game's own map shows it: a JAMMED tag on a unit whose radar is jammed, a dashed line to the unit that
+// jams it, waves and a chip from your own icon when you are the jammer, a still dotted band along the screen edge and a chip
+// when you are jammed, and who jams you with bearing and distance. The plugin sends the flags (jammed, jammedBy, and for you
+// jam and jammedBy); a jammer that is not in the snapshot gets no line, as in the game.
+const JAM_COLOR = '#ffe020';
+const JAM_ME_THRESHOLD = 0.05;   // below this the cockpit effect is gone
+const JAM_ME_HOLD_MS = 1000;     // the chip stays this long after the last jam, so it does not flicker between two pulses
+let jamMeSeenAt = -1e9;
+
+function jamChip(text, x, y, align) {
+  setFont(11, true);
+  const w = ctx.measureText(text).width + 12;
+  const left = align === 'center' ? x - w / 2 : x;
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.fillRect(left, y - 12, w, 17);
+  ctx.strokeStyle = JAM_COLOR;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(left + 0.5, y - 11.5, w - 1, 16);
+  ctx.fillStyle = JAM_COLOR;
+  ctx.fillText(text, left + 6, y + 1);
+}
+
+function jamDashedLine(a, b, alpha, width) {
+  ctx.save();
+  ctx.strokeStyle = JAM_COLOR;
+  ctx.globalAlpha = alpha;
+  ctx.lineWidth = width;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+  ctx.restore();
+}
+
+function drawJamming(ctx, toScreen) {
+  const d = settings.display;
+  if (!d.jamTag && !d.jamLine && !d.jamMine && !d.jamMe) return;
+  const p = latest.player;
+  const units = latest.units || [];
+  const byId = new Map(units.map(u => [u.id, u]));
+  const posOf = id => {
+    if (p && p.id && id === p.id) return toScreen(p.x, p.z);
+    const u = byId.get(id);
+    return u ? toScreen(u.x, u.z) : null;
+  };
+  let mineCount = 0;
+  for (const u of units) {
+    if (!u.jammed || (p && u.id === p.id)) continue;
+    const vp = toScreen(u.x, u.z);
+    const mine = !!(p && p.id && u.jammedBy === p.id);
+    if (mine) mineCount++;
+    if (vp[0] < -100 || vp[0] > viewWidth + 100 || vp[1] < -100 || vp[1] > viewHeight + 100) continue;
+    if (d.jamLine && u.jammedBy) {
+      const jp = posOf(u.jammedBy);
+      if (jp) jamDashedLine(vp, jp, mine ? 0.55 : 1, mine ? 1.2 : 1.5);
+    }
+    if (d.jamTag) jamChip('JAMMED', vp[0] + 10, vp[1] - 12);
+  }
+  ctx.save();
+  if (p && d.jamMine && mineCount > 0) {
+    // waves leave your icon toward what you jam
+    const pp = toScreen(p.x, p.z);
+    for (const u of units) {
+      if (!u.jammed || u.jammedBy !== p.id) continue;
+      const tp = toScreen(u.x, u.z);
+      const ang = Math.atan2(tp[1] - pp[1], tp[0] - pp[0]);
+      ctx.strokeStyle = 'rgba(255,224,32,0.85)';
+      ctx.lineWidth = 1.5;
+      [16, 26, 36].forEach((rad, i) => {
+        ctx.globalAlpha = 0.9 - i * 0.25;
+        ctx.beginPath(); ctx.arc(pp[0], pp[1], rad, ang - 0.45, ang + 0.45); ctx.stroke();
+      });
+    }
+    ctx.globalAlpha = 1;
+    jamChip('YOUR JAMMER ON', pp[0] + 18, pp[1] - 22);
+  }
+  ctx.restore();
+  if (p && d.jamMe) {
+    const now = performance.now();
+    if (p.jam >= JAM_ME_THRESHOLD) jamMeSeenAt = now;
+    if (now - jamMeSeenAt < JAM_ME_HOLD_MS) {
+      const W = viewWidth, H = viewHeight;
+      // a still dotted band, it does not flicker
+      ctx.save();
+      ctx.fillStyle = 'rgba(255,224,32,0.55)';
+      for (let x = 0; x < W; x += 7) { ctx.fillRect(x, 0, 3, 3); ctx.fillRect(x + 3, H - 3, 3, 3); }
+      for (let y = 0; y < H; y += 7) { ctx.fillRect(0, y, 3, 3); ctx.fillRect(W - 3, y + 3, 3, 3); }
+      ctx.restore();
+      let label = 'YOU ARE JAMMED';
+      const jammer = p.jammedBy ? byId.get(p.jammedBy) : null;
+      if (d.jamLine && jammer) jamDashedLine(toScreen(p.x, p.z), toScreen(jammer.x, jammer.z), 1, 1.5);
+      if (d.jamName && jammer) {
+        const dx = jammer.x - p.x, dz = jammer.z - p.z;
+        const brg = (Math.atan2(dx, dz) * 180 / Math.PI + 360) % 360;
+        label += ` by ${jammer.name.trim()} (${Math.round(brg)}°, ${fmtDistance(Math.hypot(dx, dz))})`;
+      }
+      jamChip(label, W / 2, H - 26, 'center');
+    }
+  }
 }
 
 // SPD/ALT/HDG block under your icon. Shared between the early space

@@ -25,6 +25,8 @@ namespace NOTacMap
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isPlayer; // human-piloted aircraft, vs. an AI/structure on the same faction
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isIncomingMissile; // locked onto the local player's own aircraft right now
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isHelicopter; // the game's own pilot type of the aircraft is Helo, so a modded helicopter is no plane even if its name is not in the page's list
+		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool jammed; // the unit's radar is jammed right now (Radar.IsJammed), the same flag the game's own map shows as JAMMED
+		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public uint? jammedBy; // the unit that jammed it last, only sent when that unit is in this snapshot too (the game's map draws the line only then)
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isMissile; // any missile or bomb, any faction, lets the client tell enemy ones apart for trail filtering
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isMyMissile; // a missile the local player personally launched
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isFriendlyMissile; // any friendly-faction missile, mine or a teammate's
@@ -124,6 +126,9 @@ namespace NOTacMap
 	{
 		public string type; // same unitName used for other units' classification, so the client can tell a heli apart from a plane for its own icon too
 		public bool isHelicopter; // see UnitSnapshot.isHelicopter
+		public uint id; // your aircraft's id, so the page can tell which jammed units are jammed by you
+		public float jam; // the cockpit's own jamming strength (CombatHUD.jamAccumulation), 0 when you are not jammed
+		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public uint? jammedBy; // who jams you, same rule as UnitSnapshot.jammedBy
 		public float speedKmh; // real Rigidbody.velocity.magnitude, see FlightHud.cs's own cockpitRB.velocity.magnitude
 		public float x;
 		public float y;
@@ -150,6 +155,87 @@ namespace NOTacMap
 
 	internal static class SnapshotBuilder
 	{
+		// Jamming. The game tells every client about each jam event on a unit (Unit.onJam, with the jammer), and its own map shows
+		// a JAMMED tag and a line to the jammer for units whose radar is jammed. The last jammer is remembered per unit. The
+		// note lives on the unit itself, so nothing is left behind when the unit is destroyed.
+		private class JamNote
+		{
+			public uint jammer;
+		}
+
+		private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Unit, JamNote> jamNotes = new System.Runtime.CompilerServices.ConditionalWeakTable<Unit, JamNote>();
+		private static bool jamErrorLogged;
+
+		private static JamNote JamNoteOf(Unit unit)
+		{
+			if (jamNotes.TryGetValue(unit, out JamNote note))
+			{
+				return note;
+			}
+			note = new JamNote();
+			jamNotes.Add(unit, note);
+			JamNote remembered = note;
+			unit.onJam += args =>
+			{
+				if (args.jammingUnit != null)
+				{
+					remembered.jammer = args.jammingUnit.persistentID.Id;
+				}
+			};
+			return note;
+		}
+
+		// Fills the jamming flags of one unit. A mistake in here must not take the whole map down, so it is caught and logged once.
+		private static void FillJamming(Unit unit, UnitSnapshot snap)
+		{
+			try
+			{
+				if (unit.radar is Radar radar)
+				{
+					JamNote note = JamNoteOf(unit);
+					if (radar.IsJammed())
+					{
+						snap.jammed = true;
+						if (note.jammer != 0)
+						{
+							snap.jammedBy = note.jammer;
+						}
+					}
+				}
+			}
+			catch (System.Exception ex)
+			{
+				if (!jamErrorLogged)
+				{
+					jamErrorLogged = true;
+					Plugin.Log.LogWarning("NOTacMap: reading the jamming of a unit failed, jamming is left out for it: " + ex.Message);
+				}
+			}
+		}
+
+		private static void FillPlayerJamming(Aircraft aircraft, PlayerSnapshot player)
+		{
+			try
+			{
+				player.id = aircraft.persistentID.Id;
+				JamNote note = JamNoteOf(aircraft);
+				CombatHUD hud = SceneSingleton<CombatHUD>.i;
+				player.jam = hud != null ? (float)System.Math.Round(hud.jamAccumulation, 2) : 0f;
+				if (player.jam > 0f && note.jammer != 0)
+				{
+					player.jammedBy = note.jammer;
+				}
+			}
+			catch (System.Exception ex)
+			{
+				if (!jamErrorLogged)
+				{
+					jamErrorLogged = true;
+					Plugin.Log.LogWarning("NOTacMap: reading your jamming failed, jamming is left out: " + ex.Message);
+				}
+			}
+		}
+
 		// The game's own pilot type of an aircraft (the AI picks its helicopter flying from it, so a modded helicopter has it set
 		// right). Tiltwing and VTOL stay planes. The first time a kind of aircraft is seen its type goes in the log, so a
 		// wrong guess is easy to find.
@@ -232,6 +318,7 @@ namespace NOTacMap
 					z = pos.z,
 					heading = playerAircraft.transform.eulerAngles.y
 				};
+				FillPlayerJamming(playerAircraft, snapshot.player);
 
 				if (playerAircraft.weaponManager != null)
 				{
@@ -494,6 +581,7 @@ namespace NOTacMap
 						}
 					}
 
+					FillJamming(unit, snap);
 					snapshot.units.Add(snap);
 					builtIds.Add(id.Id);
 				}
@@ -512,6 +600,19 @@ namespace NOTacMap
 					// (an enemy-launched missile locked onto you isn't "your"
 					// unit), add it explicitly so it doesn't go missing.
 					AddUnit(id);
+				}
+
+				// A jammer that is not in this snapshot gets no line, like on the game's own map.
+				foreach (UnitSnapshot jammedUnit in snapshot.units)
+				{
+					if (jammedUnit.jammedBy.HasValue && !builtIds.Contains(jammedUnit.jammedBy.Value))
+					{
+						jammedUnit.jammedBy = null;
+					}
+				}
+				if (snapshot.player != null && snapshot.player.jammedBy.HasValue && !builtIds.Contains(snapshot.player.jammedBy.Value))
+				{
+					snapshot.player.jammedBy = null;
 				}
 
 				// Units that are gone no longer need a remembered heading.
