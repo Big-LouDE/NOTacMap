@@ -420,6 +420,11 @@
   </div>
   <div id="displayPanel" class="panel">
     <div class="group">
+      <h4>Fair play</h4>
+      <label><input type="checkbox" data-group="display" data-key="fairPlay">Fair play</label>
+      <div class="note">Hides what your cockpit does not show you: the speed and ETA in the missile warning, and enemy missiles your warning has not picked up yet. Your other switches stay as they are.</div>
+    </div>
+    <div class="group">
       <h4>Text</h4>
       <label>Text size
         <select id="textScaleSelect">
@@ -897,7 +902,7 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true },
+  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true },
   overlays: { runwayGuides: true, weaponRange: true, grid: true, rangeRings: false, scaleBar: true },
   // Which preset is on ('custom' = the boxes as you set them), and the boxes as they were before a preset was switched on.
   preset: { mode: 'custom', mine: null },
@@ -2253,6 +2258,9 @@ const MISSILE_TRAIL_SECONDS = 10;
 const TRAIL_MIN_DIST = 25;
 const MISSILE_TRAIL_MIN_DIST = 10;
 
+// Fair play (DISPLAY): hides what the cockpit does not give you. It only changes what is drawn, the other switches keep their value.
+function fairPlay() { return settings.display.fairPlay === true; }
+
 function updateTrails(snap) {
   const now = snap.t;
   const seen = new Set();
@@ -3282,6 +3290,7 @@ function draw() {
         color = u.isMyMissile ? myMissileColor() : teammateMissileColor();
       } else if (u.isMissile || u.isIncomingMissile) {
         if (!tf.enemyMissiles) return;
+        if (u.isMissile && !u.isIncomingMissile && fairPlay()) return;   // no line behind a missile that is not drawn
         color = u.isIncomingMissile ? '#ff2020' : unitColor(u);
       } else {
         if (!unitTypeVisible(classifyUnit(u))) return;
@@ -3346,7 +3355,7 @@ function draw() {
       }
       // Blinks faster once it is urgent (under 10s out), so the rate means
       // something.
-      const showEta = settings.display.showMissileEta !== false;
+      const showEta = settings.display.showMissileEta !== false && !fairPlay();
       const urgent = showEta && etaSeconds !== null && etaSeconds < 10;
       const t = (Math.sin(performance.now() / 1000 * (urgent ? 20 : 12)) + 1) / 2;
       ctx.fillStyle = t > 0.5 ? '#ff2020' : '#ffe020';
@@ -3377,6 +3386,7 @@ function draw() {
     }
 
     if (u.isMissile) {
+      if (fairPlay()) return;   // your cockpit does not show this one
       // An enemy (or neutral) missile that the cockpit warning has not picked up as incoming. It has no
       // type of its own for the unit filter, so it used to be drawn as a plane arrow. A small needle now,
       // always shown like the other missiles, and without the speed and ETA box that is for incoming ones.
