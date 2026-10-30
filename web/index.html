@@ -487,6 +487,11 @@
       <div class="note">Name, type, side, and distance and bearing from you. Speed, altitude and heading only for your own side.</div>
     </div>
     <div class="group">
+      <h4>Pulse</h4>
+      <label><input type="checkbox" data-group="display" data-key="pulse">Pulse at the screen edge</label>
+      <div class="note">One soft glow when a missile starts coming at you (red) or when the jamming on you starts (yellow). It fades by itself and never repeats.</div>
+    </div>
+    <div class="group">
       <h4>Jamming</h4>
       <label><input type="checkbox" data-group="display" data-key="jamTag" checked>JAMMED tag on a unit</label>
       <label><input type="checkbox" data-group="display" data-key="jamLine" checked>Line to the jammer</label>
@@ -948,7 +953,7 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true },
+  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, pulse: false, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true },
   overlays: { runwayGuides: true, weaponRange: true, grid: true, rangeRings: false, scaleBar: true },
   // Which preset is on ('custom' = the boxes as you set them), and the boxes as they were before a preset was switched on.
   preset: { mode: 'custom', mine: null },
@@ -3748,8 +3753,56 @@ function draw() {
 
   drawJamming(ctx, toScreen);
   drawInfoCard(ctx, toScreen);
+  drawEdgePulse(ctx);
 
   if (settings.overlays.scaleBar) drawScaleBar(ctx);
+}
+
+// Pulse (DISPLAY, off by default): one soft glow along the screen edge when a missile starts coming at you (red) or when the
+// jamming on you starts (yellow). It fades out over a second and a half, never repeats and never strobes. What was already there
+// when the page opened does not pulse, and jamming that comes back within 5 seconds counts as the same jamming.
+const PULSE_MS = 1500;
+const PULSE_RGB = { missile: [255, 32, 32], jam: [255, 224, 32] };
+let edgePulse = null;          // { kind, t0 }
+let pulseIncomingIds = null;   // incoming missiles of the last snapshot, null until the first snapshot has been seen
+let pulseJamOn = false;
+let pulseJamAt = -1e9;
+
+function updatePulse(snap) {
+  const now = performance.now();
+  const ids = new Set((snap.units || []).filter(u => u.isIncomingMissile).map(u => u.id));
+  const jamOn = !!(snap.player && snap.player.jam >= JAM_ME_THRESHOLD);
+  if (pulseIncomingIds !== null && settings.display.pulse === true) {
+    let started = false;
+    for (const id of ids) if (!pulseIncomingIds.has(id)) { started = true; break; }
+    if (started) edgePulse = { kind: 'missile', t0: now };
+    else if (jamOn && !pulseJamOn && now - pulseJamAt > 5000) edgePulse = { kind: 'jam', t0: now };
+  }
+  if (jamOn) pulseJamAt = now;
+  pulseIncomingIds = ids;
+  pulseJamOn = jamOn;
+}
+
+function drawEdgePulse(ctx) {
+  if (!edgePulse) return;
+  const t = (performance.now() - edgePulse.t0) / PULSE_MS;
+  if (t >= 1) { edgePulse = null; return; }
+  const [r, g, b] = PULSE_RGB[edgePulse.kind];
+  const a = 0.5 * (1 - t) * (1 - t);
+  const W = viewWidth, H = viewHeight, depth = 70;
+  const edge = (x0, y0, x1, y1, rx, ry, rw, rh) => {
+    const grad = ctx.createLinearGradient(x0, y0, x1, y1);
+    grad.addColorStop(0, `rgba(${r},${g},${b},${a})`);
+    grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(rx, ry, rw, rh);
+  };
+  ctx.save();
+  edge(0, 0, 0, depth, 0, 0, W, depth);
+  edge(0, H, 0, H - depth, 0, H - depth, W, depth);
+  edge(0, 0, depth, 0, 0, 0, depth, H);
+  edge(W, 0, W - depth, 0, W - depth, 0, depth, H);
+  ctx.restore();
 }
 
 // The card of the tapped or hovered unit. For a unit of your own side: name, type, distance and bearing from you, altitude, heading
@@ -3997,6 +4050,7 @@ function connect() {
     updateTrails(latest);
     updateMarked(latest);
     updateLockLoss(latest);
+    updatePulse(latest);
     // Speed comes straight from the server (Rigidbody.velocity.magnitude, the
     // same value the cockpit HUD reads), not from position deltas. A
     // background tab gets its events in bursts, which would make a delta
