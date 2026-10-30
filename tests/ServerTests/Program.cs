@@ -22,6 +22,8 @@ namespace NOTacMap
         public static string ThemeJson = null;
         public const string PluginVersion = "1.3.0";
         public const string BuildLabel = "beta1";
+        public const string TestedGameVersion = "0.34.2";
+        public static string GameVersion = "0.35.1";
     }
     internal static class MapImageCapture
     {
@@ -498,6 +500,7 @@ internal static class Program
             Newtonsoft.Json.Linq.JObject about = null;
             try { about = Newtonsoft.Json.Linq.JObject.Parse(await r.Content.ReadAsStringAsync()); } catch { }
             Check("H /about answers with the version and the label", about != null && (string)about["version"] == Plugin.PluginVersion && (string)about["label"] == Plugin.BuildLabel);
+            Check("H /about says which game version it runs on and which one it was checked with", about != null && (string)about["gameVersion"] == Plugin.GameVersion && (string)about["testedGameVersion"] == Plugin.TestedGameVersion);
 
             hs.Stop();
             if (File.Exists(settingsFile)) File.Delete(settingsFile);

@@ -635,7 +635,9 @@ namespace NOTacMap
 					string aboutJson = Newtonsoft.Json.JsonConvert.SerializeObject(new
 					{
 						version = Plugin.PluginVersion,
-						label = Plugin.BuildLabel
+						label = Plugin.BuildLabel,
+						gameVersion = Plugin.GameVersion,
+						testedGameVersion = Plugin.TestedGameVersion
 					});
 					byte[] aboutBytes = Encoding.UTF8.GetBytes(aboutJson);
 					context.Response.ContentType = "application/json";

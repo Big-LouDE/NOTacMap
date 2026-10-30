@@ -640,6 +640,7 @@
     <p>Is the game running? Does something else use port 8123? (You can change the port in the config.)</p>
     <p>Feedback and bugs: <a href="https://github.com/Big-LouDE/NOTacMap/issues" target="_blank" rel="noopener noreferrer">github.com/Big-LouDE/NOTacMap/issues</a></p>
     <p id="helpVersion" class="help-version"></p>
+    <p id="helpGameNote" class="help-version" hidden></p>
     <div class="start-actions">
       <button type="button" id="helpClose">Close</button>
     </div>
@@ -1255,14 +1256,32 @@ function closeHelp() {
   document.removeEventListener('keydown', onHelpKey);
 }
 function onHelpKey(e) { if (e.key === 'Escape') closeHelp(); }
+// Shown only when the game is not the version NOTacMap was last checked with. "newer" or "older" when both are plain numbers.
+function gameVersionNote(game, tested) {
+  if (!game || !tested || game === tested) return '';
+  const parts = v => String(v).split('.').map(n => parseInt(n, 10));
+  const a = parts(game), b = parts(tested);
+  let how = 'not the same as';
+  if (a.every(Number.isFinite) && b.every(Number.isFinite)) {
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      const x = a[i] || 0, y = b[i] || 0;
+      if (x !== y) { how = x > y ? 'newer than' : 'older than'; break; }
+    }
+  }
+  return `Your game (${game}) is ${how} the one this was last checked with (${tested}). If the map acts up, look for a newer NOTacMap.`;
+}
 // The plugin version and, for a test release, its label ("beta1"). An older plugin has no /about: no line then.
 function loadAbout() {
   fetch('/about', { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject())
     .then(about => {
       const label = about.label ? ' ' + about.label + ' (test version)' : '';
       document.getElementById('helpVersion').textContent = 'NOTacMap ' + about.version + label;
+      const note = document.getElementById('helpGameNote');
+      const text = gameVersionNote(about.gameVersion, about.testedGameVersion);
+      note.textContent = text;
+      note.hidden = !text;
     })
-    .catch(() => { document.getElementById('helpVersion').textContent = ''; });
+    .catch(() => { document.getElementById('helpVersion').textContent = ''; document.getElementById('helpGameNote').hidden = true; });
 }
 document.getElementById('helpBtn').addEventListener('click', e => {
   e.stopPropagation();

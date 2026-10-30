@@ -25,6 +25,10 @@ namespace NOTacMap
 		// Shown in the log and in Help. "dev" while building, "beta1", "beta2" for the test releases, empty for the real 1.3.0.
 		// It is not part of PluginVersion: BepInEx can only read a plain number there.
 		internal const string BuildLabel = "beta1";
+		// The Nuclear Option version this was last checked with. A game update can break what the map reads until NOTacMap follows.
+		internal const string TestedGameVersion = "0.34.2";
+		// Read once at startup (Application.version can only be used on the main thread, the web server thread reads this copy).
+		internal static string GameVersion = "";
 
 		internal static ManualLogSource Log;
 
@@ -168,6 +172,11 @@ namespace NOTacMap
 			if (BuildLabel.Length > 0)
 			{
 				Log.LogInfo($"NOTacMap {PluginVersion} {BuildLabel}: this is a test version, not a normal release.");
+			}
+			GameVersion = Application.version ?? "";
+			if (GameVersion.Length > 0 && GameVersion != TestedGameVersion)
+			{
+				Log.LogInfo($"NOTacMap was last checked with Nuclear Option {TestedGameVersion}. You have {GameVersion}. If the map acts up after a game update, look for a newer NOTacMap.");
 			}
 			if (server.LanActive)
 			{
