@@ -759,15 +759,35 @@ if (document.fullscreenEnabled) {
 const MIN_SCALE = 0.5, MAX_SCALE = 200;
 const clampScale = s => Math.min(Math.max(s, MIN_SCALE), MAX_SCALE);
 let scale = 35; // meters per pixel; wheel or pinch to zoom
+// One notch of a mouse wheel (about 100 px) zooms by 10 %. A trackpad sends many small steps and zooms smoothly, a hard
+// flick is capped so it cannot throw the scale around.
+const WHEEL_ZOOM_PER_PX = Math.log(1.1) / 100;
 canvas.addEventListener('wheel', e => {
-  scale = clampScale(scale * ((e.deltaY > 0) ? 1.1 : 0.9));
+  let d = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 800 : 1);
+  d = Math.max(-300, Math.min(300, d));
+  if (!d) return;
+  const oldScale = scale;
+  scale = clampScale(scale * Math.exp(d * WHEEL_ZOOM_PER_PX));
+  // Following you: you stay in the center. A view you have panned zooms toward the cursor, the world point under it stays put.
+  if (viewCenter !== null && scale !== oldScale) {
+    const p = pagePoint(e);
+    const worldX = viewCenter.x + (p.x - viewWidth / 2) * oldScale;
+    const worldZ = viewCenter.z - (p.y - viewHeight / 2) * oldScale;
+    viewCenter = {
+      x: worldX - (p.x - viewWidth / 2) * scale,
+      z: worldZ + (p.y - viewHeight / 2) * scale
+    };
+  }
 });
 
 // Free pan: null means "follow the player" (default); dragging sets an
 // explicit world-space point instead, which sticks until you hit recenter.
 let viewCenter = null;
+// Where you were last seen. While you have no aircraft (dead, ejected, in the spawn menu) the map stays there and does not
+// jump to the middle of the map.
+let lastPlayerPos = null;
 function getViewOrigin() {
-  return viewCenter || latest && latest.player || { x: 0, z: 0 };
+  return viewCenter || latest && latest.player || lastPlayerPos || { x: 0, z: 0 };
 }
 
 // Mouse, touch and pen all arrive as pointer events. One pointer pans, two
@@ -2191,6 +2211,7 @@ function loadMapImage() {
       gridOffsetX = Number.isFinite(info.offsetX) ? info.offsetX : 80000;
       gridOffsetY = Number.isFinite(info.offsetY) ? info.offsetY : 80000;
       if (isNewMap) {
+        lastPlayerPos = null;   // the old map's position means nothing on a new map
         bgReady = false;
         bgImage.src = '/mapimage.png?' + Date.now(); // cache-bust when the map changes
       }
@@ -3758,6 +3779,7 @@ function connect() {
   };
   source.onmessage = e => {
     latest = JSON.parse(e.data);
+    if (latest.player) lastPlayerPos = { x: latest.player.x, z: latest.player.z };
     updateCombat(latest.loadout);
     incomingMissileActive = (latest.units || []).some(u => u.isIncomingMissile);
     updateTrails(latest);
