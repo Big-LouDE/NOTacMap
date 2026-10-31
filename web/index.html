@@ -422,7 +422,7 @@
     <div class="group">
       <h4>Fair play</h4>
       <label><input type="checkbox" data-group="display" data-key="fairPlay">Fair play</label>
-      <div class="note">Hides what your cockpit does not show you: the speed and ETA in the missile warning, and enemy missiles your warning has not picked up yet. Your other switches stay as they are.</div>
+      <div class="note">Hides what your cockpit does not show you: the speed and ETA in the missile warning, enemy missiles your warning has not picked up yet, the ATTACKER mark and the RADAR DESTROYED tag. Your other switches stay as they are.</div>
     </div>
     <div class="group">
       <h4>Text</h4>
@@ -504,6 +504,7 @@
       <label><input type="checkbox" data-group="display" data-key="jamMine" checked>Your jammer is on</label>
       <label><input type="checkbox" data-group="display" data-key="jamMe" checked>You are jammed</label>
       <label><input type="checkbox" data-group="display" data-key="jamName" checked>Who jams you</label>
+      <label><input type="checkbox" data-group="display" data-key="jamRadar" checked>RADAR DESTROYED tag on a unit</label>
       <div class="note">The same as the jamming on the game's own map, for the units your side can see.</div>
     </div>
     <div class="group">
@@ -960,7 +961,7 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true },
+  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true },
   overlays: { runwayGuides: true, weaponRange: true, grid: true, rangeRings: false, scaleBar: true },
   // Which preset is on ('custom' = the boxes as you set them), and the boxes as they were before a preset was switched on.
   preset: { mode: 'custom', mine: null },
@@ -4004,7 +4005,7 @@ function jamDashedLine(a, b, alpha, width) {
 
 function drawJamming(ctx, toScreen) {
   const d = settings.display;
-  if (!d.jamTag && !d.jamLine && !d.jamMine && !d.jamMe) return;
+  if (!d.jamTag && !d.jamLine && !d.jamMine && !d.jamMe && !d.jamRadar) return;
   const p = latest.player;
   const units = latest.units || [];
   const byId = new Map(units.map(u => [u.id, u]));
@@ -4013,6 +4014,15 @@ function drawJamming(ctx, toScreen) {
     const u = byId.get(id);
     return u ? toScreen(u.x, u.z) : null;
   };
+  // A unit whose radar is destroyed (the radar part, not the unit). Your cockpit and the game's map do not tell you this, so Fair play hides it.
+  if (d.jamRadar !== false && !fairPlay()) {
+    for (const u of units) {
+      if (!u.radarDestroyed || (p && u.id === p.id)) continue;
+      const rp = toScreen(u.x, u.z);
+      if (rp[0] < -100 || rp[0] > viewWidth + 100 || rp[1] < -100 || rp[1] > viewHeight + 100) continue;
+      jamChip('RADAR DESTROYED', rp[0] + 10, rp[1] - 12, 'left', '#ff9020');
+    }
+  }
   let mineCount = 0;
   for (const u of units) {
     if (!u.jammed || (p && u.id === p.id)) continue;

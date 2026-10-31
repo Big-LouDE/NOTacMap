@@ -25,6 +25,7 @@ namespace NOTacMap
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isPlayer; // human-piloted aircraft, vs. an AI/structure on the same faction
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isIncomingMissile; // locked onto the local player's own aircraft right now
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isHelicopter; // the game's own pilot type of the aircraft is Helo, so a modded helicopter is no plane even if its name is not in the page's list
+		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool radarDestroyed; // the unit had a radar and it is destroyed (the radar part is gone, the unit itself is not)
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool jammed; // the unit's radar is jammed right now (Radar.IsJammed), the same flag the game's own map shows as JAMMED
 		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public float? jamAge; // jammed units only: seconds since the last jam event (a radar stays jammed for a few seconds after the jamming stops)
 		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public uint? jammedBy; // the unit that jammed it last, only sent when that unit is in this snapshot too (the game's map draws the line only then)
@@ -194,8 +195,15 @@ namespace NOTacMap
 		{
 			try
 			{
-				// A destroyed radar (Unity null) is left out: it can no longer wear the jamming off, so it would stay jammed for good.
-				// The game's own JammedMarker drops its tag in the same case.
+				// A destroyed radar is a Unity "fake null": the reference is still there but the object is gone. It is reported as destroyed, and
+				// it is left out of the jamming: it can no longer wear the jamming off, so it would stay jammed for good (the game's own
+				// JammedMarker drops its tag in the same case).
+				TargetDetector detector = unit.radar;
+				if ((object)detector != null && detector == null)
+				{
+					snap.radarDestroyed = true;
+					return;
+				}
 				if (unit.radar is Radar radar && radar != null)
 				{
 					JamNote note = JamNoteOf(unit);
