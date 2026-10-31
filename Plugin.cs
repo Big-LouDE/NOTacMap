@@ -24,9 +24,9 @@ namespace NOTacMap
 		public const string PluginVersion = "1.3.0";
 		// Shown in the log and in Help. "dev" while building, "beta1", "beta2" for the test releases, empty for the real 1.3.0.
 		// It is not part of PluginVersion: BepInEx can only read a plain number there.
-		internal const string BuildLabel = "beta1";
+		internal const string BuildLabel = "beta2";
 		// The Nuclear Option version this was last checked with. A game update can break what the map reads until NOTacMap follows.
-		internal const string TestedGameVersion = "0.34.2";
+		internal const string TestedGameVersion = "0.34.6";
 		// Read once at startup (Application.version can only be used on the main thread, the web server thread reads this copy).
 		internal static string GameVersion = "";
 
