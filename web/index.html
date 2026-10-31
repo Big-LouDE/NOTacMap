@@ -483,6 +483,16 @@
       <label><input type="checkbox" data-group="display" data-key="cueCount" checked>Count of targets in range</label>
     </div>
     <div class="group">
+      <h4>Map</h4>
+      <label>Map up
+        <select id="mapUpSelect">
+          <option value="north" selected>North</option>
+          <option value="heading">Your heading</option>
+        </select>
+      </label>
+      <div class="note">North keeps the map the way it is. Your heading turns the map so that you always fly up the screen. A small compass shows where north is.</div>
+    </div>
+    <div class="group">
       <h4>Last position</h4>
       <label><input type="checkbox" data-group="display" data-key="lastPosition" checked>Mark where you lost your aircraft</label>
       <div class="note">Your aircraft stays on the map as LAST POSITION until you have a new one, and for 10 seconds after.</div>
@@ -803,12 +813,10 @@ canvas.addEventListener('wheel', e => {
   // Following you: you stay in the center. A view you have panned zooms toward the cursor, the world point under it stays put.
   if (viewCenter !== null && scale !== oldScale) {
     const p = pagePoint(e);
-    const worldX = viewCenter.x + (p.x - viewWidth / 2) * oldScale;
-    const worldZ = viewCenter.z - (p.y - viewHeight / 2) * oldScale;
-    viewCenter = {
-      x: worldX - (p.x - viewWidth / 2) * scale,
-      z: worldZ + (p.y - viewHeight / 2) * scale
-    };
+    const [ax, az] = screenOffsetToWorld(p.x - viewWidth / 2, p.y - viewHeight / 2, oldScale);
+    const worldX = viewCenter.x + ax, worldZ = viewCenter.z + az;
+    const [bx, bz] = screenOffsetToWorld(p.x - viewWidth / 2, p.y - viewHeight / 2, scale);
+    viewCenter = { x: worldX - bx, z: worldZ - bz };
   }
 });
 
@@ -825,6 +833,64 @@ function pickUnitAt(pt) {
     if (d <= bestD) { best = c; bestD = d; }
   }
   return best ? best.id : null;
+}
+
+// Track-up (DISPLAY > Map up): the map turns around the point at the center of the screen so that your heading points up. viewHeadingDeg
+// is 0 for north up. Positions go through toScreen (which turns them), and every symbol that has a heading turns by its heading minus
+// viewHeadingDeg, so an aircraft flying the same way as you always points up. Text is never turned.
+let viewHeadingDeg = 0;
+let viewHeadingAt = 0;
+function relHeading(h) { return (h || 0) - viewHeadingDeg; }
+// A vector turned counter-clockwise by deg (x east, z north).
+function rotVec(dx, dz, deg) {
+  if (!deg) return [dx, dz];
+  const r = deg * Math.PI / 180, c = Math.cos(r), s = Math.sin(r);
+  return [dx * c - dz * s, dx * s + dz * c];
+}
+// The world offset that a screen offset from the center stands for (what the pointer points at), and the other way round.
+function screenOffsetToWorld(px, py, sc) { return rotVec(px * sc, -py * sc, -viewHeadingDeg); }
+function worldToScreenOffset(dx, dz) { const [x, z] = rotVec(dx, dz, viewHeadingDeg); return [x / scale, -z / scale]; }
+
+// Called once per frame before anything is drawn. The turn follows your heading smoothly, and switching back to north up is immediate.
+function updateViewHeading() {
+  const now = performance.now();
+  const want = settings.display.mapUp === 'heading' && lastPlayerHeading !== null;
+  if (!want) { viewHeadingDeg = 0; viewHeadingAt = now; return; }
+  if (viewHeadingDeg === 0 && viewHeadingAt === 0) viewHeadingDeg = lastPlayerHeading;
+  const dt = Math.min(500, now - viewHeadingAt);
+  let diff = ((lastPlayerHeading - viewHeadingDeg + 540) % 360) - 180;
+  viewHeadingDeg = (viewHeadingDeg + diff * (1 - Math.exp(-dt / 140)) + 360) % 360;
+  if (Math.abs(diff) < 0.05) viewHeadingDeg = lastPlayerHeading;
+  viewHeadingAt = now;
+}
+let lastPlayerHeading = null;   // the heading of your aircraft, kept while you have none (the map then stays turned the way it was)
+
+// A small compass at the bottom left while the map is turned: the arrow points to north, the N stays upright.
+function drawCompass(ctx) {
+  if (!viewHeadingDeg) return;
+  const cx = 38, cy = viewHeight - 84, r = 17;
+  const rad = viewHeadingDeg * Math.PI / 180;
+  const nx = -Math.sin(rad), ny = -Math.cos(rad);   // where north points on the screen
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = col('--hud-dim');
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = '#ff4040';
+  ctx.fillStyle = '#ff4040';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(cx - nx * 4, cy - ny * 4); ctx.lineTo(cx + nx * (r - 4), cy + ny * (r - 4)); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx + nx * r, cy + ny * r);
+  ctx.lineTo(cx + nx * (r - 7) - ny * 4, cy + ny * (r - 7) + nx * 4);
+  ctx.lineTo(cx + nx * (r - 7) + ny * 4, cy + ny * (r - 7) - nx * 4);
+  ctx.closePath(); ctx.fill();
+  setFont(10, true);
+  ctx.fillStyle = col('--hud-green');
+  const tx = cx + nx * (r + 9) - 3, ty = cy + ny * (r + 9) + 4;
+  ctx.fillText('N', tx, ty);
+  ctx.restore();
 }
 
 // Free pan: null means "follow the player" (default); dragging sets an
@@ -861,8 +927,8 @@ function startGesture() {
       scale,
       // The world point under the midpoint when the pinch starts. It stays
       // under the midpoint while zooming (the inverse of toScreen).
-      worldX: origin.x + (midX - viewWidth / 2) * scale,
-      worldZ: origin.z - (midY - viewHeight / 2) * scale
+      worldX: origin.x + screenOffsetToWorld(midX - viewWidth / 2, midY - viewHeight / 2, scale)[0],
+      worldZ: origin.z + screenOffsetToWorld(midX - viewWidth / 2, midY - viewHeight / 2, scale)[1]
     };
   } else {
     gesture = null;
@@ -894,20 +960,16 @@ canvas.addEventListener('pointermove', e => {
     // Derived from toScreen's formula so a drag of (dx,dy) screen pixels
     // moves the map exactly (dx,dy) pixels under the pointer, not some
     // scale-dependent fraction of that.
-    viewCenter = {
-      x: gesture.origin.x - dx * scale,
-      z: gesture.origin.z + dy * scale
-    };
+    const [wx, wz] = screenOffsetToWorld(dx, dy, scale);
+    viewCenter = { x: gesture.origin.x - wx, z: gesture.origin.z - wz };
   } else if (gesture.type === 'pinch' && pointers.size >= 2) {
     const [a, b] = [...pointers.values()];
     const dist = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
     scale = clampScale(gesture.scale * gesture.dist / dist);
     if (!gesture.following) {
       const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
-      viewCenter = {
-        x: gesture.worldX - (midX - viewWidth / 2) * scale,
-        z: gesture.worldZ + (midY - viewHeight / 2) * scale
-      };
+      const [mx, mz] = screenOffsetToWorld(midX - viewWidth / 2, midY - viewHeight / 2, scale);
+      viewCenter = { x: gesture.worldX - mx, z: gesture.worldZ - mz };
     }
   }
 });
@@ -961,7 +1023,7 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true },
+  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true, mapUp: 'north' },
   overlays: { runwayGuides: true, weaponRange: true, grid: true, rangeRings: false, scaleBar: true },
   // Which preset is on ('custom' = the boxes as you set them), and the boxes as they were before a preset was switched on.
   preset: { mode: 'custom', mine: null },
@@ -1043,6 +1105,8 @@ function syncDisplayControls() {
   if (startSel) startSel.value = settings.display.startMode;
   const unitsSel = document.getElementById('unitsSelect');
   if (unitsSel) unitsSel.value = String(settings.display.units);
+  const mapUpSel = document.getElementById('mapUpSelect');
+  if (mapUpSel) mapUpSel.value = settings.display.mapUp === 'heading' ? 'heading' : 'north';
   updateRingOptions();
   applyTextScale();
 }
@@ -1831,6 +1895,11 @@ document.getElementById('ringSelect').addEventListener('change', e => {
   saveSettings();
 });
 
+document.getElementById('mapUpSelect').addEventListener('change', e => {
+  settings.display.mapUp = e.target.value === 'heading' ? 'heading' : 'north';
+  viewHeadingDeg = 0; viewHeadingAt = 0;
+  saveSettings();
+});
 document.getElementById('unitsSelect').addEventListener('change', e => {
   settings.display.units = e.target.value;
   updateRingOptions();
@@ -2480,36 +2549,49 @@ function drawBackground(origin) {
   if (!mapInfo || !bgReady || !bgCanvas) return;
   const cx = viewWidth / 2, cy = viewHeight / 2;
   function toScreen(x, z) {
-    return [cx + (x - origin.x) / scale, cy - (z - origin.z) / scale];
+    const [rx, rz] = rotVec(x - origin.x, z - origin.z, viewHeadingDeg);
+    return [cx + rx / scale, cy - rz / scale];
   }
   const topLeft = pixelToWorld(0, 0);
   const bottomRight = pixelToWorld(bgImage.naturalWidth, bgImage.naturalHeight);
-  const [sx0, sy0] = toScreen(topLeft.x, topLeft.z);
-  const [sx1, sy1] = toScreen(bottomRight.x, bottomRight.z);
+  // The image is placed as for north up and the whole canvas is turned around the center of the screen when the map is turned.
+  const sx0 = cx + (topLeft.x - origin.x) / scale, sy0 = cy - (topLeft.z - origin.z) / scale;
+  const sx1 = cx + (bottomRight.x - origin.x) / scale, sy1 = cy - (bottomRight.z - origin.z) / scale;
+  ctx.save();
+  if (viewHeadingDeg) { ctx.translate(cx, cy); ctx.rotate(-viewHeadingDeg * Math.PI / 180); ctx.translate(-cx, -cy); }
   ctx.globalAlpha = 0.55;
   ctx.drawImage(bgCanvas, sx0, sy0, sx1 - sx0, sy1 - sy0);
   ctx.globalAlpha = 1;
   if (waterCanvas) ctx.drawImage(waterCanvas, sx0, sy0, sx1 - sx0, sy1 - sy0);
+  ctx.restore();
 }
 
 function drawGrid(originScreenX, originScreenY) {
   const majorPx = CELL / scale;
   if (majorPx < 3) return;
 
-  const startCol = Math.floor(-originScreenX / majorPx);
-  const endCol = Math.ceil((viewWidth - originScreenX) / majorPx);
-  const startRow = Math.floor(-originScreenY / majorPx);
-  const endRow = Math.ceil((viewHeight - originScreenY) / majorPx);
+  // Turned map: the grid is drawn in the north up frame and the canvas is turned around the center, so it has to cover the
+  // whole circle around the center instead of the screen.
+  const turned = !!viewHeadingDeg;
+  const cxs = viewWidth / 2, cys = viewHeight / 2, reach = Math.hypot(viewWidth, viewHeight) / 2;
+  const left = turned ? cxs - reach : 0, right = turned ? cxs + reach : viewWidth;
+  const top = turned ? cys - reach : 0, bottom = turned ? cys + reach : viewHeight;
+  if (turned) { ctx.save(); ctx.translate(cxs, cys); ctx.rotate(-viewHeadingDeg * Math.PI / 180); ctx.translate(-cxs, -cys); }
+
+  const startCol = Math.floor((left - originScreenX) / majorPx);
+  const endCol = Math.ceil((right - originScreenX) / majorPx);
+  const startRow = Math.floor((top - originScreenY) / majorPx);
+  const endRow = Math.ceil((bottom - originScreenY) / majorPx);
 
   ctx.strokeStyle = col('--grid-major');
   ctx.lineWidth = 1;
   for (let i = startCol; i <= endCol; i++) {
     const x = originScreenX + i * majorPx;
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, viewHeight); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
   }
   for (let j = startRow; j <= endRow; j++) {
     const y = originScreenY + j * majorPx;
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(viewWidth, y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
   }
 
   const minorPx = majorPx / 10;
@@ -2517,14 +2599,15 @@ function drawGrid(originScreenX, originScreenY) {
     ctx.strokeStyle = col('--grid-minor');
     for (let i = startCol * 10; i <= endCol * 10; i++) {
       const x = originScreenX + i * minorPx;
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, viewHeight); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
     }
     for (let j = startRow * 10; j <= endRow * 10; j++) {
       const y = originScreenY + j * minorPx;
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(viewWidth, y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
     }
   }
 
+  if (turned) { ctx.restore(); return; }   // the numbers and letters sit on the screen edges, they have no place on a turned map
   ctx.fillStyle = col('--hud-dim');
   setFont(11);
   for (let i = startCol; i <= endCol; i++) {
@@ -2542,7 +2625,7 @@ function drawGrid(originScreenX, originScreenY) {
 function drawChevron(ctx, x, y, r, headingDeg) {
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate(headingDeg * Math.PI / 180);
+  ctx.rotate(relHeading(headingDeg) * Math.PI / 180);
   ctx.beginPath();
   ctx.moveTo(0, -r);
   ctx.lineTo(r * 0.7, r * 0.6);
@@ -2672,7 +2755,7 @@ function drawSteerArrows(ctx, x, y, headingDeg, wr) {
   const first = rangeInfo[0];
   if (!first || first.dist > wr.maxRange || Math.abs(first.off) <= (wr.minAlignment || 0)) return;
   const side = first.off > 0 ? 1 : -1;
-  const theta = ((headingDeg || 0) + side * (wr.minAlignment || 0)) * Math.PI / 180;
+  const theta = (relHeading(headingDeg) + side * (wr.minAlignment || 0)) * Math.PI / 180;
   const ux = Math.sin(theta), uy = -Math.cos(theta); // along the cone edge
   const tx = Math.cos(theta) * side, ty = Math.sin(theta) * side; // the way to turn
   const r = wr.maxRange / scale;
@@ -2830,7 +2913,7 @@ function drawScaleBar(ctx) {
 function drawWeaponRangeRing(ctx, x, y, headingDeg, wr) {
   const radiusPx = wr.maxRange / scale;
   if (!(radiusPx > 2)) return;
-  const headingRad = (headingDeg || 0) * Math.PI / 180;
+  const headingRad = relHeading(headingDeg) * Math.PI / 180;
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(headingRad);
@@ -2918,7 +3001,7 @@ function drawWeaponRangeRing(ctx, x, y, headingDeg, wr) {
 function drawMissileShape(ctx, x, y, r, headingDeg) {
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate((headingDeg || 0) * Math.PI / 180);
+  ctx.rotate(relHeading(headingDeg) * Math.PI / 180);
   ctx.beginPath();
   ctx.moveTo(0, -r * 1.8);
   ctx.lineTo(r * 0.28, 0);
@@ -2937,7 +3020,7 @@ function drawMissileShape(ctx, x, y, r, headingDeg) {
 function drawHeadingTick(ctx, x, y, r, headingDeg) {
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate((headingDeg || 0) * Math.PI / 180);
+  ctx.rotate(relHeading(headingDeg) * Math.PI / 180);
   ctx.beginPath();
   ctx.moveTo(0, 0);
   ctx.lineTo(0, -r);
@@ -2955,7 +3038,7 @@ function drawUnitIcon(ctx, category, x, y, r, headingDeg) {
   const rotates = category === 'plane' || category === 'generic';
   ctx.save();
   ctx.translate(x, y);
-  if (rotates) ctx.rotate((headingDeg || 0) * Math.PI / 180);
+  if (rotates) ctx.rotate(relHeading(headingDeg) * Math.PI / 180);
   switch (category) {
     case 'tank':
       drawSquare(ctx, 0, 0, r);
@@ -3005,7 +3088,7 @@ function drawUnitIcon(ctx, category, x, y, r, headingDeg) {
       drawXMark(ctx, 0, 0, r * 0.6);
       break;
     default: // 'plane' and true catch-all 'generic'
-      drawChevron(ctx, 0, 0, r, 0);
+      drawChevron(ctx, 0, 0, r, viewHeadingDeg);   // the context is already turned, so no turn of its own
       ctx.fill();
       break;
   }
@@ -3233,12 +3316,14 @@ function draw() {
   updateInRange();
   if (ringOptionsFor !== unitsInUse()) updateRingOptions();
 
+  updateViewHeading();
   const cx = viewWidth / 2;
   const cy = viewHeight / 2;
   const origin = getViewOrigin(); // wherever the view is centered, you, or a manual pan
 
   function toScreen(x, z) {
-    return [cx + (x - origin.x) / scale, cy - (z - origin.z) / scale];
+    const [rx, rz] = rotVec(x - origin.x, z - origin.z, viewHeadingDeg);
+    return [cx + rx / scale, cy - rz / scale];
   }
 
   // Claim the stat block's space first, so every label drawn afterwards
@@ -3783,6 +3868,7 @@ function draw() {
   drawLastPosition(ctx, toScreen);
   drawInfoCard(ctx, toScreen);
   drawEdgePulse(ctx);
+  drawCompass(ctx);
 
   if (settings.overlays.scaleBar) drawScaleBar(ctx);
 }
@@ -4167,7 +4253,7 @@ function connect() {
   };
   source.onmessage = e => {
     latest = JSON.parse(e.data);
-    if (latest.player) lastPlayerPos = { x: latest.player.x, z: latest.player.z };
+    if (latest.player) { lastPlayerPos = { x: latest.player.x, z: latest.player.z }; lastPlayerHeading = latest.player.heading; }
     updateCombat(latest.loadout);
     incomingMissileActive = (latest.units || []).some(u => u.isIncomingMissile);
     updateTrails(latest);
