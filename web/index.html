@@ -483,6 +483,11 @@
       <label><input type="checkbox" data-group="display" data-key="cueCount" checked>Count of targets in range</label>
     </div>
     <div class="group">
+      <h4>Last position</h4>
+      <label><input type="checkbox" data-group="display" data-key="lastPosition" checked>Mark where you lost your aircraft</label>
+      <div class="note">Your aircraft stays on the map as LAST POSITION until you have a new one, and for 10 seconds after.</div>
+    </div>
+    <div class="group">
       <h4>Info card</h4>
       <label><input type="checkbox" data-group="display" data-key="infoCard" checked>Info card when you tap or hover a unit</label>
       <div class="note">Name, type, side, and distance and bearing from you. Speed, altitude and heading only for your own side.</div>
@@ -955,7 +960,7 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true },
+  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true },
   overlays: { runwayGuides: true, weaponRange: true, grid: true, rangeRings: false, scaleBar: true },
   // Which preset is on ('custom' = the boxes as you set them), and the boxes as they were before a preset was switched on.
   preset: { mode: 'custom', mine: null },
@@ -2288,6 +2293,7 @@ function loadMapImage() {
       gridOffsetY = Number.isFinite(info.offsetY) ? info.offsetY : 80000;
       if (isNewMap) {
         lastPlayerPos = null;   // the old map's position means nothing on a new map
+        lastPosMark = null; lastPosHadPlayer = false; lastPosPlayer = null;
         bgReady = false;
         bgImage.src = '/mapimage.png?' + Date.now(); // cache-bust when the map changes
       }
@@ -3773,6 +3779,7 @@ function draw() {
 
   drawJamming(ctx, toScreen);
   drawAttackers(ctx, toScreen);
+  drawLastPosition(ctx, toScreen);
   drawInfoCard(ctx, toScreen);
   drawEdgePulse(ctx);
 
@@ -3847,6 +3854,66 @@ function drawAttackers(ctx, toScreen) {
     ctx.restore();
     jamChip('ATTACKER', sx + 16, sy - 14, 'left', '#ff2020');
   }
+}
+
+// Last position: where you were when you lost your aircraft (died, ejected, left it). Your aircraft symbol stays there, bright at first
+// and dimming slowly while you wait, with the chip LAST POSITION. When you have an aircraft again it stays 10 more seconds and fades out,
+// so you can see how far from the place you spawned. A gap of under 1.5 seconds is no loss (a short blip in the data), and a new map
+// starts clean.
+const LASTPOS_DIM_MS = 60000;    // bright to dim while you wait
+const LASTPOS_DIM_FLOOR = 0.3;   // how dim it gets at most while you wait
+const LASTPOS_KEEP_MS = 10000;   // how long it stays after you have an aircraft again
+const LASTPOS_BLIP_MS = 1500;
+let lastPosMark = null;          // { x, z, heading, heli, t0, backAt }
+let lastPosHadPlayer = false;
+let lastPosPlayer = null;        // the player block of the last snapshot that had one
+
+function updateLastPosition(snap) {
+  const now = performance.now();
+  if (snap.player) {
+    lastPosPlayer = { x: snap.player.x, z: snap.player.z, heading: snap.player.heading, heli: classifyUnit({ type: snap.player.type, baseType: 'aircraft', isHelicopter: snap.player.isHelicopter }) === 'helicopter' };
+    if (lastPosMark && lastPosMark.backAt === null) {
+      if (now - lastPosMark.t0 < LASTPOS_BLIP_MS) lastPosMark = null;
+      else lastPosMark.backAt = now;
+    }
+    lastPosHadPlayer = true;
+  } else {
+    if (lastPosHadPlayer && lastPosPlayer && !lastPosMark) lastPosMark = { ...lastPosPlayer, t0: now, backAt: null };
+    lastPosHadPlayer = false;
+  }
+}
+
+function lastPosAlpha() {
+  if (!lastPosMark) return 0;
+  const now = performance.now();
+  const waitEnd = lastPosMark.backAt !== null ? lastPosMark.backAt : now;
+  const dim = Math.min(1, (waitEnd - lastPosMark.t0) / LASTPOS_DIM_MS);
+  const a = 1 - dim * (1 - LASTPOS_DIM_FLOOR);
+  if (lastPosMark.backAt === null) return a;
+  const gone = (now - lastPosMark.backAt) / LASTPOS_KEEP_MS;
+  return gone >= 1 ? 0 : a * (1 - gone);
+}
+
+function drawLastPosition(ctx, toScreen) {
+  if (settings.display.lastPosition === false || !lastPosMark) return;
+  const a = lastPosAlpha();
+  if (a <= 0) { if (lastPosMark.backAt !== null) lastPosMark = null; return; }
+  const [sx, sy] = toScreen(lastPosMark.x, lastPosMark.z);
+  if (sx < -100 || sx > viewWidth + 100 || sy < -100 || sy > viewHeight + 100) return;
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#ffffff';
+  if (lastPosMark.heli) {
+    drawUnitIcon(ctx, 'helicopter', sx, sy, 8, 0);
+    ctx.lineWidth = 2;
+    drawHeadingTick(ctx, sx, sy, 13, lastPosMark.heading);
+  } else {
+    drawChevron(ctx, sx, sy, 8, lastPosMark.heading);
+    ctx.fill();
+  }
+  jamChip('LAST POSITION', sx + 14, sy - 12, 'left', '#ffffff');
+  ctx.restore();
 }
 
 // The card of the tapped or hovered unit. For a unit of your own side: name, type, distance and bearing from you, altitude, heading
@@ -4096,6 +4163,7 @@ function connect() {
     updateMarked(latest);
     updateLockLoss(latest);
     updatePulse(latest);
+    updateLastPosition(latest);
     // Speed comes straight from the server (Rigidbody.velocity.magnitude, the
     // same value the cockpit HUD reads), not from position deltas. A
     // background tab gets its events in bursts, which would make a delta
