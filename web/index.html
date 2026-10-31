@@ -3852,7 +3852,7 @@ function drawAttackers(ctx, toScreen) {
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(sx, sy, 13, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
-    jamChip('ATTACKER', sx + 16, sy - 14, 'left', '#ff2020');
+    jamChip('ATTACKER', sx + 16, sy - 32, 'left', '#ff2020');
   }
 }
 
@@ -3973,6 +3973,7 @@ function drawInfoCard(ctx, toScreen) {
 // when you are jammed, and who jams you with bearing and distance. The plugin sends the flags (jammed, jammedBy, and for you
 // jam and jammedBy); a jammer that is not in the snapshot gets no line, as in the game.
 const JAM_COLOR = '#ffe020';
+const JAM_MINE_MAX_AGE = 1.0;   // your jammer counts as on while its last jam event is younger than this (seconds); a radar stays jammed longer
 const JAM_ME_THRESHOLD = 0.05;   // below this the cockpit effect is gone
 const JAM_ME_HOLD_MS = 1000;     // the chip stays this long after the last jam, so it does not flicker between two pulses
 let jamMeSeenAt = -1e9;
@@ -4016,7 +4017,7 @@ function drawJamming(ctx, toScreen) {
   for (const u of units) {
     if (!u.jammed || (p && u.id === p.id)) continue;
     const vp = toScreen(u.x, u.z);
-    const mine = !!(p && p.id && u.jammedBy === p.id);
+    const mine = !!(p && p.id && u.jammedBy === p.id && !(u.jamAge > JAM_MINE_MAX_AGE));
     if (mine) mineCount++;
     if (vp[0] < -100 || vp[0] > viewWidth + 100 || vp[1] < -100 || vp[1] > viewHeight + 100) continue;
     if (d.jamLine && u.jammedBy) {
@@ -4030,7 +4031,7 @@ function drawJamming(ctx, toScreen) {
     // waves leave your icon toward what you jam
     const pp = toScreen(p.x, p.z);
     for (const u of units) {
-      if (!u.jammed || u.jammedBy !== p.id) continue;
+      if (!u.jammed || u.jammedBy !== p.id || u.jamAge > JAM_MINE_MAX_AGE) continue;
       const tp = toScreen(u.x, u.z);
       const ang = Math.atan2(tp[1] - pp[1], tp[0] - pp[0]);
       ctx.strokeStyle = 'rgba(255,224,32,0.85)';
