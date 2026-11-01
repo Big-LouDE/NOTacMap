@@ -43,10 +43,25 @@ namespace NOTacMap
 			}
 		}
 
+		// A frame that is already slow (a big explosion scene, a loading hitch) gets no extra GPU work from here: the icons wait, with one
+		// let through every two seconds so a machine that always runs slow still gets them in the end.
+		private const float SlowFrame = 0.04f;
+		private static float lastSlowCapture;
+
 		// Main thread, once per map update: cuts out a few of the waiting icons.
 		internal static void Process()
 		{
-			for (int n = 0; n < MaxPerCall; n++)
+			int allowed = MaxPerCall;
+			if (Time.unscaledDeltaTime > SlowFrame)
+			{
+				if (Time.realtimeSinceStartup - lastSlowCapture < 2f)
+				{
+					return;
+				}
+				lastSlowCapture = Time.realtimeSinceStartup;
+				allowed = 1;
+			}
+			for (int n = 0; n < allowed; n++)
 			{
 				UnitDefinition definition;
 				lock (icons)
