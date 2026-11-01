@@ -1,6 +1,6 @@
 # NOTacMap features
 
-This is the long version of the feature list. The README has the short one. It describes version 1.2.3.
+This is the long version of the feature list. The README has the short one. It describes version 1.3.0.
 
 NOTacMap puts a live map of your game on a second monitor, a phone or a tablet. A plugin inside Nuclear Option reads what your own side already knows, and a small web server inside the game hands it to a page in your browser. You don't set anything up per map.
 
@@ -13,6 +13,8 @@ Everything on the map comes from your faction's tracking data, the same source t
 The mod never asks the game server for anything and never sends commands over the network. It also can't see your teammates' marked targets, because the game keeps your target selection on your own machine.
 
 The incoming-missile warning on the map (the blinking needle and its box) only appears after your cockpit warning has picked the missile up. The map can't know about a launch earlier than your RWR does.
+
+Some things on the map go further than your cockpit does, like the speed and ETA of an incoming missile or who fired it. If you want only what the cockpit shows, switch on Fair play at the top of DISPLAY. It hides the speed and ETA in the missile warning, enemy missiles your warning hasn't picked up yet, the ATTACKER mark, the RADAR DESTROYED tag and the rings of enemy nuclear missiles on their way. Everything else you switched on stays as it is.
 
 ---
 
@@ -30,13 +32,15 @@ Double-click the map for fullscreen. F11 and Esc work as usual. There's also a f
 
 ## Looking around the map
 
-North is always up. Drag to pan, scroll the mouse wheel to zoom. On a touch screen one finger pans and two fingers pinch to zoom, around the point between your fingers. If you lift one finger of a pinch, you carry on panning with the other. Zoom goes from 0.5 to 200 meters per pixel and starts at 35.
+North is up by default. Under DISPLAY, Map up can be set to Your heading, and the map then turns so that you always fly up the screen. A small compass shows where north is, and the button under RECENTER ON ME switches between the two. Drag to pan, scroll the mouse wheel to zoom. The wheel zooms in smooth steps, about 10 percent for a normal notch. While the view follows you, you stay in the center. Once you have panned, the zoom goes toward the cursor and the point under it stays put. On a touch screen one finger pans and two fingers pinch to zoom, around the point between your fingers, and while the map follows you the pinch keeps you in the center. If you lift one finger of a pinch, you carry on panning with the other. Zoom goes from 0.5 to 200 meters per pixel and starts at 35.
 
 The view follows your aircraft until you drag it. After that it stays where you put it, and the "recenter on me" button puts it back on you.
 
-The background is the game's own terrain picture, taken once per map on your machine and never saved. Open ocean is painted black, because a flat tan or orange sea makes the symbols hard to read. This works on any map, modded ones too, because it only needs the map size from the game.
+The background is the game's own terrain picture, taken once per map on your machine and never saved. The sea is painted in the Water color, a deep blue unless you pick another one under DISPLAY, Colors. Where the sea is comes from the game's own ocean depth map, so it follows the coast even on maps where the sea has a different color in different places. A map without a depth map falls back to the color of its four corners. Past the edge of the map the water carries on and gets darker the further out you go, so zooming all the way out shows a map in the middle of the sea. This works on any map, modded ones too, because it only needs the map size from the game.
 
 The grid has a heavy line every 10 km and a thin line every 1 km once you're zoomed in far enough. Columns have numbers and rows have letters along the edge. You can switch the grid off in FILTER.
+
+FILTER, under Overlays, also has distance rings and a scale bar. The rings are off by default. They are circles around you at 5, 10, 20 and 40 km (2, 5, 10 and 20 nautical miles in feet mode), and "Which rings" under DISPLAY, View can show just one of them. "Show scale" draws a scale bar in the bottom left that follows the zoom.
 
 In the top right corner there's a grid reference like the one in the cockpit, for example `Hg95`. It's always for your own position, even when you've panned somewhere else. The numbers count from an offset that every map sets for itself, and the mod reads it from the game, so the reference matches the cockpit's.
 
@@ -50,9 +54,11 @@ Labels try not to sit on top of each other. Things that are closer and more dang
 
 Every unit gets a symbol for its type. Planes are an arrow that turns with the heading. Helicopters are a circle with a rotor cross, tanks a filled square, APCs a filled diamond, radars a half circle with a line, AA and SAM sites a cross with a diagonal cross over it, ships a hollow diamond, other vehicles a hollow square and buildings a dot. An ejected pilot is an X, and missiles are a thin needle. The legend in the top left lists all of them.
 
-The type comes from the unit's name first. I keep lists of names for the vanilla aircraft and vehicles and for the mods I've installed. When a name isn't in the lists, the game's own base type decides, so a new modded aircraft still shows up as a plane and a new vehicle as a vehicle. Anything that fits nothing gets the plane arrow and counts under "Plane" in FILTER.
+The type comes from the unit's name first. I keep lists of names for the vanilla aircraft and vehicles and for the mods I've installed. When a name isn't in the lists, the game's own base type decides, so a new modded aircraft still shows up as a plane and a new vehicle as a vehicle. Anything that fits nothing gets the plane arrow and counts under "Plane" in FILTER. Whether an aircraft is a helicopter comes from the game's own pilot type, so a modded helicopter shows as one even when its name isn't in my lists.
 
 Colors follow the side. Yellow is you and the other human pilots on your team, blue is AI and structures on your side, red is the enemy. You can change all three. Neutral things use the game's neutral color.
+
+Under DISPLAY, View, Icons can be set to Game. Then every unit is drawn with the icon the game's own map uses, taken from your running game the first time a unit of that type shows up, so modded units get theirs too. The legend is hidden while it is on. Buildings keep their own dot. An icon that has no transparency gets it from its brightness, and one that comes out as a solid square or empty is left out and that unit keeps our symbol.
 
 Each unit has its name next to it in its side's color. If a unit is the target of a lock, its name appears in the lock label instead, so the two don't overlap.
 
@@ -74,7 +80,27 @@ If an air-to-air missile loses its lock, because of flares, notching or jamming,
 
 FILTER can hide air-to-air locks, air-to-ground locks and missiles that have no lock. Your own missile always stays.
 
-For incoming missiles the map uses the list your cockpit warning already built. You see a big needle that blinks red and yellow, and a box beside it with the word MISSILE, the speed in km/h and an ETA in seconds. The ETA is the straight-line distance divided by the missile's speed. Under 10 seconds the blink gets faster. If several missiles arrive together, every one is shown, and if their boxes would overlap, the boxes stack while the needles stay where the missiles are.
+For incoming missiles the map uses the list your cockpit warning already built. You see a big needle that blinks red and yellow, and a box beside it with the word MISSILE, the speed in km/h and an ETA in seconds. The ETA is the straight-line distance divided by the missile's speed. Under 10 seconds the blink gets faster. If several missiles arrive together, every one is shown, and if their boxes would overlap, the boxes stack while the needles stay where the missiles are. The speed and the ETA are extra information from the map, since your cockpit only gives a tone and arrows, so they have a switch under DISPLAY, Missile warning.
+
+---
+
+## Who fired, jamming and other marks
+
+All of these are under DISPLAY, each with its own switch, and the hover or long-press note of the switch says what it does.
+
+**ATTACKER.** The aircraft that fired a missile at you gets a red ring and the tag ATTACKER, when it is on your map. The map only knows the shooter if your side tracks it. When the missile is gone, whether you evaded it, it missed or somebody shot it down, the ring stays for 30 more seconds. It dims like LAST POSITION does, follows the aircraft while your side still tracks it, and otherwise stays where it was last seen. Under the tag it says what fired and how long ago, for example `FS-20 Vortex · 12s ago`. Fair play hides it.
+
+**Pulse.** Off by default. One soft glow along the screen edge when a missile starts coming at you (red) or when the jamming on you starts (yellow). It fades out in about a second and a half and never repeats, and there is no flashing. What was already there when the page opened doesn't pulse.
+
+**Jamming.** The game's own map shows JAMMED on a unit whose radar is being jammed, with a line to the jammer. NOTacMap shows the same for the units your side can see: a JAMMED tag, and a line to the jammer when the jammer is on your map too. YOUR JAMMER ON shows while you are the one jamming (it goes out within a second of you stopping). YOU ARE JAMMED shows how strong it is when you are the target, and under it who jams you. RADAR DESTROYED shows on a unit whose radar was shot away. A destroyed radar can't wear the jamming off by itself, so without this tag it would stay JAMMED for good. All six are on by default. The radar tag is hidden by Fair play.
+
+**Info card.** Hover a unit with the mouse, or tap it on a touch screen, and a small card shows its name, type, side, and the distance and bearing from you. Speed, altitude and heading are only shown for units on your own side. A tap or a click keeps the card open. A tap somewhere else or Esc closes it.
+
+**LAST POSITION.** When you lose your aircraft (shot down, ejected, or you left it), your aircraft symbol stays where you were, with the tag LAST POSITION. It dims slowly while you wait, down to 30 percent over a minute. When you have an aircraft again it stays for 10 more seconds and fades, so you can see how far from the spot you are. A gap of under a second and a half in the data doesn't count as a loss.
+
+**Nuclear blast radius.** The radius comes from the game's own numbers, the same formula its shockwave uses: 13 times the cube root of the yield (the 250 kt GPO-N reaches 8.18 km). Rings are amber for your side and red for the enemy. While the weapon you have selected is nuclear and has ammo, a dashed ring with BLAST and the distance sits around your marked target, or around the impact point when it is an unguided bomb. A nuclear missile in the air gets a dashed ring too, around its target, or around you when it is coming at you (NUKE or ENEMY NUKE). Where one really went off, a solid ring stays for a minute and dims. The map only draws that ring when the game itself made its nuclear shockwave there, so a missile that was shot down or didn't explode gets none. Fair play keeps only the rings of your own side.
+
+**Bomb impact point.** With an unguided bomb selected, a white mark shows where it would land if you let it go now, with IMPACT, the distance and the time the bomb needs to fall, and a dotted line from you. It is worked out the way the cockpit's own bombing display does it (the same drag, the same steps, the same line cast), so it sits on the cockpit's pipper. It isn't shown with the gear down, with no bombs left, or when the bomb would not land within the cockpit's own limit. Around the mark an amber ring shows how far the bomb's blast and fragments reach, taken from the game's damage code (20 times the cube root of the yield). That's the furthest it can hurt, not the area where everything is destroyed. For a nuclear bomb the ring is the nuclear blast radius. Guided and glide bombs don't get a mark. Fair play leaves it on, because it is your own cockpit's information.
 
 ---
 
@@ -94,6 +120,8 @@ Once you mark a target, the circle turns into a cone along your heading. The wid
 
 The static circle is gray-blue and the cone is orange. Both colors can be changed, and FILTER can switch the whole thing off.
 
+When a marked target is inside the cone, the map tells you in a few ways. Each has its own switch under DISPLAY, Marked target in range, and all are on by default. The cone is tinted. The brackets around the target close in. The range number lights up. One slow fade plays once when it enters, the only animation here, and it never repeats. Arrows show which way to turn when the target is in range but off to the side. A line shows how far is left until it is in range. A small chip counts how many of your marked targets are in range.
+
 ---
 
 ## Trails
@@ -106,11 +134,13 @@ FILTER has a folded section for trails with five switches: friendly aircraft, en
 
 ## FILTER
 
+Presets, at the top: All, Combat (all my weapons), Combat (selected weapon), Minimal and My choice. Combat reads the weapons on your own aircraft and ticks only what they can hit, and it follows your loadout, so a weapon you run out of drops out. The first Combat uses everything you carry, the second only the weapon you have selected. Minimal shows planes, helicopters, weapon range and missile trails. My choice goes back to the boxes the way you set them.
+
 Unit types: Plane, Helicopter, Tank, APC, Radar, AA / SAM, Ship, Vehicle (other), Building and Pilot (ejected). All are on except Pilot.
 
 Weapons: Air-to-air, Air-to-ground and Unlocked / other. All on.
 
-Overlays: Runway approach guides, Weapon range and Grid. All on.
+Overlays: Runway approach guides, Weapon range, Grid, Distance rings and Show scale. All on except the rings.
 
 Trails, in a fold: the five switches above. All on.
 
@@ -120,13 +150,17 @@ Everything you tick is saved.
 
 ## DISPLAY
 
+The panel is folded into sections so it stays short: View, Missile warning, Marked target in range, Jamming, Marks and info, Page and names and Colors. Fair play stays at the top. A fold remembers whether you opened it. Many switches have a short note: hold the mouse over the label, or touch and hold it on a phone, and the note shows. The `?` at the end of a label marks those.
+
+**View.** Map up (North or Your heading), Icons (Ours or Game), Units (Auto follows the unit setting in the game, or Meters or Feet), Which rings, Text size, the dark outline and Red HUD.
+
 **Text.** Text size is Small, Normal, Large or X-Large, and Large is the default. It scales the text on the map and on the page. The dark outline behind text is on by default, and it keeps labels readable over bright terrain. "Show pilot names" is on by default and puts the pilot's name on teammates' missiles. "Use real names instead of callsigns" is also on by default, so teammates' real Steam names are shown. If you stream, turn it off: each teammate then gets a callsign from a fixed list for the session, and keeps it for as long as the page stays open.
 
 **Map.** "Redraws per second when idle" is 5, 8, 12, 20 or 30 frames a second and 8 is the default. It goes up by itself while you pan, zoom or something is animating. "Sharp text and lines" draws at the screen's real pixel density. A phone gets up to three times, and the game PC is capped at two so it keeps its power for the game. It costs a bit more CPU. "Red HUD (night vision)" turns the green HUD text and the grid red. The page is dark with or without it.
 
-**Page.** "Close this tab when the game closes" is on by default. "Pause the feed while this tab is hidden" is on too, and I explain it further down.
+**Page.** "Close this tab when the game closes" is on by default. "Pause the feed while this tab is hidden" is on too, and I explain it further down. "Keep the screen on" only does something on a phone that uses the secure link, see Phone and tablet.
 
-**Colors.** Eleven of them: your team (human pilots), AI and structures, enemy, your missile, teammate missile, lock, marked target, runway guide, weapon range (static), weapon range (armed) and HUD text. Each one has a swatch that opens a honeycomb picker with a row of grays, boxes for RGB and hex, and a reset arrow. HUD text follows the game's own live HUD theme until you pick a color yourself, and reset puts it back to following the game.
+**Colors.** Twelve of them: your team (human pilots), AI and structures, enemy, water, your missile, teammate missile, lock, marked target, runway guide, weapon range (static), weapon range (armed) and HUD text. Each one has a swatch that opens a honeycomb picker with a row of grays, boxes for RGB and hex, and a reset arrow. HUD text follows the game's own live HUD theme until you pick a color yourself, and reset puts it back to following the game.
 
 At the bottom of the panel there's a link to report a bug.
 
@@ -134,7 +168,7 @@ At the bottom of the panel there's a link to report a bug.
 
 ## Legend, help and the status line
 
-The legend sits in the top left and lists every symbol. Tap it to open or close it, and it remembers what you chose. Next to it is a "? help" button with a short guide: quick start, how to read the map, what FILTER and DISPLAY do, the phone steps and what to check when something is wrong.
+The legend sits in the top left and lists every symbol. (It is hidden while Icons is set to Game.) Tap it to open or close it, and it remembers what you chose. Next to it is a "? help" button with a short guide: quick start, how to read the map, what FILTER and DISPLAY do, the phone steps and what to check when something is wrong.
 
 The status line says what's going on: `connecting...`, `LIVE` (with the number of friendly weapons in flight when there are any), `disconnected, retrying...`, `asleep (tab hidden)`, `reconnecting...`, `game closed, you can close this tab` or `showing the phone link`.
 
@@ -164,7 +198,9 @@ If the PC changes network, access moves to the new address and the link on the m
 
 Saving settings only works from the PC. A phone keeps its own display settings in its browser. The page is made for touch too: bigger buttons, panels that fit the screen, and a layout for a phone held sideways, with the buttons in a row and the color picker showing the numbers next to the honeycomb.
 
-The page can't keep a phone screen on, so set a longer screen timeout on the phone. On Android you can also turn on "Stay awake" in the developer options, which keeps the screen on while it charges. On an iPhone, set Auto-Lock to Never. The reason is that a web page may only keep a screen awake over HTTPS, and this map is plain HTTP on your home network.
+A web page may only keep a screen awake over HTTPS, and the normal link is plain HTTP on your home network. So on the normal link, set a longer screen timeout on the phone. On Android you can also turn on "Stay awake" in the developer options, which keeps the screen on while it charges. On an iPhone, set Auto-Lock to Never. The secure link below is the other way.
+
+**Secure link (HTTPS, experimental).** In DEVICES, "Secure link" starts a second, encrypted address on port 8124. The page on that link can keep the phone's screen on while the map is open (DISPLAY, Keep the screen on, on by default). The plugin makes its own certificate the first time, in the game, and names only the address of this PC in it. It is self-signed, so the phone's browser says the connection is not private, once for each browser session. Tap through it. To be sure it is your PC, compare the SHA-256 fingerprint that DEVICES shows with the one in the certificate details on the phone. The link still needs the secret, the same as the normal one, and the secure port is closed again when you switch access off or make a new link. The certificate is renewed by itself when the address changes or has under 30 days left. It is off by default, and I have only tried it with Chrome on Android so far, not with Samsung Internet or Safari. With `HttpsOnly` set to true in the config, other devices can only use the secure link and the plain link refuses them (this PC is not affected).
 
 Don't forward the port. Anything forwarded to the PC (router port forwarding, WSL2, `netsh portproxy` or a reverse proxy) looks like it comes from the PC itself, and that never needs the secret.
 
@@ -184,12 +220,15 @@ A few things live in `BepInEx/config/com.bigloude.notacmap.cfg` instead (or pres
 | Server > AllowLan | false | Access from other devices. The DEVICES switch keeps it in step. |
 | Server > LanAddress | empty | The network address to use. Found by itself when empty. |
 | Server > LanToken | empty | The secret in the link. Made the first time you turn on access from other devices. If you write your own, use letters, digits, - and _, at least 16 characters. |
+| Server > HttpsEnabled | false | The secure link. The DEVICES switch keeps it in step. |
+| Server > HttpsPort | 8124 | The port of the secure link. |
+| Server > HttpsOnly | false | With the secure link on, other devices can only use that one. |
 
 ---
 
 ## How light it is
 
-The plugin builds one snapshot five times a second on the game's main thread and turns it into text on another thread. If building takes more than 3 ms, a line appears in the log. Flags that aren't set are left out, which keeps the data small on a busy server.
+The plugin builds one snapshot five times a second on the game's main thread and turns it into text on another thread, straight into a reused buffer so it makes little garbage for the game to clean up. If building takes more than 8 ms, a line appears in the log, at most once every 15 seconds. Flags that aren't set are left out, which keeps the data small on a busy server. The map icons of the Game setting are cut out of the game's textures in small steps, and not at all on a frame that is already slow.
 
 When no page is connected, the plugin builds nothing. A hidden tab hangs up after ten seconds and reconnects when you look at it again. The page redraws slowly while nothing moves and speeds up while you pan, zoom or something animates. If the page is still reading the last update when the next one is ready, the next one is skipped instead of piling up. Every connected page is written to on its own, so a phone that stops answering can't hold up the PC. If it stays stuck for 5 seconds it is dropped, and the page reconnects by itself.
 
@@ -199,12 +238,14 @@ When no page is connected, the plugin builds nothing. A hidden tab hangs up afte
 
 Grid references follow the offsets the game gives each map (80,000 meters each way on the standard maps, 120,000 across on the wide naval map). I checked them against the cockpit on two maps. If one map ever disagrees with your cockpit, please tell me which.
 
-Unit types come from names plus the base type. An unknown modded aircraft shows as a plane, and a modded helicopter shows as a plane until I add its name.
+Unit types come from names plus the base type. An unknown modded aircraft shows as a plane. A modded helicopter shows as a helicopter when the game's own pilot type says so.
 
 Marked targets are only yours. Sharing them would need two copies of the mod to talk to each other directly, and that's on the README's list of possible add-ons.
 
-The phone link isn't encrypted. It's plain HTTP on your home network.
+The normal phone link isn't encrypted. It's plain HTTP on your home network. The secure link is encrypted, but its certificate is the plugin's own, which is why the browser warns.
 
 If Windows won't let the game listen on the network, the page and the log both say so, and the map keeps working on the PC.
 
-Enemy missiles that your cockpit warning hasn't picked up yet are still drawn as a missile needle, just without the speed and ETA box. No unit filter hides them, the same as the incoming ones. The speed and the ETA on the box are worked out by the mod from the missile's position, the cockpit itself only gives a tone and arrows.
+Enemy missiles that your cockpit warning hasn't picked up yet are still drawn as a missile needle, just without the speed and ETA box. No unit filter hides them, the same as the incoming ones. Fair play does hide them. The speed and the ETA on the box are worked out by the mod from the missile's position, the cockpit itself only gives a tone and arrows.
+
+The blast radius of a nuclear weapon and the reach of an ordinary bomb come from the game's own damage code, the impact point from the cockpit's own bombing display. The map shows what the game uses, I haven't measured real damage. The graphics card of one test PC hung in heavy explosion scenes. That was the driver and not this mod, and a newer driver is the first thing to try if it happens to you.

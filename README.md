@@ -2,7 +2,7 @@
 
 A live tactical map for [Nuclear Option](https://store.steampowered.com/app/2168680/Nuclear_Option/), for a second monitor. A BepInEx plugin reads game state and serves it to a page in your browser. Nothing to calibrate or set up per map.
 
-A second-screen map for HOTAS pilots. It follows your aircraft by itself, so you don't need the mouse during a flight. Works in multiplayer. Tested on official and community servers. It only shows what your own game already knows and sends nothing to the server.
+A second-screen map for HOTAS pilots. It follows your aircraft by itself, so you don't need the mouse during a flight. Works in multiplayer. Tested on official and community servers. It only shows what your own game already knows and sends nothing to the server. Last checked with Nuclear Option 0.34.6.
 
 ## Features
 
@@ -12,11 +12,16 @@ A second-screen map for HOTAS pilots. It follows your aircraft by itself, so you
 - Incoming-missile warnings with speed and ETA, from the same RWR detection as the cockpit. Friendly missiles in flight are shown for everyone, labeled with the pilot
 - Marked targets get an amber reticle, which turns into a spinning "LOST" marker if you lose contact
 - Missile locks show as a pink line and ring. With several missiles out, the closest one gets the label and the rest are small rings (+N). If a missile loses its lock on an aircraft, a ring shows where it was and the line snaps
-- Weapon range ring: a circle at your weapon's base range that turns into a cone along your heading once you mark a target. The range matches the cockpit HUD
+- Weapon range ring: a circle at your weapon's base range that turns into a cone along your heading once you mark a target. The range matches the cockpit HUD. When a marked target is inside the cone the map tells you: a tinted cone, closing brackets, arrows to turn and the distance still to go
+- FILTER presets, including a Combat view that reads your weapons and shows only what they can hit. Distance rings and a scale bar. Units in meters or feet, or following the game
+- Who fired at you (ATTACKER, kept for 30 seconds after the missile is gone), jamming like the game's own map (JAMMED, the line to the jammer, YOUR JAMMER ON, RADAR DESTROYED), an info card on tap or hover, and LAST POSITION where you lost your aircraft
+- Nuclear blast radius from the game's own numbers, and for unguided bombs the impact point as on the cockpit's pipper, with a ring for the blast
+- The map can turn so that your heading is up. Under DISPLAY the icons can be the game's own, and the sea follows the coast in the Water color and carries on past the map's edge
+- Fair play: one switch that hides what your cockpit doesn't show you
 - Runway approach lines, and fading trails behind moving units. FILTER picks which kinds of trails show, and the grid can be switched off too
 - FILTER and DISPLAY (top right) control what's shown, how it looks, and the colors. A dark outline on text keeps labels readable over the terrain (switch it off in DISPLAY). Tap the legend to open or close it, and the Help button next to it explains the symbols and the settings
 - The background map comes from the game's own terrain texture, so any map works. Pan, zoom, and a button to recenter on you
-- Optional LAN mode to open the map on a phone or tablet on your home network. Off by default, touch works
+- Optional LAN mode to open the map on a phone or tablet on your home network. Off by default, touch works. An experimental secure link (HTTPS) lets the phone keep its screen on
 - Light on frame rate: redraws slowly when idle, speeds up when you pan or zoom, and sleeps while the tab is hidden
 
 Want the details? [FEATURES.md](FEATURES.md) explains each feature and setting.
@@ -57,17 +62,19 @@ Once access from other devices is on, it stays on after a restart until you swit
 
 Only devices on a private network address (192.168.x.x, 10.x.x.x, 172.16 to 31.x.x or 169.254.x.x) are accepted, and they need the secret in the link. The New link button in DEVICES makes a new link and cuts off every device that has the old one. Deleting `LanToken` from the config and restarting the game does the same. Switching access off and on again keeps the same link.
 
-Anyone who has the link can see your map, and the connection isn't encrypted, so use it at home and not on public wifi. Don't forward the port (router port forwarding, WSL2 or `netsh portproxy`, a reverse proxy): anything forwarded to this PC looks like it comes from the PC itself and needs no secret. Saving settings only works from the PC, so a phone keeps its own display settings.
+Anyone who has the link can see your map, and the normal connection isn't encrypted, so use it at home and not on public wifi. Don't forward the port (router port forwarding, WSL2 or `netsh portproxy`, a reverse proxy): anything forwarded to this PC looks like it comes from the PC itself and needs no secret. Saving settings only works from the PC, so a phone keeps its own display settings.
 
 If Windows won't let the game listen on the network, the page and the log say so, and the map keeps working on the PC.
 
-**Keeping the screen on.** The page can't do it, so set a longer screen timeout on the phone. On Android you can also turn on "Stay awake" in the developer options, which keeps the screen on while it charges. On an iPhone, set Auto-Lock to Never. The reason: a web page may only keep a screen awake over HTTPS, and this map is plain HTTP on your home network.
+**Keeping the screen on.** A web page may only keep a screen awake over HTTPS, and the normal link is plain HTTP on your home network. So on the normal link, set a longer screen timeout on the phone. On Android you can also turn on "Stay awake" in the developer options, which keeps the screen on while it charges. On an iPhone, set Auto-Lock to Never.
+
+**Secure link (experimental).** DEVICES has a "Secure link (HTTPS)" switch. It starts a second address on port 8124 with a certificate the plugin makes itself, and the page on that link keeps the phone's screen on. The phone's browser says the connection is not private, once for each browser session, because the certificate is not from an authority. Tap through it, and compare the fingerprint that DEVICES shows with the one in the certificate details on the phone if you want to be sure. It is off by default. I have only tried it with Chrome on Android so far.
 
 ## Configuration
 
-All settings are on screen. **FILTER** covers unit types, weapon categories, overlays, and trails. **DISPLAY** covers text size, redraw rate, pilot names, the red HUD (night vision), and colors. Both save to `settings.json` next to the plugin. Heads up if you stream: teammates' real Steam names are shown on the map by default. Untick "Use real names instead of callsigns" in DISPLAY and they get random callsigns instead.
+All settings are on screen. **FILTER** covers presets, unit types, weapon categories, overlays, and trails. **DISPLAY** covers what the map shows beyond the units (jamming, who fired, blast rings and so on), text size, redraw rate, pilot names, the red HUD (night vision), and colors. Hold the mouse over a switch, or touch and hold it on a phone, and a short note says what it does. Both save to `settings.json` next to the plugin. Heads up if you stream: teammates' real Steam names are shown on the map by default. Untick "Use real names instead of callsigns" in DISPLAY and they get random callsigns instead.
 
-A few things live in the BepInEx config instead, `BepInEx/config/com.bigloude.notacmap.cfg` (or press F1 if you have the BepInEx Configuration Manager): the port, the update rate, opening the page automatically, and access from other devices. Each entry has a plain description.
+A few things live in the BepInEx config instead, `BepInEx/config/com.bigloude.notacmap.cfg` (or press F1 if you have the BepInEx Configuration Manager): the port, the update rate, opening the page automatically, access from other devices, and the secure link (`HttpsEnabled`, `HttpsPort` and `HttpsOnly`). Each entry has a plain description.
 
 ## Troubleshooting
 
