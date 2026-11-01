@@ -73,9 +73,9 @@ namespace NOTacMap
 		private volatile string lanAddress; // null when LAN access is off, or if it couldn't start
 		private string refusedAddress; // an address Windows turned down, not tried again until the address changes
 		private volatile RequestGuard guard;
-		private bool httpsWanted;  // HTTPS is switched on in DEVICES. It only runs while LAN access runs.
+		private volatile bool httpsWanted;  // HTTPS is switched on in DEVICES. It only runs while LAN access runs.
 		private int httpsPort;
-		private IDisposable front; // the TLS front (see TlsFront), null while HTTPS is off
+		private volatile IDisposable front; // the TLS front (see TlsFront), null while HTTPS is off
 		private readonly HashSet<string> rejectedLogged = new HashSet<string>();
 
 		// lanToken is null to keep the map on this PC only. lanAddress can be null while
