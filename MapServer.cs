@@ -503,7 +503,13 @@ namespace NOTacMap
 
 		public void Broadcast(string json)
 		{
-			WriteToClients(Encoding.UTF8.GetBytes($"data: {json}\n\n"), true);
+			BroadcastEvent(Encoding.UTF8.GetBytes($"data: {json}\n\n"));
+		}
+
+		// A whole event stream message, "data: ...\n\n", already as bytes.
+		public void BroadcastEvent(byte[] message)
+		{
+			WriteToClients(message, true);
 		}
 
 		// An SSE comment line: browsers ignore it, but writing it finds clients

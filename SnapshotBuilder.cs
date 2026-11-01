@@ -287,6 +287,10 @@ namespace NOTacMap
 		// contact is observed, so for a contact that is no longer observed the heading stays at the
 		// last observed value instead of following the unit's real heading.
 		private static readonly Dictionary<uint, float> lastHeadings = new Dictionary<uint, float>();
+		// Build() runs on the main thread only, one at a time, so its working sets are kept and cleared instead of made again.
+		private static readonly HashSet<PersistentID> seenIds = new HashSet<PersistentID>();
+		private static readonly HashSet<uint> builtUnitIds = new HashSet<uint>();
+		private static readonly HashSet<PersistentID> incomingIds = new HashSet<PersistentID>();
 
 		private static string FactionString(FactionHQ hq)
 		{
@@ -472,15 +476,18 @@ namespace NOTacMap
 
 			if (GameManager.GetLocalHQ(out FactionHQ localHq))
 			{
-				var seen = new HashSet<PersistentID>();
-				var builtIds = new HashSet<uint>();
+				var seen = seenIds;
+				seen.Clear();
+				var builtIds = builtUnitIds;
+				builtIds.Clear();
 
 				// Missiles the local player's own RWR has already promoted from "unknown" to
 				// "known" (in range and line of sight, or gated by seeker mode / network
 				// share), see MissileWarning.Update(). This is the cockpit RWR's own fairness
 				// gate. Scanning Missile.targetID directly would reveal a launch before the
 				// player's RWR warns them.
-				var incomingMissileIds = new HashSet<PersistentID>();
+				var incomingMissileIds = incomingIds;
+				incomingMissileIds.Clear();
 				if (playerAircraft != null)
 				{
 					MissileWarning warning = playerAircraft.GetMissileWarningSystem();

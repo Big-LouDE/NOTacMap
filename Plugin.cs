@@ -51,6 +51,41 @@ namespace NOTacMap
 		private bool themeDumped;
 		private volatile bool broadcastInFlight;
 
+		// One snapshot goes out at a time (broadcastInFlight), so the serializer and its buffer are reused. The text is written
+		// straight into the buffer as UTF-8, with the event stream framing around it. Going through a json string, an
+		// interpolated string and then bytes made three copies of a payload that is large on a busy server (and those copies
+		// landed in the large object heap, which is only cleaned by full collections).
+		private static readonly JsonSerializer snapshotSerializer = new JsonSerializer();
+		private static readonly System.IO.MemoryStream snapshotBuffer = new System.IO.MemoryStream(1 << 16);
+		private static System.IO.StreamWriter snapshotText;
+		private static JsonTextWriter snapshotJson;
+		private static readonly byte[] eventHead = System.Text.Encoding.ASCII.GetBytes("data: ");
+		private static readonly byte[] eventTail = System.Text.Encoding.ASCII.GetBytes("\n\n");
+
+		private static byte[] SerializeEvent(MapSnapshot snapshot)
+		{
+			try
+			{
+				if (snapshotJson == null)
+				{
+					snapshotText = new System.IO.StreamWriter(snapshotBuffer, new System.Text.UTF8Encoding(false), 1 << 12);
+					snapshotJson = new JsonTextWriter(snapshotText) { CloseOutput = false };
+				}
+				snapshotBuffer.SetLength(0);
+				snapshotBuffer.Write(eventHead, 0, eventHead.Length);
+				snapshotSerializer.Serialize(snapshotJson, snapshot);
+				snapshotJson.Flush();
+				snapshotBuffer.Write(eventTail, 0, eventTail.Length);
+				return snapshotBuffer.ToArray();
+			}
+			catch
+			{
+				// A writer that stopped halfway is not used again: the next snapshot starts a new one.
+				snapshotJson = null;
+				throw;
+			}
+		}
+
 		private static string Hex(Color c) => ColorUtility.ToHtmlStringRGBA(c);
 
 		internal static string ThemeJson;
@@ -480,8 +515,7 @@ namespace NOTacMap
 				{
 					try
 					{
-						string json = JsonConvert.SerializeObject(snapshot);
-						server.Broadcast(json);
+						server.BroadcastEvent(SerializeEvent(snapshot));
 					}
 					catch (Exception ex)
 					{
