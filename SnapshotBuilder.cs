@@ -602,7 +602,7 @@ namespace NOTacMap
 					}
 
 					FillJamming(unit, snap);
-					if (!(unit is Missile))
+					if (!(unit is Missile) && !(unit is Building))
 					{
 						UnitIconCapture.Want(unit.definition);
 					}

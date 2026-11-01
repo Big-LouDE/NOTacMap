@@ -3631,7 +3631,8 @@ function draw() {
     if (!unitTypeVisible(category)) return;
     infoPicks.push({ id: u.id, x: sx, y: sy });
     ctx.fillStyle = unitColor(u);
-    const gameIcon = gameIconsOn() ? gameIconFor(u.type) : null;
+    // Buildings keep our own symbol: the game stretches a building's icon to its real footprint, which makes a blob here.
+    const gameIcon = gameIconsOn() && u.baseType !== 'building' ? gameIconFor(u.type) : null;
     if (gameIcon) drawGameIcon(ctx, gameIcon, sx, sy, unitColor(u), u.heading);
     else drawUnitIcon(ctx, category, sx, sy, 6, u.heading);
     // Label matches its icon's faction color (not a flat dim theme color)
