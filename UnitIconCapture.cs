@@ -134,9 +134,46 @@ namespace NOTacMap
 			RenderTexture.active = target;
 			var readable = new Texture2D(width, height, TextureFormat.RGBA32, false);
 			readable.ReadPixels(new Rect(0, 0, width, height), 0, 0);
-			readable.Apply();
 			RenderTexture.active = previous;
 			RenderTexture.ReleaseTemporary(target);
+
+			// Some of the game's icons are a white shape on black with no transparency at all. Tinted as they are they would be solid
+			// squares, so for those the brightness becomes the transparency (the shape stays, the black goes).
+			Color32[] pixels = readable.GetPixels32();
+			bool opaque = true;
+			for (int i = 0; i < pixels.Length; i++)
+			{
+				if (pixels[i].a < 250)
+				{
+					opaque = false;
+					break;
+				}
+			}
+			if (opaque)
+			{
+				for (int i = 0; i < pixels.Length; i++)
+				{
+					byte bright = (byte)Mathf.Max(pixels[i].r, Mathf.Max(pixels[i].g, pixels[i].b));
+					pixels[i] = new Color32(255, 255, 255, bright);
+				}
+				readable.SetPixels32(pixels);
+			}
+
+			// An icon that is a solid block (nearly every pixel filled) or nearly empty is no use as a symbol, the unit keeps its own.
+			int filled = 0;
+			for (int i = 0; i < pixels.Length; i++)
+			{
+				if (pixels[i].a > 128)
+				{
+					filled++;
+				}
+			}
+			if (filled > pixels.Length * 0.92f || filled < pixels.Length * 0.02f)
+			{
+				Object.Destroy(readable);
+				return null;
+			}
+			readable.Apply();
 
 			byte[] png = readable.EncodeToPNG();
 			Object.Destroy(readable);
