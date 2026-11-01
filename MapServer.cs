@@ -693,6 +693,35 @@ namespace NOTacMap
 					return;
 				}
 
+				if (path == "/uniticon")
+				{
+					// The map icon of one kind of unit, taken from the running game (see UnitIconCapture). 404: not taken yet, ask again
+					// in a moment. 410: this kind has no icon we can use, do not ask again.
+					string kind = request.QueryString["type"];
+					if (string.IsNullOrEmpty(kind))
+					{
+						context.Response.StatusCode = 400;
+						context.Response.Close();
+						return;
+					}
+					UnitIconCapture.Icon unitIcon;
+					int iconState = UnitIconCapture.Lookup(kind, out unitIcon);
+					if (iconState != 1)
+					{
+						context.Response.StatusCode = iconState == 2 ? 410 : 404;
+						context.Response.Close();
+						return;
+					}
+					context.Response.ContentType = "image/png";
+					context.Response.AddHeader("X-Orient", unitIcon.Orient ? "1" : "0");
+					context.Response.AddHeader("X-Size", unitIcon.Size.ToString(System.Globalization.CultureInfo.InvariantCulture));
+					context.Response.AddHeader("X-Sprite", unitIcon.Sprite ?? "");
+					context.Response.ContentLength64 = unitIcon.Png.Length;
+					context.Response.OutputStream.Write(unitIcon.Png, 0, unitIcon.Png.Length);
+					context.Response.Close();
+					return;
+				}
+
 				if (path == "/mapinfo")
 				{
 					if (MapImageCapture.Png == null)

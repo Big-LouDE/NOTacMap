@@ -334,6 +334,7 @@ namespace NOTacMap
 					heading = playerAircraft.transform.eulerAngles.y
 				};
 				FillPlayerJamming(playerAircraft, snapshot.player);
+				UnitIconCapture.Want(playerAircraft.definition);
 
 				if (playerAircraft.weaponManager != null)
 				{
@@ -601,6 +602,10 @@ namespace NOTacMap
 					}
 
 					FillJamming(unit, snap);
+					if (!(unit is Missile))
+					{
+						UnitIconCapture.Want(unit.definition);
+					}
 					snapshot.units.Add(snap);
 					builtIds.Add(id.Id);
 				}
@@ -620,6 +625,9 @@ namespace NOTacMap
 					// unit), add it explicitly so it doesn't go missing.
 					AddUnit(id);
 				}
+
+				// A few of the icons that are waiting get cut out of the game's textures.
+				UnitIconCapture.Process();
 
 				// A shooter that is not in this snapshot cannot be marked.
 				foreach (UnitSnapshot incoming in snapshot.units)

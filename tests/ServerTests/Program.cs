@@ -25,6 +25,18 @@ namespace NOTacMap
         public const string TestedGameVersion = "0.34.6";
         public static string GameVersion = "0.35.1";
     }
+    internal static class UnitIconCapture
+    {
+        public class Icon { public byte[] Png; public bool Orient; public float Size; public string Sprite; }
+        public static Icon Ready = null;   // what /uniticon answers for the type "Ready"
+        public static string Without = "";  // a type that has no usable icon
+        public static int Lookup(string key, out Icon icon)
+        {
+            icon = null;
+            if (key == "Ready" && Ready != null) { icon = Ready; return 1; }
+            return key == Without ? 2 : 0;
+        }
+    }
     internal static class MapImageCapture
     {
         public static byte[] Png = null;
@@ -494,6 +506,21 @@ internal static class Program
             MapImageCapture.MapName = "";
             MapImageCapture.MapSizeX = 0;
             MapImageCapture.MapSizeY = 0;
+
+            // /uniticon: the icon of a kind of unit, 404 while it is not taken yet, 410 for a kind without one
+            r = await Send("GET", H + "/uniticon?type=Ready");
+            Check("H /uniticon is a 404 while the icon is not taken yet", (int)r.StatusCode == 404);
+            UnitIconCapture.Ready = new UnitIconCapture.Icon { Png = new byte[] { 5, 4, 3 }, Orient = true, Size = 1.5f, Sprite = "attackHelo1" };
+            r = await Send("GET", H + "/uniticon?type=Ready");
+            byte[] iconBytes = await r.Content.ReadAsByteArrayAsync();
+            Check("H /uniticon gives the picture with its orient, size and sprite name", (int)r.StatusCode == 200 && iconBytes.Length == 3 && r.Content.Headers.ContentType.MediaType == "image/png"
+                && System.Linq.Enumerable.First(r.Headers.GetValues("X-Orient")) == "1" && System.Linq.Enumerable.First(r.Headers.GetValues("X-Size")) == "1.5" && System.Linq.Enumerable.First(r.Headers.GetValues("X-Sprite")) == "attackHelo1");
+            UnitIconCapture.Without = "Plain";
+            r = await Send("GET", H + "/uniticon?type=Plain");
+            Check("H /uniticon is a 410 for a kind without an icon", (int)r.StatusCode == 410);
+            r = await Send("GET", H + "/uniticon");
+            Check("H /uniticon without a type is a 400", (int)r.StatusCode == 400);
+            UnitIconCapture.Ready = null;
 
             // /about gives the version and the label of a test release
             r = await Send("GET", H + "/about");

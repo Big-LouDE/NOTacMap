@@ -75,6 +75,7 @@
     padding: 4px 8px; cursor: pointer; white-space: nowrap;
   }
   #controls button:hover, #controls button.active, #controls button.rotated { color: var(--hud-green); border-color: var(--hud-green); }
+  html.game-icons #legendHead, html.game-icons #legend .legend-rows { display: none !important; }
   #menuRow { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
   #menuRow[hidden] { display: none; }
   .panel {
@@ -497,6 +498,13 @@
         </select>
       </label>
       <div class="note">North keeps the map the way it is. Your heading turns the map so that you always fly up the screen. A small compass shows where north is.</div>
+      <label>Icons
+        <select id="iconStyleSelect">
+          <option value="ours" selected>NOTacMap</option>
+          <option value="game">Game</option>
+        </select>
+      </label>
+      <div class="note">Game draws every unit with the icon the game's own map uses, taken from your running game. The legend is hidden then.</div>
     </div>
     <div class="group">
       <h4>Last position</h4>
@@ -1029,7 +1037,7 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true, mapUp: 'north' },
+  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true, mapUp: 'north', iconStyle: 'ours' },
   overlays: { runwayGuides: true, weaponRange: true, grid: true, rangeRings: false, scaleBar: true },
   // Which preset is on ('custom' = the boxes as you set them), and the boxes as they were before a preset was switched on.
   preset: { mode: 'custom', mine: null },
@@ -1111,6 +1119,9 @@ function syncDisplayControls() {
   if (startSel) startSel.value = settings.display.startMode;
   const unitsSel = document.getElementById('unitsSelect');
   if (unitsSel) unitsSel.value = String(settings.display.units);
+  const iconSel = document.getElementById('iconStyleSelect');
+  if (iconSel) iconSel.value = settings.display.iconStyle === 'game' ? 'game' : 'ours';
+  try { applyIconStyle(); } catch (e) { /* set up further down the page */ }
   const mapUpSel = document.getElementById('mapUpSelect');
   if (mapUpSel) mapUpSel.value = settings.display.mapUp === 'heading' ? 'heading' : 'north';
   try { mapUpLabel(); } catch (e) { /* the button is set up further down the page */ }
@@ -1902,6 +1913,11 @@ document.getElementById('ringSelect').addEventListener('change', e => {
   saveSettings();
 });
 
+document.getElementById('iconStyleSelect').addEventListener('change', e => {
+  settings.display.iconStyle = e.target.value === 'game' ? 'game' : 'ours';
+  applyIconStyle();
+  saveSettings();
+});
 document.getElementById('mapUpSelect').addEventListener('change', e => {
   settings.display.mapUp = e.target.value === 'heading' ? 'heading' : 'north';
   viewHeadingDeg = 0; viewHeadingAt = 0;
@@ -3615,7 +3631,9 @@ function draw() {
     if (!unitTypeVisible(category)) return;
     infoPicks.push({ id: u.id, x: sx, y: sy });
     ctx.fillStyle = unitColor(u);
-    drawUnitIcon(ctx, category, sx, sy, 6, u.heading);
+    const gameIcon = gameIconsOn() ? gameIconFor(u.type) : null;
+    if (gameIcon) drawGameIcon(ctx, gameIcon, sx, sy, unitColor(u), u.heading);
+    else drawUnitIcon(ctx, category, sx, sy, 6, u.heading);
     // Label matches its icon's faction color (not a flat dim theme color)
     // so a red enemy contact reads as red everywhere, not just its icon.
     // Skipped entirely if this unit is an active lock target, the lock
@@ -3889,7 +3907,10 @@ function draw() {
     // as-is. A helicopter's real glyph (circle+rotor-cross) has no point
     // to rotate, so draw the heli shape instead of a plane chevron, plus a
     // short tick line for heading.
-    if (classifyUnit({ type: latest.player.type, baseType: 'aircraft', isHelicopter: latest.player.isHelicopter }) === 'helicopter') {
+    const ownGameIcon = gameIconsOn() ? gameIconFor(latest.player.type) : null;
+    if (ownGameIcon) {
+      drawGameIcon(ctx, ownGameIcon, sx, sy, '#ffffff', latest.player.heading);
+    } else if (classifyUnit({ type: latest.player.type, baseType: 'aircraft', isHelicopter: latest.player.isHelicopter }) === 'helicopter') {
       drawUnitIcon(ctx, 'helicopter', sx, sy, 8, 0);
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
@@ -4007,7 +4028,7 @@ let lastPosPlayer = null;        // the player block of the last snapshot that h
 function updateLastPosition(snap) {
   const now = performance.now();
   if (snap.player) {
-    lastPosPlayer = { x: snap.player.x, z: snap.player.z, heading: snap.player.heading, heli: classifyUnit({ type: snap.player.type, baseType: 'aircraft', isHelicopter: snap.player.isHelicopter }) === 'helicopter' };
+    lastPosPlayer = { type: snap.player.type, x: snap.player.x, z: snap.player.z, heading: snap.player.heading, heli: classifyUnit({ type: snap.player.type, baseType: 'aircraft', isHelicopter: snap.player.isHelicopter }) === 'helicopter' };
     if (lastPosMark && lastPosMark.backAt === null) {
       if (now - lastPosMark.t0 < LASTPOS_BLIP_MS) lastPosMark = null;
       else lastPosMark.backAt = now;
@@ -4040,7 +4061,10 @@ function drawLastPosition(ctx, toScreen) {
   ctx.globalAlpha = a;
   ctx.fillStyle = '#ffffff';
   ctx.strokeStyle = '#ffffff';
-  if (lastPosMark.heli) {
+  const markIcon = gameIconsOn() ? gameIconFor(lastPosMark.type) : null;
+  if (markIcon) {
+    drawGameIcon(ctx, markIcon, sx, sy, '#ffffff', lastPosMark.heading);
+  } else if (lastPosMark.heli) {
     drawUnitIcon(ctx, 'helicopter', sx, sy, 8, 0);
     ctx.lineWidth = 2;
     drawHeadingTick(ctx, sx, sy, 13, lastPosMark.heading);
@@ -4049,6 +4073,66 @@ function drawLastPosition(ctx, toScreen) {
     ctx.fill();
   }
   jamChip('LAST POSITION', sx + 14, sy - 12, 'left', '#ffffff');
+  ctx.restore();
+}
+
+// Game icons (DISPLAY > Icons: Game). Every kind of unit has an icon in the game's own map. The plugin cuts it out of the running game
+// and serves it at /uniticon?type=NAME (404: not ready yet, ask again in a moment; 410: this kind has none). The icon is white, the page
+// tints it with the faction color. Until it has arrived, or when there is none, the unit keeps the symbol of NOTacMap.
+const gameIcons = new Map();   // type -> { state: 'new' | 'wait' | 'ready' | 'none', img, orient, size, sprite, tries, nextAt, busy, tints }
+const GAME_ICON_PX = 20;       // the longer side of an icon with size 1
+function gameIconsOn() { return settings.display.iconStyle === 'game'; }
+function applyIconStyle() { document.documentElement.classList.toggle('game-icons', gameIconsOn()); }
+
+function gameIconFor(type) {
+  if (!type) return null;
+  let g = gameIcons.get(type);
+  if (!g) { g = { state: 'new', tries: 0, nextAt: 0, busy: false, tints: new Map() }; gameIcons.set(type, g); }
+  if (g.state === 'ready') return g;
+  if ((g.state === 'new' || g.state === 'wait') && !g.busy && performance.now() >= g.nextAt) loadGameIcon(type, g);
+  return null;
+}
+
+function loadGameIcon(type, g) {
+  g.busy = true;
+  const retry = () => { g.tries++; if (g.tries > 15) g.state = 'none'; else { g.state = 'wait'; g.nextAt = performance.now() + Math.min(8000, 1000 * g.tries); } };
+  fetch('/uniticon?type=' + encodeURIComponent(type), { cache: 'no-store' })
+    .then(r => {
+      if (r.status === 200) {
+        const orient = r.headers.get('X-Orient') === '1';
+        const size = parseFloat(r.headers.get('X-Size')) || 1;
+        const sprite = r.headers.get('X-Sprite') || '';
+        return r.blob().then(b => createImageBitmap(b)).then(img => { Object.assign(g, { img, orient, size, sprite, state: 'ready' }); });
+      }
+      if (r.status === 410 || r.status === 400) g.state = 'none'; else retry();
+    })
+    .catch(retry)
+    .finally(() => { g.busy = false; });
+}
+
+// The white icon in one color, made once per color.
+function gameIconTint(g, color) {
+  let c = g.tints.get(color);
+  if (c) return c;
+  c = document.createElement('canvas');
+  c.width = g.img.width; c.height = g.img.height;
+  const x = c.getContext('2d');
+  x.drawImage(g.img, 0, 0);
+  x.globalCompositeOperation = 'source-in';
+  x.fillStyle = color;
+  x.fillRect(0, 0, c.width, c.height);
+  if (g.tints.size > 24) g.tints.clear();
+  g.tints.set(color, c);
+  return c;
+}
+
+function drawGameIcon(ctx, g, x, y, color, headingDeg) {
+  const k = GAME_ICON_PX * g.size / Math.max(g.img.width, g.img.height);
+  const w = g.img.width * k, h = g.img.height * k;
+  ctx.save();
+  ctx.translate(x, y);
+  if (g.orient) ctx.rotate(relHeading(headingDeg) * Math.PI / 180);
+  ctx.drawImage(gameIconTint(g, color), -w / 2, -h / 2, w, h);
   ctx.restore();
 }
 
