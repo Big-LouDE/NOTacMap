@@ -158,7 +158,7 @@ namespace NOTacMap
 				new ConfigurationManagerAttributes { Browsable = false }));
 
 			httpsEnabled = Config.Bind("Server", "HttpsEnabled", false,
-				"EXPERIMENTAL. Offer the phone link over https, so the phone's browser can keep the screen on while the map is open (browsers only allow that on a secure page). Needs access from other devices. The browser warns that the connection is not private, because the certificate is made by this plugin and not by a company, tap through the warning. The map page switches this for you (DEVICES) and keeps this value in step.");
+				"EXPERIMENTAL. Offer the phone link over https, so the phone's browser can keep the screen on while the map is open (browsers only allow that on a secure page). Needs access from other devices. The browser warns that it cannot check the certificate, because the plugin makes it itself and not a company. The link is still encrypted. Only tap through on a link you got from your own PC. The map page switches this for you (DEVICES) and keeps this value in step.");
 			httpsPort = Config.Bind("Server", "HttpsPort", 8124, new ConfigDescription(
 				"The port of the https phone link, next to the normal port. Change it only if something else uses it. Takes effect the next time the game starts or HTTPS is switched.",
 				new AcceptableValueRange<int>(1024, 65535)));
@@ -351,7 +351,7 @@ namespace NOTacMap
 			IDisposable started = TlsFront.Start(address, frontPort, backendPort, certificate);
 			string fingerprint = TlsCertificate.Fingerprint(certificate);
 			server.HttpsFingerprint = fingerprint;
-			Log.LogInfo($"NOTacMap: HTTPS (experimental) is on at https://{address}:{frontPort}/ . The phone's browser will warn that the connection is not private, the certificate is made by this plugin. Tap through the warning. Certificate SHA-256: {fingerprint}");
+			Log.LogInfo($"NOTacMap: HTTPS (experimental) is on at https://{address}:{frontPort}/ . The phone's browser will warn that it cannot check the certificate, because the plugin makes it itself. The link is still encrypted. Only tap through on a link you got from your own PC. Certificate SHA-256: {fingerprint}");
 			return started;
 		}
 
