@@ -438,7 +438,12 @@ namespace NOTacMap
 			public bool friendly;
 			public bool armed;
 			public float lastSeen;
+			public float endedAt = -1f;
 		}
+
+		private static readonly HashSet<int> shockwavesClaimed = new HashSet<int>();
+		private const float ShockwaveWaitSeconds = 1.5f;
+		private const float ShockwaveNear = 600f;
 
 		private static readonly Dictionary<uint, NukeWatch> nukeWatches = new Dictionary<uint, NukeWatch>();
 		private static readonly List<uint> nukeEnded = new List<uint>();
@@ -488,16 +493,46 @@ namespace NOTacMap
 					nukeEnded.Add(entry.Key);
 					continue;
 				}
-				bool armed = w.armed || m.IsArmed();
-				Plugin.Log.LogInfo($"NOTacMap: a nuclear missile ended, {(armed ? "armed: it went off" : "not armed: it did not go off")}.");
-				if (armed)
+				// It has ended (the game disables a missile when it detonates, shot down or not). Whether it really went off is what the game
+				// shows: a nuclear detonation makes a Shockwave object at its place. The warhead's armed flag alone says nothing (it is on for
+				// nearly every warhead), so it is only written to the log. The shockwave can come a moment later, so the plugin looks for it for
+				// a second and a half.
+				if (w.endedAt < 0f)
 				{
-					GlobalPosition at = m.GlobalPosition();
-					float bx = at.x, bz = at.z;
-					recentBlasts.Add(new BlastSnapshot { id = ++blastCounter, x = Round1(bx), z = Round1(bz), r = w.radius, friendly = w.friendly });
-					recentBlastTimes.Add(now);
+					w.endedAt = now;
 				}
-				nukeEnded.Add(entry.Key);
+				GlobalPosition at = m.GlobalPosition();
+				Shockwave found = null;
+				foreach (Shockwave wave in UnityEngine.Object.FindObjectsOfType<Shockwave>())
+				{
+					if (wave == null || shockwavesClaimed.Contains(wave.GetInstanceID()))
+					{
+						continue;
+					}
+					if (FastMath.Distance(wave.transform.GlobalPosition(), at) < ShockwaveNear)
+					{
+						found = wave;
+						break;
+					}
+				}
+				if (found != null)
+				{
+					GlobalPosition place = found.transform.GlobalPosition();
+					if (shockwavesClaimed.Count > 64)
+					{
+						shockwavesClaimed.Clear();
+					}
+					shockwavesClaimed.Add(found.GetInstanceID());
+					Plugin.Log.LogInfo($"NOTacMap: a nuclear missile ended and the game made a shockwave there: it went off (warhead armed flag {(w.armed || m.IsArmed())}).");
+					recentBlasts.Add(new BlastSnapshot { id = ++blastCounter, x = Round1(place.x), z = Round1(place.z), r = w.radius, friendly = w.friendly });
+					recentBlastTimes.Add(now);
+					nukeEnded.Add(entry.Key);
+				}
+				else if (now - w.endedAt > ShockwaveWaitSeconds)
+				{
+					Plugin.Log.LogInfo($"NOTacMap: a nuclear missile ended and the game made no shockwave: it did not go off (warhead armed flag {(w.armed || m.IsArmed())}).");
+					nukeEnded.Add(entry.Key);
+				}
 			}
 			foreach (uint id in nukeEnded)
 			{
