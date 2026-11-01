@@ -523,6 +523,7 @@
       <label data-note="Name, type, side, and distance and bearing from you. Speed, altitude and heading only for your own side."><input type="checkbox" data-group="display" data-key="infoCard" checked>Info card when you tap or hover a unit</label>
       <label data-note="Your aircraft stays on the map as LAST POSITION until you have a new one, and for 10 seconds after."><input type="checkbox" data-group="display" data-key="lastPosition" checked>Mark where you lost your aircraft</label>
       <label data-note="A ring with the real blast radius (from the game's own numbers) around the marked target while you have a nuclear weapon selected, around a nuclear missile that is on its way, and where one went off, for a minute."><input type="checkbox" data-group="display" data-key="nukeRadius" checked>Nuclear blast radius</label>
+      <label data-note="While an unguided bomb is selected: where it would land if you let it go now, worked out the way the cockpit's own bombing display does it, with the time the bomb needs to fall. For a nuclear bomb the blast ring is drawn around that point."><input type="checkbox" data-group="display" data-key="bombImpact" checked>Bomb impact point</label>
     </details>
     <details class="group fold" data-fold="page">
       <summary>Page and names</summary>
@@ -1070,7 +1071,7 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, nukeRadius: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true, mapUp: 'north', iconStyle: 'ours', keepScreenOn: true },
+  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, nukeRadius: true, bombImpact: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true, mapUp: 'north', iconStyle: 'ours', keepScreenOn: true },
   overlays: { runwayGuides: true, weaponRange: true, grid: true, rangeRings: false, scaleBar: true },
   // Which preset is on ('custom' = the boxes as you set them), and the boxes as they were before a preset was switched on.
   preset: { mode: 'custom', mine: null },
@@ -4125,6 +4126,7 @@ function draw() {
   drawJamming(ctx, toScreen);
   drawAttackers(ctx, toScreen);
   drawNukes(ctx, toScreen);
+  drawBombImpact(ctx, toScreen);
   drawLastPosition(ctx, toScreen);
   drawInfoCard(ctx, toScreen);
   drawEdgePulse(ctx);
@@ -4312,7 +4314,8 @@ function drawNukes(ctx, toScreen) {
   // the weapon you have selected
   const station = (latest.loadout || []).find(l => l.selected && l.blast > 0 && l.ammo > 0);
   if (station) {
-    const marked = (latest.markedTargets || []).find(m => m.isPrimary && !m.lost && m.name);
+    // an unguided bomb falls where the impact point is, a guided weapon goes for the marked target
+    const marked = latest.bombImpact && settings.display.bombImpact !== false ? latest.bombImpact : (latest.markedTargets || []).find(m => m.isPrimary && !m.lost && m.name);
     if (marked) {
       const [sx, sy] = toScreen(marked.x, marked.z);
       drawBlastRing(ctx, sx, sy, station.blast, AMBER, 1, true, 'BLAST ' + fmtDistance(station.blast));
@@ -4335,6 +4338,33 @@ function drawNukes(ctx, toScreen) {
     const [sx, sy] = toScreen(b.x, b.z);
     drawBlastRing(ctx, sx, sy, b.r, b.friendly ? AMBER : RED, a, false, 'BLAST ' + fmtDistance(b.r));
   }
+}
+
+// Bomb impact point: where the unguided bomb of the selected station would land now. The plugin works it out the way the cockpit's own
+// bombing display does (the same drag, step lengths and line cast), so the mark sits where the cockpit's pipper is. It is your own cockpit's
+// information, Fair play leaves it as it is.
+function drawBombImpact(ctx, toScreen) {
+  const b = latest && latest.bombImpact;
+  if (!b || settings.display.bombImpact === false || !latest.player) return;
+  const [sx, sy] = toScreen(b.x, b.z);
+  const [px, py] = toScreen(latest.player.x, latest.player.z);
+  ctx.save();
+  // the fall line from you to the point
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 4]);
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(sx, sy); ctx.stroke();
+  ctx.setLineDash([]);
+  if (sx > -40 && sx < viewWidth + 40 && sy > -40 && sy < viewHeight + 40) {
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(sx, sy, 7, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx - 12, sy); ctx.lineTo(sx - 4, sy); ctx.moveTo(sx + 4, sy); ctx.lineTo(sx + 12, sy);
+    ctx.moveTo(sx, sy - 12); ctx.lineTo(sx, sy - 4); ctx.moveTo(sx, sy + 4); ctx.lineTo(sx, sy + 12); ctx.stroke();
+    const dist = Math.hypot(b.x - latest.player.x, b.z - latest.player.z);
+    jamChip(`IMPACT ${fmtDistance(dist)} · ${b.fallTime.toFixed(1)}s`, sx + 16, sy - 10, 'left', '#ffffff');
+  }
+  ctx.restore();
 }
 
 // Last position: where you were when you lost your aircraft (died, ejected, left it). Your aircraft symbol stays there, bright at first

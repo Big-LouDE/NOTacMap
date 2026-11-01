@@ -141,6 +141,15 @@ namespace NOTacMap
 		public float heading;
 	}
 
+	// Where an unguided bomb of your selected station would hit if you let it go now, worked out the way the cockpit's own bombing display does it.
+	internal class BombImpactSnapshot
+	{
+		public float x;
+		public float y;
+		public float z;
+		public float fallTime; // seconds the bomb needs from your altitude, the cockpit's ToF
+	}
+
 	internal class MapSnapshot
 	{
 		// Server-side timestamp (seconds since game start). A background browser tab
@@ -154,6 +163,8 @@ namespace NOTacMap
 		public List<WaypointSnapshot> waypoints = new List<WaypointSnapshot>();
 		public List<MarkedTargetSnapshot> markedTargets = new List<MarkedTargetSnapshot>();
 		public WeaponRangeSnapshot weaponRange;
+		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+		public BombImpactSnapshot bombImpact; // your own selected unguided bomb only
 		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
 		public List<LoadoutStation> loadout; // your own weapon stations, only while you are in an aircraft
 	}
@@ -277,6 +288,97 @@ namespace NOTacMap
 		private static float Round1(float value)
 		{
 			return Mathf.Round(value * 10f) / 10f;
+		}
+
+		// The impact point of an unguided bomb. This is HUDBombingState.CCIPTrajectory and SplitSearchTrajectory of the game, so the point is
+		// where the cockpit's own pipper is: the bomb leaves with the aircraft's speed (less a quarter of gravity for a second), 32 steps of
+		// growing length with drag from the fin area, mass and air density, then the first hit of a line cast along the path, or the sea.
+		private sealed class BombShape
+		{
+			public float dragCoef;
+			public float finArea;
+			public float mass;
+		}
+
+		private static readonly Dictionary<WeaponInfo, BombShape> bombShapes = new Dictionary<WeaponInfo, BombShape>();
+		private static readonly List<GlobalPosition> bombPath = new List<GlobalPosition>(40);
+		private static bool bombErrorLogged;
+
+		private static BombImpactSnapshot BombImpactOf(Aircraft aircraft, WeaponStation station)
+		{
+			try
+			{
+				WeaponInfo info = station != null ? station.WeaponInfo : null;
+				if (info == null || !info.bomb || info.glideBomb || info.gun || station.Ammo <= 0 || aircraft.gearDeployed || aircraft.rb == null)
+				{
+					return null;
+				}
+				if (!bombShapes.TryGetValue(info, out BombShape shape))
+				{
+					Missile prefab = info.weaponPrefab != null ? info.weaponPrefab.GetComponent<Missile>() : null;
+					shape = prefab == null ? null : new BombShape { dragCoef = prefab.GetDragCoef(Mathf.PI / 360f), finArea = prefab.GetFinArea(), mass = info.massPerRound };
+					bombShapes[info] = shape;
+				}
+				if (shape == null || shape.mass <= 0f)
+				{
+					return null;
+				}
+
+				GlobalPosition position = aircraft.GlobalPosition() - Vector3.up * aircraft.definition.spawnOffset.y;
+				Vector3 velocity = aircraft.rb.velocity - Vector3.up * 9.81f * 0.25f + info.muzzleVelocity * aircraft.transform.forward;
+				float step = 0.5f;
+				float drag = 0.5f * shape.dragCoef * LevelInfo.GetAirDensity(aircraft.GlobalPosition().y) * shape.finArea / shape.mass;
+				bombPath.Clear();
+				bombPath.Add(position);
+				bool reachedSea = false;
+				for (int i = 0; i < 32; i++)
+				{
+					step += 0.04f;
+					GlobalPosition before = position;
+					position += velocity * step;
+					if (position.y < 0f)
+					{
+						// the path ends where it crosses the sea
+						float t = before.y / (before.y - position.y);
+						bombPath.Add(before + (position - before) * Mathf.Clamp01(t));
+						reachedSea = true;
+						break;
+					}
+					bombPath.Add(position);
+					velocity -= (Vector3.up * 9.81f + velocity.normalized * drag * velocity.sqrMagnitude) * step;
+				}
+				if (!reachedSea)
+				{
+					return null;   // it would still be in the air after 32 steps: no impact to show, like the cockpit
+				}
+
+				// the first thing the path runs into on the way down, else the sea at its end
+				GlobalPosition impact = bombPath[bombPath.Count - 1];
+				for (int i = 1; i < bombPath.Count; i++)
+				{
+					if (Physics.Linecast(bombPath[i - 1].ToLocalPosition(), bombPath[i].ToLocalPosition(), out RaycastHit hit, ~(int)PhysicsLayers.ExclusionZonesMask))
+					{
+						impact = hit.point.ToGlobalPosition();
+						break;
+					}
+				}
+				return new BombImpactSnapshot
+				{
+					x = Round1(impact.x),
+					y = Round1(impact.y),
+					z = Round1(impact.z),
+					fallTime = Round1(Kinematics.FallTime(aircraft.radarAlt, aircraft.rb.velocity.y))
+				};
+			}
+			catch (System.Exception ex)
+			{
+				if (!bombErrorLogged)
+				{
+					bombErrorLogged = true;
+					Plugin.Log.LogWarning("NOTacMap: working out where your bomb would land failed, the impact point is left out: " + ex.Message);
+				}
+				return null;
+			}
 		}
 
 		// The game itself treats a warhead of more than 100000 as a nuclear one (Missile.CheckExclusionZone keeps the AI out of a zone
@@ -505,6 +607,7 @@ namespace NOTacMap
 
 						snapshot.weaponRange = rangeSnap;
 					}
+					snapshot.bombImpact = BombImpactOf(playerAircraft, station);
 				}
 			}
 
