@@ -74,7 +74,9 @@
     text-transform: uppercase; letter-spacing: 0.05em;
     padding: 4px 8px; cursor: pointer; white-space: nowrap;
   }
-  #controls button:hover, #controls button.active { color: var(--hud-green); border-color: var(--hud-green); }
+  #controls button:hover, #controls button.active, #controls button.rotated { color: var(--hud-green); border-color: var(--hud-green); }
+  #menuRow { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+  #menuRow[hidden] { display: none; }
   .panel {
     position: absolute; top: calc(100% + 4px); right: 0; min-width: 150px;
     background: rgba(0, 10, 0, 0.85); border: 1px solid var(--hud-dim);
@@ -332,9 +334,13 @@
 <div id="themeWarning">Live theme not loaded yet - showing fallback palette. It will switch over by itself once you're in a mission.</div>
 <div id="controls">
   <button id="recenterBtn">&#8982; recenter on me</button>
-  <button id="fullscreenBtn" hidden>&#9974; fullscreen</button>
-  <button id="rotateBtn" hidden title="Turns the page sideways, for a phone that stays locked upright. Tap again to turn it the other way, and once more to switch it off">&#8635; rotate</button>
-  <button id="devicesBtn" hidden>&#9742; devices</button>
+  <button id="mapUpBtn" title="Turns the map so that north is up, or so that your heading is up">&#8982; north up</button>
+  <button id="menuBtn" hidden title="Fullscreen, rotate and devices">&#8943; menu</button>
+  <div id="menuRow" hidden>
+    <button id="fullscreenBtn" hidden>&#9974; fullscreen</button>
+    <button id="rotateBtn" hidden title="Turns the page sideways, for a phone that stays locked upright. Tap again to turn it the other way, and once more to switch it off">&#8635; rotate</button>
+    <button id="devicesBtn" hidden>&#9742; devices</button>
+  </div>
   <button id="displayBtn">&#9881; display</button>
   <button id="filterBtn">&#9776; filter</button>
   <div id="filterPanel" class="panel">
@@ -651,7 +657,7 @@
     <p>FILTER also has presets. Combat shows only what your weapons can hit.</p>
     <p>Range rings and a scale bar help to judge distances. Both are in FILTER.</p>
     <h3>Phone or tablet</h3>
-    <p>DEVICES (top right). Off by default, home network only. The QR code stays hidden until you show it.</p>
+    <p>MENU (top right), then DEVICES. Off by default, home network only. The QR code stays hidden until you show it.</p>
     <h3>Something wrong?</h3>
     <p>Is the game running? Does something else use port 8123? (You can change the port in the config.)</p>
     <p>Feedback and bugs: <a href="https://github.com/Big-LouDE/NOTacMap/issues" target="_blank" rel="noopener noreferrer">github.com/Big-LouDE/NOTacMap/issues</a></p>
@@ -1107,6 +1113,7 @@ function syncDisplayControls() {
   if (unitsSel) unitsSel.value = String(settings.display.units);
   const mapUpSel = document.getElementById('mapUpSelect');
   if (mapUpSel) mapUpSel.value = settings.display.mapUp === 'heading' ? 'heading' : 'north';
+  try { mapUpLabel(); } catch (e) { /* the button is set up further down the page */ }
   updateRingOptions();
   applyTextScale();
 }
@@ -1898,6 +1905,7 @@ document.getElementById('ringSelect').addEventListener('change', e => {
 document.getElementById('mapUpSelect').addEventListener('change', e => {
   settings.display.mapUp = e.target.value === 'heading' ? 'heading' : 'north';
   viewHeadingDeg = 0; viewHeadingAt = 0;
+  try { mapUpLabel(); } catch (e) { /* not set up yet */ }
   saveSettings();
 });
 document.getElementById('unitsSelect').addEventListener('change', e => {
@@ -2015,11 +2023,52 @@ settingsReady.then(() => { updatePresetButtons(); });
 
 // The rotate button is for touch screens. It goes off, left (the top of the page at the right of the screen, so the phone
 // is turned to the left to read it), right, off. The choice is kept on the device.
+// MENU: the buttons that are not needed all the time (fullscreen, rotate, devices) sit in a row that opens under the MENU button and
+// closes again after a tap. The MENU button is only there while at least one of them is available on this device.
+const menuBtn = document.getElementById('menuBtn');
+const menuRow = document.getElementById('menuRow');
+// Both only touch an attribute that really changes: the observer below watches "hidden", and setting it to the value it already has
+// still counts as a change, which would start it again and never stop.
+function closeMenu() { if (!menuRow.hidden) menuRow.hidden = true; menuBtn.classList.remove('active'); }
+function updateMenu() {
+  const any = [...menuRow.children].some(b => !b.hidden);
+  if (menuBtn.hidden === any) menuBtn.hidden = !any;
+  if (!any) closeMenu();
+}
+menuBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  const open = menuRow.hidden;
+  document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
+  menuRow.hidden = !open;
+  menuBtn.classList.toggle('active', open);
+});
+menuRow.addEventListener('click', e => { if (e.target.closest('button')) setTimeout(closeMenu, 0); });
+document.addEventListener('click', e => { if (!menuRow.hidden && !e.target.closest('#menuRow, #menuBtn')) closeMenu(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+new MutationObserver(updateMenu).observe(menuRow, { subtree: true, attributes: true, attributeFilter: ['hidden'] });
+updateMenu();
+
+// MAP UP: a quick switch between north up and your heading up (the same setting as in DISPLAY).
+const mapUpBtn = document.getElementById('mapUpBtn');
+function mapUpLabel() {
+  mapUpBtn.textContent = settings.display.mapUp === 'heading' ? '\u2316 heading up' : '\u2316 north up';
+}
+mapUpBtn.addEventListener('click', () => {
+  settings.display.mapUp = settings.display.mapUp === 'heading' ? 'north' : 'heading';
+  viewHeadingDeg = 0; viewHeadingAt = 0;
+  const sel = document.getElementById('mapUpSelect');
+  if (sel) sel.value = settings.display.mapUp;
+  mapUpLabel();
+  saveSettings();
+});
+mapUpLabel();
+
 const rotateBtn = document.getElementById('rotateBtn');
 if (matchMedia('(pointer: coarse)').matches) rotateBtn.hidden = false;
 function rotateLabel() {
   rotateBtn.textContent = '\u21bb rotate';
   rotateBtn.classList.toggle('active', rotation !== 0);
+  document.getElementById('menuBtn').classList.toggle('rotated', rotation !== 0);
 }
 rotateBtn.addEventListener('click', () => {
   rotation = rotation === 0 ? 90 : rotation === 90 ? 270 : 0;
