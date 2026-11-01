@@ -2599,6 +2599,7 @@ function loadMapImage() {
       if (isNewMap) {
         lastPlayerPos = null;   // the old map's position means nothing on a new map
         lastPosMark = null; lastPosHadPlayer = false; lastPosPlayer = null;
+        attackerMemory.clear();
         bgReady = false;
         bgImage.src = '/mapimage.png?' + Date.now(); // cache-bust when the map changes
       }
@@ -4177,25 +4178,66 @@ function drawEdgePulse(ctx) {
 }
 
 // Threat focus: the aircraft that fired a missile that is heading at you gets a red ring and the chip ATTACKER, when it is on your map.
-// Your cockpit does not tell you who fired, so Fair play hides it.
+// Your cockpit does not tell you who fired, so Fair play hides it. When the missile is gone (evaded, missed, shot down) the ring stays for
+// 30 more seconds like the LAST POSITION marker: it dims, follows the aircraft while it is still on the map, otherwise it stays where it
+// was last seen, and it says what it was and how long ago it fired.
+const ATTACKER_KEEP_MS = 30000;
+const ATTACKER_DIM_FLOOR = 0.3;
+const ATTACKER_FADE_MS = 4000;     // the last seconds fade out
+const attackerMemory = new Map();  // shooter id -> { id, type, name, x, z, live, lastLive }
+
+function updateAttackers(snap) {
+  const now = performance.now();
+  const units = snap.units || [];
+  const byId = new Map(units.map(u => [u.id, u]));
+  for (const a of attackerMemory.values()) a.live = false;
+  for (const m of units) {
+    if (!m.isIncomingMissile || !m.shooterId) continue;
+    const s = byId.get(m.shooterId);
+    if (s) {
+      attackerMemory.set(s.id, { id: s.id, type: s.type, name: s.name, x: s.x, z: s.z, live: true, lastLive: now });
+    } else {
+      const known = attackerMemory.get(m.shooterId);
+      if (known) { known.live = true; known.lastLive = now; }
+    }
+  }
+  for (const [id, a] of attackerMemory) {
+    if (a.live) continue;
+    if (now - a.lastLive >= ATTACKER_KEEP_MS) { attackerMemory.delete(id); continue; }
+    const s = byId.get(id);
+    if (s) { a.x = s.x; a.z = s.z; }
+  }
+}
+
+function attackerAlpha(a, now) {
+  if (a.live) return 1;
+  const age = now - a.lastLive;
+  if (age >= ATTACKER_KEEP_MS) return 0;
+  const dim = 1 - (1 - ATTACKER_DIM_FLOOR) * (age / ATTACKER_KEEP_MS);
+  const left = ATTACKER_KEEP_MS - age;
+  return left < ATTACKER_FADE_MS ? dim * (left / ATTACKER_FADE_MS) : dim;
+}
+
 function drawAttackers(ctx, toScreen) {
   if (settings.display.threatFocus === false || fairPlay()) return;
-  const units = latest.units || [];
-  const byId = new Map(units.map(u => [u.id, u]));
-  const done = new Set();
-  for (const m of units) {
-    if (!m.isIncomingMissile || !m.shooterId || done.has(m.shooterId)) continue;
-    done.add(m.shooterId);
-    const s = byId.get(m.shooterId);
-    if (!s) continue;
-    const [sx, sy] = toScreen(s.x, s.z);
+  const now = performance.now();
+  for (const a of attackerMemory.values()) {
+    const alpha = attackerAlpha(a, now);
+    if (alpha <= 0) continue;
+    const [sx, sy] = toScreen(a.x, a.z);
     if (sx < -100 || sx > viewWidth + 100 || sy < -100 || sy > viewHeight + 100) continue;
     ctx.save();
+    ctx.globalAlpha = alpha;
     ctx.strokeStyle = '#ff2020';
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(sx, sy, 13, 0, Math.PI * 2); ctx.stroke();
-    ctx.restore();
     jamChip('ATTACKER', sx + 16, sy - 32, 'left', '#ff2020');
+    if (!a.live) {
+      setFont(10, false);
+      ctx.fillStyle = '#ff2020';
+      ctx.fillText(`${a.type} · ${Math.round((now - a.lastLive) / 1000)}s ago`, sx + 22, sy - 14);
+    }
+    ctx.restore();
   }
 }
 
@@ -4580,6 +4622,7 @@ function connect() {
     updateLockLoss(latest);
     updatePulse(latest);
     updateLastPosition(latest);
+    updateAttackers(latest);
     // Speed comes straight from the server (Rigidbody.velocity.magnitude, the
     // same value the cockpit HUD reads), not from position deltas. A
     // background tab gets its events in bursts, which would make a delta
