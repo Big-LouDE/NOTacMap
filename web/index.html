@@ -4249,13 +4249,13 @@ function drawAttackers(ctx, toScreen) {
 // Nuclear blast radius. The plugin sends the radius of a nuclear missile or bomb (the game's own Shockwave numbers) with the unit, and
 // with each of your weapon stations. Three things are drawn: a ring with the radius around the marked target while the weapon you have
 // selected is nuclear (so you see how far you must be), a dashed ring where a nuclear missile in the air is going (the target, or you
-// when it is coming at you), and a ring where one went off, for a minute, dimming. Fair play leaves out the ones that are not yours
+// when it is coming at you), and a ring where one went off (the plugin says when one really did, an armed warhead), for a minute, dimming. Fair play leaves out the ones that are not yours
 // or your side's, since your cockpit does not know what is coming.
 const NUKE_KEEP_MS = 60000;
 const NUKE_FADE_MS = 8000;
 const NUKE_DIM_FLOOR = 0.3;
 const nukeMemory = new Map();   // missile id -> the last snapshot of it: { x, z, r, friendly, mine, tx, tz, isIncoming }
-const nukeBlasts = [];          // where one went off: { x, z, r, friendly, t0 }
+const nukeBlasts = [];          // where one went off, from the plugin: { id, x, z, r, friendly, t0 }
 
 function updateNukes(snap) {
   const now = performance.now();
@@ -4265,13 +4265,12 @@ function updateNukes(snap) {
     seen.add(u.id);
     nukeMemory.set(u.id, { id: u.id, x: u.x, z: u.z, r: u.blastRadius, friendly: u.faction === 'friendly', mine: !!u.isMyMissile, tx: u.hasTarget ? u.targetX : null, tz: u.hasTarget ? u.targetZ : null, isIncoming: !!u.isIncomingMissile });
   }
-  for (const [id, n] of nukeMemory) {
-    if (seen.has(id)) continue;
-    nukeMemory.delete(id);
-    // it went off (or was shot down) about where it was last seen; a target close by is where it was heading
-    let x = n.x, z = n.z;
-    if (n.tx !== null && Math.hypot(n.tx - n.x, n.tz - n.z) < 600) { x = n.tx; z = n.tz; }
-    nukeBlasts.push({ x, z, r: n.r, friendly: n.friendly, t0: now });
+  // a missile that is no longer in the data is not necessarily an explosion (shot down before it was armed, out of sight): the ring
+  // where one went off comes from the plugin, which knows whether the warhead was armed when it ended
+  for (const id of nukeMemory.keys()) if (!seen.has(id)) nukeMemory.delete(id);
+  for (const b of snap.blasts || []) {
+    if (nukeBlasts.some(k => k.id === b.id)) continue;
+    nukeBlasts.push({ id: b.id, x: b.x, z: b.z, r: b.r, friendly: !!b.friendly, t0: now });
   }
   for (let i = nukeBlasts.length - 1; i >= 0; i--) if (now - nukeBlasts[i].t0 >= NUKE_KEEP_MS) nukeBlasts.splice(i, 1);
 }

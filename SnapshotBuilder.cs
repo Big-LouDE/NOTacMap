@@ -151,6 +151,17 @@ namespace NOTacMap
 		public float fallTime; // seconds the bomb needs from your altitude, the cockpit's ToF
 	}
 
+	// A nuclear weapon that really went off: the game's missile was armed when it ended (a shot down or timed out one that was not armed only
+	// fizzles, and one that is just out of sight is not an explosion either). Sent for a few seconds so a slow page does not miss it.
+	internal class BlastSnapshot
+	{
+		public uint id;
+		public float x;
+		public float z;
+		public float r;
+		public bool friendly;
+	}
+
 	internal class MapSnapshot
 	{
 		// Server-side timestamp (seconds since game start). A background browser tab
@@ -164,6 +175,8 @@ namespace NOTacMap
 		public List<WaypointSnapshot> waypoints = new List<WaypointSnapshot>();
 		public List<MarkedTargetSnapshot> markedTargets = new List<MarkedTargetSnapshot>();
 		public WeaponRangeSnapshot weaponRange;
+		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+		public List<BlastSnapshot> blasts;
 		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
 		public BombImpactSnapshot bombImpact; // your own selected unguided bomb only
 		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
@@ -416,6 +429,94 @@ namespace NOTacMap
 			return reach;
 		}
 
+		// Nuclear missiles that are on the map: where each was last seen and whether its warhead is armed, so that the end of one can be told
+		// from an out of sight one. A missile that is disabled (the game does that the moment it detonates, shot down or not) or gone has ended.
+		private sealed class NukeWatch
+		{
+			public Missile missile;
+			public float x, z, radius;
+			public bool friendly;
+			public bool armed;
+			public float lastSeen;
+		}
+
+		private static readonly Dictionary<uint, NukeWatch> nukeWatches = new Dictionary<uint, NukeWatch>();
+		private static readonly List<uint> nukeEnded = new List<uint>();
+		private static readonly List<BlastSnapshot> recentBlasts = new List<BlastSnapshot>();
+		private static readonly List<float> recentBlastTimes = new List<float>();
+		private static uint blastCounter;
+		private const float BlastSendSeconds = 6f;
+		private const float NukeLostSeconds = 20f;
+
+		private static void WatchNuke(uint id, Missile missile, float x, float z, float radius, bool friendly)
+		{
+			if (!nukeWatches.TryGetValue(id, out NukeWatch w))
+			{
+				w = new NukeWatch();
+				nukeWatches[id] = w;
+			}
+			w.missile = missile;
+			w.x = x;
+			w.z = z;
+			w.radius = radius;
+			w.friendly = friendly;
+			w.armed = missile.IsArmed();
+			w.lastSeen = Time.realtimeSinceStartup;
+		}
+
+		// Called every update after the units are built: turns the ended nuclear missiles into blasts and keeps the blasts of the last seconds.
+		private static void UpdateBlasts(MapSnapshot snapshot)
+		{
+			float now = Time.realtimeSinceStartup;
+			nukeEnded.Clear();
+			foreach (KeyValuePair<uint, NukeWatch> entry in nukeWatches)
+			{
+				NukeWatch w = entry.Value;
+				Missile m = w.missile;
+				bool gone = m == null;
+				if (!gone && !m.disabled)
+				{
+					if (now - w.lastSeen > NukeLostSeconds)
+					{
+						nukeEnded.Add(entry.Key);   // out of sight for a long time: nothing to say about it
+					}
+					continue;
+				}
+				if (gone)
+				{
+					// destroyed without being seen disabled first: a mission ending or a long hitch, not something to report as an explosion
+					nukeEnded.Add(entry.Key);
+					continue;
+				}
+				bool armed = w.armed || m.IsArmed();
+				Plugin.Log.LogInfo($"NOTacMap: a nuclear missile ended, {(armed ? "armed: it went off" : "not armed: it did not go off")}.");
+				if (armed)
+				{
+					GlobalPosition at = m.GlobalPosition();
+					float bx = at.x, bz = at.z;
+					recentBlasts.Add(new BlastSnapshot { id = ++blastCounter, x = Round1(bx), z = Round1(bz), r = w.radius, friendly = w.friendly });
+					recentBlastTimes.Add(now);
+				}
+				nukeEnded.Add(entry.Key);
+			}
+			foreach (uint id in nukeEnded)
+			{
+				nukeWatches.Remove(id);
+			}
+			for (int i = recentBlasts.Count - 1; i >= 0; i--)
+			{
+				if (now - recentBlastTimes[i] > BlastSendSeconds)
+				{
+					recentBlasts.RemoveAt(i);
+					recentBlastTimes.RemoveAt(i);
+				}
+			}
+			if (recentBlasts.Count > 0)
+			{
+				snapshot.blasts = new List<BlastSnapshot>(recentBlasts);
+			}
+		}
+
 		// Per kind of weapon: the prefab's yield does not change, so it is looked up once.
 		private static readonly Dictionary<WeaponInfo, float> weaponBlast = new Dictionary<WeaponInfo, float>();
 
@@ -476,6 +577,9 @@ namespace NOTacMap
 		{
 			if (DynamicMap.i == null)
 			{
+				nukeWatches.Clear();
+				recentBlasts.Clear();
+				recentBlastTimes.Clear();
 				return null;
 			}
 
@@ -732,6 +836,10 @@ namespace NOTacMap
 					{
 						snap.isMissile = true;
 						snap.blastRadius = BlastRadiusOf(missile.GetYield());
+						if (snap.blastRadius > 0f)
+						{
+							WatchNuke(id.Id, missile, snap.x, snap.z, snap.blastRadius, faction == "friendly");
+						}
 						snap.isMyMissile = playerAircraft != null && missile.owner == playerAircraft;
 						// Any friendly missile is exactly as visible to a teammate as any
 						// other friendly unit already is via trackingDatabase/factionUnits -
@@ -833,6 +941,8 @@ namespace NOTacMap
 					}
 					foreach (uint key in gone) lastHeadings.Remove(key);
 				}
+
+				UpdateBlasts(snapshot);
 
 				foreach (Airbase airbase in localHq.GetAirbases())
 				{
