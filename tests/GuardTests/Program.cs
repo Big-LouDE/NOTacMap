@@ -23,6 +23,9 @@ internal static class Program
         string path = "/", string query = "", string cookie = null, string fetchSite = null)
         => g.Evaluate(host, origin, from, method, path, query, cookie, fetchSite);
 
+    static GuardDecision Ask2(RequestGuard g, string host, IPAddress from, string method = "GET", string path = "/", string query = "", string cookie = null, bool viaFront = false)
+        => g.Evaluate(host, null, from, method, path, query, cookie, null, viaFront);
+
     static void Main()
     {
         var lan = new RequestGuard(8123, "192.168.1.10", TOKEN);
@@ -225,6 +228,52 @@ internal static class Program
         FrontPeers.Remove(front);
         Check("front: removed, the connection is judged by its own address again", FrontPeers.Resolve(front).Equals(front.Address));
         Check("front: the list is empty again", FrontPeers.Count == 0);
+
+        // ---- the HTTPS hardening
+        // The secure host is never this PC: a request that names it and looks local (or has no address) is refused, whatever else is true.
+        Check("secure host from loopback is refused", Ask(https, HH, null, Pc, cookie: "notacmap_t=" + TOKEN).Status == 403);
+        Check("secure host from loopback is refused without anything else", Ask(https, HH, null, Pc).Status == 403);
+        Check("secure host from the mapped loopback form is refused", Ask(https, HH, null, IPAddress.Parse("::ffff:127.0.0.1"), cookie: "notacmap_t=" + TOKEN).Status == 403);
+        Check("secure host from IPv6 loopback is refused", Ask(https, HH, null, IPAddress.IPv6Loopback).Status == 403);
+        Check("secure host with no address is refused", Ask(https, HH, null, null, cookie: "notacmap_t=" + TOKEN).Status == 403);
+        Check("secure host in another case from loopback is refused", Ask(https, HH.ToUpperInvariant(), null, Pc).Status == 403);
+        Check("the plain host from loopback is still this PC", Ask(https, "localhost:8123", null, Pc).Status == 0);
+        Check("the plain network host from loopback is still this PC", Ask(https, LH, null, Pc).Status == 0);
+        Check("the secure host from a phone with the secret is let in", Ask(https, HH, null, Phone, cookie: "notacmap_t=" + TOKEN).Status == 0);
+
+        // the cookie: Secure and __Host- on the https host, the old one on the plain host
+        GuardDecision viaSecure = Ask(https, HH, null, Phone, query: "t=" + TOKEN);
+        GuardDecision viaPlain = Ask(https, LH, null, Phone, query: "t=" + TOKEN);
+        Check("https host: the cookie has the __Host- name", viaSecure.Status == 302 && viaSecure.SetCookie.StartsWith("__Host-notacmap_t=" + TOKEN));
+        Check("https host: the cookie is Secure, HttpOnly, SameSite=Lax, Path=/ and has no Domain", viaSecure.SetCookie.Contains("; Secure") && viaSecure.SetCookie.Contains("; HttpOnly") && viaSecure.SetCookie.Contains("SameSite=Lax") && viaSecure.SetCookie.Contains("Path=/") && !viaSecure.SetCookie.Contains("Domain"));
+        Check("plain host: the old name, HttpOnly, no Secure", viaPlain.Status == 302 && viaPlain.SetCookie.StartsWith("notacmap_t=" + TOKEN) && !viaPlain.SetCookie.Contains("Secure") && viaPlain.SetCookie.Contains("HttpOnly") && viaPlain.SetCookie.Contains("SameSite=Lax"));
+        Check("the __Host- cookie is accepted", Ask(https, HH, null, Phone, cookie: "__Host-notacmap_t=" + TOKEN).Status == 0);
+        Check("the __Host- cookie is accepted on the plain host too", Ask(https, LH, null, Phone, cookie: "__Host-notacmap_t=" + TOKEN).Status == 0);
+        Check("either name is accepted when both are sent", Ask(https, HH, null, Phone, cookie: "x=1; notacmap_t=wrong; __Host-notacmap_t=" + TOKEN).Status == 0);
+        Check("a wrong __Host- cookie is refused as a wrong secret", Ask(https, HH, null, Phone, cookie: "__Host-notacmap_t=wrongwrongwrongwrongwrongwrong").Status == 401);
+        Check("the old cookie still works with HTTPS off", Ask(lan, LH, null, Phone, cookie: "notacmap_t=" + TOKEN).Status == 0);
+        Check("with HTTPS off the plain host gets the plain cookie", Ask(lan, LH, null, Phone, query: "t=" + TOKEN).SetCookie.StartsWith("notacmap_t="));
+
+        // HttpsOnly: other devices only through the front, this PC unaffected
+        var only = new RequestGuard(8123, "192.168.1.10", TOKEN, 8124, true);
+        var fronted = new IPEndPoint(IPAddress.Parse("192.168.1.10"), 50101);
+        FrontPeers.Add(fronted, Phone);
+        Check("IsFronted: a listed connection", FrontPeers.IsFronted(fronted));
+        Check("IsFronted: an unlisted one", !FrontPeers.IsFronted(new IPEndPoint(IPAddress.Parse("192.168.1.10"), 50102)));
+        Check("IsFronted: the mapped form of a listed one", FrontPeers.IsFronted(new IPEndPoint(IPAddress.Parse("::ffff:192.168.1.10"), 50101)));
+        Check("IsFronted: null", !FrontPeers.IsFronted(null));
+        Check("HttpsOnly: through the front with the secret is let in", Ask2(only, HH, Phone, cookie: "notacmap_t=" + TOKEN, viaFront: true).Status == 0);
+        Check("HttpsOnly: a link with the secret through the front is sent on", Ask2(only, HH, Phone, query: "t=" + TOKEN, viaFront: true).Status == 302);
+        Check("HttpsOnly: a request from the network that did not come through the front is refused", Ask2(only, LH, Phone, cookie: "notacmap_t=" + TOKEN, viaFront: false).Status == 403);
+        Check("HttpsOnly: the refusal says why", Ask2(only, LH, Phone, cookie: "notacmap_t=" + TOKEN, viaFront: false).Reason.Contains("HttpsOnly"));
+        Check("HttpsOnly: even the secret link on the plain port is refused", Ask2(only, LH, Phone, query: "t=" + TOKEN, viaFront: false).Status == 403);
+        Check("HttpsOnly: this PC on loopback is unaffected", Ask2(only, "localhost:8123", Pc, viaFront: false).Status == 0);
+        Check("HttpsOnly: this PC reaching its own plain address is unaffected", Ask2(only, LH, Pc, viaFront: false).Status == 0);
+        Check("HttpsOnly: this PC may still switch things", Ask2(only, "localhost:8123", Pc, method: "POST", path: "/lan", viaFront: false).Status == 0);
+        Check("HttpsOnly off: a plain request from the network works as before", Ask2(https, LH, Phone, cookie: "notacmap_t=" + TOKEN, viaFront: false).Status == 0);
+        Check("HttpsOnly without HTTPS on does nothing", Ask2(new RequestGuard(8123, "192.168.1.10", TOKEN, 0, true), LH, Phone, cookie: "notacmap_t=" + TOKEN, viaFront: false).Status == 0);
+        Check("HttpsOnly with LAN off still refuses the network as before", Ask2(new RequestGuard(8123, null, null, 0, true), "localhost:8123", Phone, viaFront: false).Status == 403);
+        FrontPeers.Remove(fronted);
 
         Console.WriteLine($"\n{pass} passed, {fail} failed");
         Environment.Exit(fail == 0 ? 0 : 1);

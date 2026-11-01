@@ -415,6 +415,9 @@
       <label><input type="checkbox" id="httpsToggle">Secure link (HTTPS, experimental)</label>
       <div class="note" id="httpsNote">Lets the phone keep its screen on while the map is open. The phone's browser warns that the connection is not private, because the certificate is made by this plugin. Tap through the warning, once for each browser session.</div>
       <div class="note lan-error" id="httpsError" hidden></div>
+      <div class="note" id="httpsStartNote" hidden>Starting HTTPS. The certificate is made the first time, this can take a few seconds.</div>
+      <div class="note" id="httpsFingerprintBox" hidden>Certificate SHA-256:<br><span id="httpsFingerprint"></span><br>Compare this with the certificate details on your phone before you tap through.</div>
+      <div class="note" id="httpsOnlyNote" hidden>HttpsOnly is on in the config: other devices can only use the secure link, the plain link refuses them.</div>
       <button type="button" id="lanReveal" class="mini-btn">Show QR code and link</button>
       <div id="lanSecret" hidden>
         <canvas id="lanQr" title="Scan with the phone camera"></canvas>
@@ -1723,7 +1726,15 @@ function applyLan(info) {
   const changed = (lanInfo ? lanInfo.url : null) !== url;
   lanInfo = url ? info : null;
   document.getElementById('lanToggle').checked = !!url;
-  document.getElementById('httpsToggle').checked = !!(url && info.https);
+  document.getElementById('httpsToggle').checked = !!(url && (info.https || info.httpsStarting));
+  const starting = !!(url && info.httpsStarting);
+  document.getElementById('httpsStartNote').hidden = !starting;
+  const fingerprint = url && info.https && info.certSha256 ? info.certSha256 : '';
+  document.getElementById('httpsFingerprint').textContent = fingerprint;
+  document.getElementById('httpsFingerprintBox').hidden = !fingerprint;
+  document.getElementById('httpsOnlyNote').hidden = !(url && info.https && info.httpsOnly);
+  if (url && info.httpsError) showHttpsError(info.httpsError);
+  if (starting) pollHttps();
   document.getElementById('lanOn').hidden = !url;
   document.getElementById('lanStatus').textContent = url
     ? 'On. Home network only.'
@@ -1875,13 +1886,28 @@ document.getElementById('lanNewLink').addEventListener('click', () => {
   showLanError('');
   postLan({ newLink: true }).then(res => { if (res.error) showLanError(res.error); });
 });
-document.getElementById('httpsToggle').addEventListener('change', e => {
+function showHttpsError(message) {
   const line = document.getElementById('httpsError');
-  line.hidden = true;
+  line.textContent = message || '';
+  line.hidden = !message;
+}
+// While HTTPS is starting (the certificate is made on a worker thread), the answer to /lan says so, and the page asks again
+// until it is up or has failed.
+let httpsPollTimer = null, httpsPollCount = 0;
+function pollHttps() {
+  if (httpsPollTimer) return;
+  httpsPollTimer = setTimeout(() => {
+    httpsPollTimer = null;
+    if (++httpsPollCount > 40) { httpsPollCount = 0; return; }
+    refreshLan();
+  }, 700);
+}
+document.getElementById('httpsToggle').addEventListener('change', e => {
+  showHttpsError('');
+  httpsPollCount = 0;
   const want = e.target.checked;
   postLan({ https: want }).then(res => {
-    if (res.error) { line.textContent = res.error; line.hidden = false; }
-    document.getElementById('httpsToggle').checked = !!(res.enabled && res.https);
+    if (res.error) showHttpsError(res.error);
   });
 });
 document.getElementById('lanToggle').addEventListener('change', e => {

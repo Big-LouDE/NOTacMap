@@ -17,6 +17,7 @@ namespace NOTacMap
         public readonly List<string> Lines = new List<string>();
         public void LogWarning(string m) { lock (Lines) Lines.Add("WARN " + m); }
         public void LogInfo(string m) { lock (Lines) Lines.Add("INFO " + m); }
+        public void LogDebug(string m) { lock (Lines) Lines.Add("DEBUG " + m); }
     }
     internal static class Plugin
     {
@@ -49,6 +50,13 @@ namespace NOTacMap
     }
 }
 
+internal sealed class Probe : IDisposable
+{
+    private readonly Action onDispose;
+    public Probe(Action onDispose) { this.onDispose = onDispose; }
+    public void Dispose() { onDispose(); }
+}
+
 internal static class Program
 {
     static int pass, fail;
@@ -63,6 +71,163 @@ internal static class Program
         if (origin != null) req.Headers.TryAddWithoutValidation("Origin", origin);
         if (body != null) req.Content = new StringContent(body, System.Text.Encoding.UTF8, contentType ?? "text/plain");
         return await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
+    }
+
+
+    static async Task<bool> WaitFor(Func<bool> condition, int ms = 6000)
+    {
+        for (int waited = 0; waited < ms; waited += 50)
+        {
+            if (condition()) return true;
+            await Task.Delay(50);
+        }
+        return condition();
+    }
+
+    static X509Certificate2 NewCertificate()
+    {
+        using (var rsa = RSA.Create(2048))
+        {
+            var request = new CertificateRequest("CN=NOTacMap test", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            var made = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(2));
+            return new X509Certificate2(made.Export(X509ContentType.Pfx, "x"), "x");
+        }
+    }
+
+    static int FreePort()
+    {
+        var l = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        l.Start();
+        int p = ((IPEndPoint)l.LocalEndpoint).Port;
+        l.Stop();
+        return p;
+    }
+
+    // A plain echo server standing in for the web server behind the front.
+    static System.Net.Sockets.TcpListener StartEcho(int port)
+    {
+        var l = new System.Net.Sockets.TcpListener(IPAddress.Loopback, port);
+        l.Start();
+        new Thread(() =>
+        {
+            while (true)
+            {
+                System.Net.Sockets.TcpClient c;
+                try { c = l.AcceptTcpClient(); } catch { return; }
+                new Thread(() =>
+                {
+                    try
+                    {
+                        var s = c.GetStream(); var b = new byte[4096]; int n;
+                        while ((n = s.Read(b, 0, b.Length)) > 0) { s.Write(b, 0, n); s.Flush(); }
+                    }
+                    catch { }
+                    try { c.Close(); } catch { }
+                }) { IsBackground = true }.Start();
+            }
+        }) { IsBackground = true }.Start();
+        return l;
+    }
+
+    // True when the other side has closed the connection (a read returns 0 or fails) within the time. False when it is still open.
+    static bool ClosedWithin(Stream stream, int ms)
+    {
+        var done = new ManualResetEvent(false);
+        bool closed = false;
+        var t = new Thread(() =>
+        {
+            try { var b = new byte[16]; closed = stream.Read(b, 0, 1) <= 0; }
+            catch { closed = true; }
+            done.Set();
+        }) { IsBackground = true };
+        t.Start();
+        return done.WaitOne(ms) && closed;
+    }
+
+    static System.Net.Security.SslStream TlsClient(System.Net.Sockets.TcpClient c)
+    {
+        var ssl = new System.Net.Security.SslStream(c.GetStream(), false, (s, cert, chain, errors) => true);
+        ssl.AuthenticateAsClient("test");
+        return ssl;
+    }
+
+    // Stands in for the web server where a real one cannot listen (HttpListener needs administrator rights for the network address): it takes
+    // the request head, asks FrontPeers who it really is and what the guard says, and answers with the guard's status.
+    static System.Net.Sockets.TcpListener StartGuardBackend(IPAddress address, int port, Func<RequestGuard> guard)
+    {
+        var l = new System.Net.Sockets.TcpListener(address, port);
+        l.Start();
+        new Thread(() =>
+        {
+            while (true)
+            {
+                System.Net.Sockets.TcpClient c;
+                try { c = l.AcceptTcpClient(); } catch { return; }
+                new Thread(() =>
+                {
+                    try
+                    {
+                        var s = c.GetStream();
+                        var head = new System.Text.StringBuilder(); int b;
+                        while (!head.ToString().EndsWith("\r\n\r\n") && (b = s.ReadByte()) >= 0) head.Append((char)b);
+                        string[] lines = head.ToString().Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
+                        string[] first = lines[0].Split(' ');
+                        string host = null, cookie = null;
+                        foreach (string line in lines) { if (line.StartsWith("Host: ")) host = line.Substring(6); if (line.StartsWith("Cookie: ")) cookie = line.Substring(8); }
+                        var remote = (IPEndPoint)c.Client.RemoteEndPoint;
+                        string path = first[1]; string query = "";
+                        int q = path.IndexOf('?'); if (q >= 0) { query = path.Substring(q); path = path.Substring(0, q); }
+                        GuardDecision d = guard().Evaluate(host, null, FrontPeers.Resolve(remote), first[0], path, query, cookie, null, FrontPeers.IsFronted(remote));
+                        string reply = "HTTP/1.1 " + (d.Status == 0 ? 200 : d.Status) + " X\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
+                        var bytes = System.Text.Encoding.ASCII.GetBytes(reply);
+                        s.Write(bytes, 0, bytes.Length); s.Flush();
+                    }
+                    catch { }
+                    try { c.Close(); } catch { }
+                }) { IsBackground = true }.Start();
+            }
+        }) { IsBackground = true }.Start();
+        return l;
+    }
+
+    // One request over TLS to the front, from this machine's own network address. Returns the status of the answer, or -1.
+    static int AskThroughFront(IPAddress from, IPAddress to, int port, string host, string target, string cookie = null)
+    {
+        try
+        {
+            using (var c = new System.Net.Sockets.TcpClient(new IPEndPoint(from, 0)))
+            {
+                c.Connect(to, port);
+                var ssl = TlsClient(c);
+                string req = "GET " + target + " HTTP/1.1\r\nHost: " + host + "\r\n" + (cookie != null ? "Cookie: " + cookie + "\r\n" : "") + "Connection: close\r\n\r\n";
+                var bytes = System.Text.Encoding.ASCII.GetBytes(req);
+                ssl.Write(bytes, 0, bytes.Length); ssl.Flush();
+                var line = new System.Text.StringBuilder(); int b;
+                while ((b = ssl.ReadByte()) >= 0 && b != '\n') line.Append((char)b);
+                return int.Parse(line.ToString().Split(' ')[1]);
+            }
+        }
+        catch { return -1; }
+    }
+
+    // The same without TLS and without the front: straight to the web server.
+    static int AskDirect(IPAddress from, IPAddress to, int port, string host, string target, string cookie = null)
+    {
+        try
+        {
+            using (var c = new System.Net.Sockets.TcpClient(new IPEndPoint(from, 0)))
+            {
+                c.Connect(to, port);
+                var s = c.GetStream();
+                string req = "GET " + target + " HTTP/1.1\r\nHost: " + host + "\r\n" + (cookie != null ? "Cookie: " + cookie + "\r\n" : "") + "Connection: close\r\n\r\n";
+                var bytes = System.Text.Encoding.ASCII.GetBytes(req);
+                s.Write(bytes, 0, bytes.Length); s.Flush();
+                var line = new System.Text.StringBuilder(); int b;
+                while ((b = s.ReadByte()) >= 0 && b != '\n') line.Append((char)b);
+                return int.Parse(line.ToString().Split(' ')[1]);
+            }
+        }
+        catch { return -1; }
     }
 
     static void Main() { Run().GetAwaiter().GetResult(); }
@@ -396,16 +561,22 @@ internal static class Program
 
             var j = new MapServer(port, null, null);
             j.ConfigureHttps(true, httpsPort);
-            j.HttpsFrontStart = (address, frontPort, backendPort) => TlsFront.Start(address, frontPort, backendPort, cert);
+            int madeCalls = 0;
+            j.HttpsFrontStart = (address, frontPort, backendPort) => { Interlocked.Increment(ref madeCalls); return TlsFront.Start(address, frontPort, backendPort, cert); };
+            var reached = new List<bool>();
+            j.HttpsReached = on => { lock (reached) reached.Add(on); };
+            j.HttpsFingerprint = "AA:BB:CC";
             j.Start();
             j.EnableLan(tok, "127.0.0.2");
             Console.WriteLine("J: 127.0.0.2 as a stand-in LAN address " + (j.LanActive ? "accepted" : "refused by Windows, J skipped"));
             if (j.LanActive)
             {
-                Check("J HTTPS is on and the phone link is an https link", j.HttpsActive && j.LanUrl.StartsWith("https://127.0.0.2:" + httpsPort + "/?t="));
+                Check("J HTTPS comes up on its own thread and then the link is https", await WaitFor(() => j.HttpsActive) && j.LanUrl.StartsWith("https://127.0.0.2:" + httpsPort + "/?t="));
+                Check("J the plugin was told the state was reached", await WaitFor(() => { lock (reached) return reached.Contains(true); }));
                 r = await Send("GET", B + "/lan");
                 string lanJson = await r.Content.ReadAsStringAsync();
                 Check("J /lan says https is on, wanted, and its port", lanJson.Contains("\"https\":true") && lanJson.Contains("\"httpsWanted\":true") && lanJson.Contains("\"httpsPort\":" + httpsPort));
+                Check("J /lan carries the certificate fingerprint for this PC", lanJson.Contains("\"certSha256\":\"AA:BB:CC\"") && lanJson.Contains("\"httpsStarting\":false") && lanJson.Contains("\"httpsOnly\":false"));
                 r = await viaHttps("GET", "/about", null);
                 Check("J a page comes through TLS: 200", r.StatusCode == HttpStatusCode.OK && (await r.Content.ReadAsStringAsync()).Contains("\"version\""));
                 r = await viaHttps("POST", "/lan", "{\"https\":true}");
@@ -428,6 +599,7 @@ internal static class Program
 
                 j.SetHttps(false);
                 Check("J off: the link is plain again", !j.HttpsActive && j.LanUrl.StartsWith("http://127.0.0.2:" + port + "/?t="));
+                Check("J off: the plugin was told it is off", await WaitFor(() => { lock (reached) return reached.Contains(false); }));
                 bool secureGone;
                 try { await viaHttps("GET", "/about", null); secureGone = false; } catch (Exception) { secureGone = true; }
                 Check("J off: the https port stops answering", secureGone);
@@ -435,35 +607,237 @@ internal static class Program
                 Check("J off: the plain address still answers", r.StatusCode == HttpStatusCode.OK);
                 Check("J off: a wanted-but-off state is shown", (await (await Send("GET", B + "/lan")).Content.ReadAsStringAsync()).Contains("\"https\":false"));
 
-                Check("J on again: it starts and reports true", j.SetHttps(true) && j.HttpsActive);
+                j.SetHttps(true);
+                Check("J on again: it starts", await WaitFor(() => j.HttpsActive));
                 r = await viaHttps("GET", "/about", null);
                 Check("J on again: a page comes through", r.StatusCode == HttpStatusCode.OK);
 
-                // switching LAN off takes the front with it, and on again brings it back (HTTPS was still wanted)
+                // switching LAN off takes the front and its open connections with it, and on again brings it back (HTTPS was still wanted)
+                var evOff = await viaHttps("GET", "/events", null);
+                var offStream = await evOff.Content.ReadAsStreamAsync();
+                var offBuf = new byte[64]; await offStream.ReadAsync(offBuf, 0, offBuf.Length);
                 j.DisableLan();
+                Check("J LAN off: an open stream through the front is closed", ClosedWithin(offStream, 4000));
+                evOff.Dispose();
                 Check("J LAN off: no front is left", !j.HttpsActive);
                 secureGone = false;
                 try { await viaHttps("GET", "/about", null); } catch (Exception) { secureGone = true; }
                 Check("J LAN off: the https port stops answering", secureGone);
                 j.EnableLan(tok, "127.0.0.2");
-                Check("J LAN on again: the front is back", j.HttpsActive);
+                Check("J LAN on again: the front is back", await WaitFor(() => j.HttpsActive));
+
+                // a new link closes everything that came through the front, and the front starts again
+                var evLink = await viaHttps("GET", "/events", null);
+                var linkStream = await evLink.Content.ReadAsStreamAsync();
+                var linkBuf = new byte[64]; await linkStream.ReadAsync(linkBuf, 0, linkBuf.Length);
+                int madeBefore = madeCalls;
+                j.EnableLan("fedcba9876543210fedcba9876543210", "127.0.0.2");
+                Check("J a new link: an open stream through the front is closed", ClosedWithin(linkStream, 4000));
+                evLink.Dispose();
+                Check("J a new link: the front starts again", await WaitFor(() => j.HttpsActive && madeCalls > madeBefore));
+                r = await viaHttps("GET", "/about", null);
+                Check("J a new link: the https link answers again", r.StatusCode == HttpStatusCode.OK);
+
+                // moving the address closes the connections of the old front and starts a new one
+                var evMove = await viaHttps("GET", "/events", null);
+                var moveStream = await evMove.Content.ReadAsStreamAsync();
+                var moveBuf = new byte[64]; await moveStream.ReadAsync(moveBuf, 0, moveBuf.Length);
+                j.SetLanAddress("127.0.0.3");
+                Check("J the address moves: an open stream through the old front is closed", ClosedWithin(moveStream, 4000));
+                evMove.Dispose();
+                Check("J the address moves: the https link follows", await WaitFor(() => j.HttpsActive && j.LanUrl.StartsWith("https://127.0.0.3:")));
             }
-            // a front that cannot start leaves the plain link working
+            // a front that cannot start leaves the plain link working, and the config is never told it is on
             var bad = new MapServer(port + 8, null, null);
             bad.ConfigureHttps(true, port + 9);
+            var badReached = new List<bool>();
+            bad.HttpsReached = on => { lock (badReached) badReached.Add(on); };
             bad.HttpsFrontStart = (address, frontPort, backendPort) => { throw new InvalidOperationException("no certificate"); };
             bad.Start();
             bad.EnableLan(tok, "127.0.0.2");
             if (bad.LanActive)
             {
+                await Task.Delay(800);
                 Check("J a front that cannot start: HTTPS stays off, the link stays plain", !bad.HttpsActive && bad.LanUrl.StartsWith("http://"));
+                Check("J a front that cannot start: the plugin is never told it is on", badReached.Count == 0);
+                string badJson = await (await Send("GET", "http://127.0.0.1:" + (port + 8) + "/lan")).Content.ReadAsStringAsync();
+                Check("J a front that cannot start: /lan says why and that the wish is gone", badJson.Contains("\"httpsError\":\"HTTPS could not start") && badJson.Contains("\"httpsWanted\":false") && badJson.Contains("\"httpsStarting\":false"));
                 Check("J a front that cannot start: it is said in the log", Plugin.Log.Lines.Exists(l => l.Contains("HTTPS could not start")));
                 r = await Send("GET", "http://127.0.0.2:" + (port + 8) + "/about");
                 Check("J a front that cannot start: the plain address still answers", r.StatusCode == HttpStatusCode.OK);
             }
             bad.Stop();
+
+            // a start that is overtaken is thrown away: switched off while it was still being made
+            var slow = new MapServer(port + 10, null, null);
+            slow.ConfigureHttps(true, port + 11);
+            var slowReached = new List<bool>();
+            slow.HttpsReached = on => { lock (slowReached) slowReached.Add(on); };
+            int slowDisposed = 0;
+            var gate = new ManualResetEvent(false);
+            slow.HttpsFrontStart = (address, frontPort, backendPort) => { gate.WaitOne(5000); return new Probe(() => Interlocked.Increment(ref slowDisposed)); };
+            slow.Start();
+            slow.EnableLan(tok, "127.0.0.2");
+            if (slow.LanActive)
+            {
+                string startingJson = await (await Send("GET", "http://127.0.0.1:" + (port + 10) + "/lan")).Content.ReadAsStringAsync();
+                Check("J while the certificate is being made /lan says starting, and the link is still http", startingJson.Contains("\"httpsStarting\":true") && !slow.HttpsActive && slow.LanUrl.StartsWith("http://"));
+                slow.SetHttps(false);
+                gate.Set();
+                Check("J a start that was switched off meanwhile is thrown away", await WaitFor(() => slowDisposed == 1) && !slow.HttpsActive);
+                lock (slowReached) Check("J and it is only reported as off, never as on", !slowReached.Contains(true) && slowReached.Contains(false));
+
+                // overtaken by another address
+                gate.Reset();
+                slow.SetHttps(true);
+                slow.SetLanAddress("127.0.0.3");
+                gate.Set();
+                Check("J a start for the old address is thrown away after a move", await WaitFor(() => slowDisposed >= 2));
+            }
+            slow.Stop();
             j.Stop();
             Thread.Sleep(300);
+        }
+
+        // ===== K. TlsFront limits, with short deadlines (they are 10 seconds in the game)
+        {
+            Check("K the peer list starts empty", await WaitFor(() => FrontPeers.Count == 0));
+            X509Certificate2 kcert = NewCertificate();
+            int back = FreePort(), front = FreePort();
+            var echo = StartEcho(back);
+            int saveHandshake = TlsFront.HandshakeMs, saveFirst = TlsFront.FirstRequestMs, savePer = TlsFront.MaxPerAddress;
+            TlsFront.HandshakeMs = 900; TlsFront.FirstRequestMs = 900; TlsFront.MaxPerAddress = 3;
+            var kf = TlsFront.Start("127.0.0.1", front, back, kcert);
+            try
+            {
+                // a connection that sends nothing is dropped by the handshake deadline
+                var idle = new System.Net.Sockets.TcpClient("127.0.0.1", front);
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                bool dropped = ClosedWithin(idle.GetStream(), 4000);
+                Check("K an idle connection is dropped by the handshake deadline, not kept", dropped && sw.ElapsedMilliseconds < 3500);
+                idle.Close();
+
+                // one byte at a time does not get past the total deadline (a read timeout alone would let it hold the slot for ever)
+                var drip = new System.Net.Sockets.TcpClient("127.0.0.1", front);
+                var dripStream = drip.GetStream();
+                bool dripDropped = false;
+                sw.Restart();
+                // the head of a handshake record that is 16384 bytes long, then its body one byte at a time
+                dripStream.Write(new byte[] { 0x16, 0x03, 0x01, 0x40, 0x00 }, 0, 5); dripStream.Flush();
+                for (int i = 0; i < 30 && !dripDropped; i++)
+                {
+                    try { dripStream.WriteByte(0x01); dripStream.Flush(); } catch { dripDropped = true; break; }
+                    Thread.Sleep(200);
+                    if (sw.ElapsedMilliseconds > 1200 && ClosedWithin(dripStream, 50)) dripDropped = true;
+                }
+                Check("K a sender that drips one byte at a time is dropped by the total deadline", dripDropped && sw.ElapsedMilliseconds < 5000);
+                drip.Close();
+
+                // a finished handshake with no request is dropped by the first request deadline
+                var quiet = new System.Net.Sockets.TcpClient("127.0.0.1", front);
+                var quietSsl = TlsClient(quiet);
+                sw.Restart();
+                Check("K a connection that says nothing after the handshake is dropped", ClosedWithin(quietSsl, 4000) && sw.ElapsedMilliseconds < 3500);
+                quiet.Close();
+
+                // once the first bytes are there there is no reading deadline (the live stream is long lived), and the bytes go to the server and back
+                var busy = new System.Net.Sockets.TcpClient("127.0.0.1", front);
+                var busySsl = TlsClient(busy);
+                busySsl.Write(new byte[] { 65 }, 0, 1); busySsl.Flush();
+                Check("K the first bytes go through to the server and come back", busySsl.ReadByte() == 65);
+                Check("K while it is open the peer list has its connection", FrontPeers.Count == 1);
+                Thread.Sleep(1800);   // longer than the first request deadline
+                busySsl.Write(new byte[] { 66 }, 0, 1); busySsl.Flush();
+                Check("K after the first bytes there is no reading deadline", busySsl.ReadByte() == 66);
+
+                // the cap for one address (a longer handshake deadline for this part, so the ones that are held stay)
+                TlsFront.HandshakeMs = 4000;
+                Thread.Sleep(300);
+                var held = new List<System.Net.Sockets.TcpClient>();
+                for (int i = 0; i < 2; i++) held.Add(new System.Net.Sockets.TcpClient("127.0.0.1", front));   // with busy, three from this address
+                var extra = new System.Net.Sockets.TcpClient("127.0.0.1", front);
+                Check("K a connection over the cap for one address is refused at once", ClosedWithin(extra.GetStream(), 1500));
+                extra.Close();
+                bool stillOpen = held.TrueForAll(c => !ClosedWithin(c.GetStream(), 100));
+                Check("K the ones under the cap are not touched", stillOpen);
+                foreach (var h in held) h.Close();
+                busySsl.Dispose(); busy.Close();
+                Check("K when they are gone the list is empty again", await WaitFor(() => FrontPeers.Count == 0));
+
+                // the accept loop goes on after an error
+                TlsFront.TestFaultOnce = true;
+                var after = new System.Net.Sockets.TcpClient("127.0.0.1", front);
+                var afterSsl = TlsClient(after);
+                afterSsl.Write(new byte[] { 67 }, 0, 1); afterSsl.Flush();
+                Check("K the connection before the error is served", afterSsl.ReadByte() == 67);
+                Check("K the accept loop met the error", await WaitFor(() => !TlsFront.TestFaultOnce));
+                Thread.Sleep(300);
+                var after2 = new System.Net.Sockets.TcpClient("127.0.0.1", front);
+                var after2Ssl = TlsClient(after2);
+                after2Ssl.Write(new byte[] { 68 }, 0, 1); after2Ssl.Flush();
+                Check("K an error in the accept loop does not end it", after2Ssl.ReadByte() == 68);
+
+                // Dispose closes what is open
+                kf.Dispose();
+                Check("K closing the front closes the open connections", ClosedWithin(afterSsl, 3000) && ClosedWithin(after2Ssl, 3000));
+                after.Close(); after2.Close();
+                Check("K and the peer list is empty", await WaitFor(() => FrontPeers.Count == 0));
+                bool refusedNow;
+                try { var late = new System.Net.Sockets.TcpClient("127.0.0.1", front); refusedNow = ClosedWithin(late.GetStream(), 1000); late.Close(); } catch (Exception) { refusedNow = true; }
+                Check("K a closed front takes no new connection", refusedNow);
+            }
+            finally
+            {
+                try { kf.Dispose(); } catch { }
+                try { echo.Stop(); } catch { }
+                TlsFront.HandshakeMs = saveHandshake; TlsFront.FirstRequestMs = saveFirst; TlsFront.MaxPerAddress = savePer;
+            }
+        }
+
+        // ===== L. the front, the peer list and the guard together, with a phone address that is not loopback
+        {
+            const string tok = "0123456789abcdef0123456789abcdef";
+            string problem;
+            string lanText = LanAddress.Resolve("", out problem);
+            Console.WriteLine("L: this machine's network address " + (lanText ?? ("none (" + problem + "), L skipped")));
+            if (lanText != null)
+            {
+                IPAddress lan = IPAddress.Parse(lanText);
+                int back = FreePort(), front = FreePort(), plainBack = FreePort();
+                string secureHost = lanText + ":" + front;
+                var open = new RequestGuard(back, lanText, tok, front, false);
+                var only = new RequestGuard(back, lanText, tok, front, true);
+                RequestGuard current = open;
+                var server = StartGuardBackend(lan, back, () => current);
+                var loopServer = StartGuardBackend(IPAddress.Loopback, back, () => current);
+                var lf = TlsFront.Start(lanText, front, back, NewCertificate());
+                try
+                {
+                    string cookie = RequestGuard.CookieName + "=" + tok, secureCookie = RequestGuard.SecureCookieName + "=" + tok;
+                    Check("L through the front without the secret: refused (401)", AskThroughFront(lan, lan, front, secureHost, "/about") == 401);
+                    Check("L through the front with a wrong secret: refused (401)", AskThroughFront(lan, lan, front, secureHost, "/about", RequestGuard.CookieName + "=wrongwrongwrongwrongwrongwrongwr") == 401);
+                    Check("L through the front with the link secret: sent on with a cookie (302)", AskThroughFront(lan, lan, front, secureHost, "/about?t=" + tok) == 302);
+                    Check("L through the front with the cookie: let in (200)", AskThroughFront(lan, lan, front, secureHost, "/about", cookie) == 200);
+                    Check("L through the front with the __Host- cookie: let in (200)", AskThroughFront(lan, lan, front, secureHost, "/about", secureCookie) == 200);
+                    Check("L the phone link page is for this PC only, through the front too (403)", AskThroughFront(lan, lan, front, secureHost, "/lan", cookie) == 403);
+                    Check("L a direct request on loopback is trusted (200)", AskDirect(IPAddress.Loopback, IPAddress.Loopback, back, "127.0.0.1:" + back, "/about") == 200);
+                    Check("L a direct request on the network address, no secret: refused (401)", AskDirect(lan, lan, back, lanText + ":" + back, "/about") == 401);
+                    Check("L a direct request on the network address, with the cookie: let in (200)", AskDirect(lan, lan, back, lanText + ":" + back, "/about", cookie) == 200);
+                    // a direct request that names the secure host is never taken for this PC, even from loopback
+                    Check("L a direct request on loopback that names the secure host: refused (403)", AskDirect(IPAddress.Loopback, IPAddress.Loopback, back, secureHost, "/about") == 403);
+
+                    // HttpsOnly: other devices only through the front, this PC unaffected
+                    current = only;
+                    Check("L HttpsOnly: through the front with the cookie: let in (200)", AskThroughFront(lan, lan, front, secureHost, "/about", cookie) == 200);
+                    Check("L HttpsOnly: a direct request on the network address with the cookie: refused (403)", AskDirect(lan, lan, back, lanText + ":" + back, "/about", cookie) == 403);
+                    Check("L HttpsOnly: a direct request on loopback is still trusted (200)", AskDirect(IPAddress.Loopback, IPAddress.Loopback, back, "127.0.0.1:" + back, "/about") == 200);
+                }
+                finally
+                {
+                    try { lf.Dispose(); } catch { }
+                    try { server.Stop(); loopServer.Stop(); } catch { }
+                }
+            }
         }
 
         // ===== G. 1.2.1: Sec-Fetch-Site on /events over real HTTP, and the "new link" request

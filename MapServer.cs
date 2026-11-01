@@ -73,9 +73,13 @@ namespace NOTacMap
 		private volatile string lanAddress; // null when LAN access is off, or if it couldn't start
 		private string refusedAddress; // an address Windows turned down, not tried again until the address changes
 		private volatile RequestGuard guard;
+		private volatile bool httpsOnly;   // HttpsOnly in the config: while HTTPS runs, other devices may only use it
 		private volatile bool httpsWanted;  // HTTPS is switched on in DEVICES. It only runs while LAN access runs.
 		private int httpsPort;
-		private volatile IDisposable front; // the TLS front (see TlsFront), null while HTTPS is off
+		private volatile IDisposable front; // the TLS front (see TlsFront), null while HTTPS is off or still starting
+		private volatile bool httpsStarting;
+		private volatile string httpsError; // why the last start failed, shown on the page
+		private int frontGeneration;        // listenerLock
 		private readonly HashSet<string> rejectedLogged = new HashSet<string>();
 
 		// lanToken is null to keep the map on this PC only. lanAddress can be null while
@@ -120,58 +124,120 @@ namespace NOTacMap
 		// Set by the plugin. Switches HTTPS on or off for the page's DEVICES panel. Same result convention as LanSwitch.
 		public Func<bool, string> HttpsSwitch;
 
+		// Set by the plugin when it has made the certificate: its SHA-256 as hex pairs, shown on the page of this PC only.
+		public volatile string HttpsFingerprint;
+
+		// Set by the plugin. Called when the state that was asked for is really there (true: running, false: off), so the config is only
+		// saved then and a switch that failed never leaves HTTPS "on" in the config.
+		public Action<bool> HttpsReached;
+
 		public bool HttpsActive { get { return front != null; } }
 		public int HttpsPort { get { return httpsPort; } }
 
 		// Before Start: whether HTTPS was on in the config, and on which port.
-		public void ConfigureHttps(bool wanted, int port)
+		public void ConfigureHttps(bool wanted, int port, bool onlySecure = false)
 		{
 			httpsWanted = wanted;
 			httpsPort = port;
+			httpsOnly = onlySecure;
 		}
 
 		private RequestGuard MakeGuard(string address, string token)
 		{
-			return new RequestGuard(port, address, token, front != null ? httpsPort : 0);
+			return new RequestGuard(port, address, token, front != null ? httpsPort : 0, httpsOnly);
 		}
 
-		// The caller holds listenerLock.
+		// The caller holds listenerLock. Starting is asynchronous: making the certificate the first time takes seconds and must not hold the
+		// lock (every request waits on it) or the game's main thread. A start that is overtaken, by another address, by HTTPS being turned
+		// off or by LAN access ending, is thrown away when it comes back (frontGeneration).
 		private void StartFront(string address)
 		{
 			StopFront();
 			if (!httpsWanted || HttpsFrontStart == null || httpsPort <= 0 || address == null) return;
+			int generation = ++frontGeneration;
+			int frontPort = httpsPort;
+			httpsStarting = true;
+			httpsError = null;
+			ThreadPool.QueueUserWorkItem(_ => FinishFront(address, frontPort, generation));
+		}
+
+		private void FinishFront(string address, int frontPort, int generation)
+		{
+			IDisposable started = null;
+			string failure = null;
 			try
 			{
-				front = HttpsFrontStart(address, httpsPort, port);
+				started = HttpsFrontStart(address, frontPort, port);   // outside the lock
 			}
 			catch (Exception ex)
 			{
-				front = null;
-				Plugin.Log?.LogWarning($"NOTacMap: HTTPS could not start on {address}:{httpsPort} ({ex.Message.Trim()}). The phone link stays on http.");
+				failure = ex.Message.Trim();
+				Plugin.Log?.LogWarning($"NOTacMap: HTTPS could not start on {address}:{frontPort} ({failure}). The phone link stays on http.");
+			}
+			bool reached = false;
+			lock (listenerLock)
+			{
+				bool current = running && generation == frontGeneration && httpsWanted && lanAddress == address;
+				if (!current)
+				{
+					// Overtaken: what was made is not wanted any more.
+					try { if (started != null) started.Dispose(); } catch { }
+					return;
+				}
+				httpsStarting = false;
+				if (started == null)
+				{
+					httpsWanted = false;   // the switch goes back to off, the page shows why
+					httpsError = "HTTPS could not start on port " + frontPort + (failure != null ? " (" + failure + ")" : "") + ". The link stays on http.";
+					return;
+				}
+				front = started;
+				guard = MakeGuard(address, lanToken);   // only now does the guard know the https address
+				reached = true;
+			}
+			if (reached)
+			{
+				Action<bool> saved = HttpsReached;
+				if (saved != null) saved(true);
 			}
 		}
 
+		// Closes the front and every connection that came through it, and drops a start that is still on its way.
 		private void StopFront()
 		{
+			frontGeneration++;
+			httpsStarting = false;
 			IDisposable old = front;
 			front = null;
 			try { if (old != null) old.Dispose(); } catch { /* it is closing anyway */ }
 		}
 
-		// Switches HTTPS on or off while the game runs. True when it is in the state that was asked for.
-		public bool SetHttps(bool on)
+		// Switches HTTPS on or off while the game runs. Turning it on only starts it (see StartFront): the page asks /lan until
+		// httpsStarting is over, and HttpsReached tells the plugin when the asked state is really there so it can save the config.
+		public void SetHttps(bool on)
 		{
+			bool turnedOff = false;
 			lock (listenerLock)
 			{
-				if (!running) return false;
+				if (!running) return;
 				httpsWanted = on;
+				httpsError = null;
 				string address = lanAddress;
-				if (address != null)
+				if (on)
 				{
-					StartFront(address);
-					guard = MakeGuard(address, lanToken);
+					if (address != null) StartFront(address);
 				}
-				return !on || front != null;
+				else
+				{
+					StopFront();
+					if (address != null) guard = MakeGuard(address, lanToken);
+					turnedOff = true;
+				}
+			}
+			if (turnedOff)
+			{
+				Action<bool> saved = HttpsReached;
+				if (saved != null) saved(false);
 			}
 		}
 
@@ -366,7 +432,16 @@ namespace NOTacMap
 				refusedAddress = null;
 				ApplyAddress(address);
 				guard = MakeGuard(lanAddress, lanToken); // a new token also needs a new guard
-				if (newToken) DropLanClients(); // a phone with the old link keeps no stream open
+				if (newToken)
+				{
+					DropLanClients(); // a phone with the old link keeps no stream open
+					if (lanAddress != null && httpsWanted)
+					{
+						// and no idle connection either: the front is closed with everything that came through it, and starts again
+						StartFront(lanAddress);
+						guard = MakeGuard(lanAddress, lanToken);
+					}
+				}
 				return true;
 			}
 		}
@@ -631,7 +706,7 @@ namespace NOTacMap
 				RequestGuard usedGuard = guard;
 				GuardDecision decision = usedGuard.Evaluate(request.Headers["Host"], request.Headers["Origin"],
 					sender, method, path, request.Url.Query, request.Headers["Cookie"],
-					request.Headers["Sec-Fetch-Site"]);
+					request.Headers["Sec-Fetch-Site"], FrontPeers.IsFronted(request.RemoteEndPoint));
 				if (decision.Status == 302)
 				{
 					context.Response.AddHeader("Set-Cookie", decision.SetCookie);
@@ -900,7 +975,13 @@ namespace NOTacMap
 					string lanUrl = LanUrl;
 					string json = lanUrl == null
 						? "{\"enabled\":false"
-						: "{\"enabled\":true,\"url\":\"" + lanUrl + "\",\"https\":" + (front != null ? "true" : "false") + ",\"httpsWanted\":" + (httpsWanted ? "true" : "false") + ",\"httpsPort\":" + httpsPort;
+						: "{\"enabled\":true,\"url\":\"" + lanUrl + "\",\"https\":" + (front != null ? "true" : "false") + ",\"httpsWanted\":" + (httpsWanted ? "true" : "false") + ",\"httpsPort\":" + httpsPort + ",\"httpsOnly\":" + (front != null && httpsOnly ? "true" : "false")
+							+ ",\"httpsStarting\":" + (httpsStarting ? "true" : "false");
+					string secureError = httpsError;
+					if (lanUrl != null && secureError != null) json += ",\"httpsError\":" + Newtonsoft.Json.JsonConvert.ToString(secureError);
+					string fingerprint = HttpsFingerprint;
+					// The request is from this PC (a phone is refused before it gets here), the fingerprint is for the person at the PC.
+					if (lanUrl != null && front != null && fingerprint != null && !fromNetwork) json += ",\"certSha256\":" + Newtonsoft.Json.JsonConvert.ToString(fingerprint);
 					if (error != null) json += ",\"error\":" + Newtonsoft.Json.JsonConvert.ToString(error);
 					json += "}";
 					byte[] bytes = Encoding.UTF8.GetBytes(json);

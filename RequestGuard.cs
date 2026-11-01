@@ -34,6 +34,9 @@ namespace NOTacMap
 	internal class RequestGuard
 	{
 		public const string CookieName = "notacmap_t";
+		// On the https link the cookie is Secure and has the __Host- prefix, which makes a browser take it only from an https page, only for
+		// this exact host, with Path=/ and no Domain. Either name is accepted when a request comes in.
+		public const string SecureCookieName = "__Host-notacmap_t";
 
 		// The token ends up in a link, a cookie and a JSON string, so only plain characters are
 		// allowed, and it has to be long enough that guessing it is hopeless.
@@ -51,8 +54,9 @@ namespace NOTacMap
 		private readonly HashSet<string> allowedHosts;
 		private readonly byte[] token; // null when LAN access is off
 		private readonly string httpsHost; // "address:port" of the HTTPS link, null while HTTPS is off
+		private readonly bool httpsOnly;   // while HTTPS is on, other devices may only come through it
 
-		public RequestGuard(int port, string lanAddress, string lanToken, int httpsPort = 0)
+		public RequestGuard(int port, string lanAddress, string lanToken, int httpsPort = 0, bool httpsOnly = false)
 		{
 			allowedHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 			{
@@ -67,13 +71,15 @@ namespace NOTacMap
 				{
 					httpsHost = lanAddress + ":" + httpsPort;
 					allowedHosts.Add(httpsHost);
+					this.httpsOnly = httpsOnly;
 				}
 			}
 		}
 
-		// fetchSite is the Sec-Fetch-Site header, which current browsers add to every request.
+		// fetchSite is the Sec-Fetch-Site header, which current browsers add to every request. viaFront says that the request came
+		// in through the TLS front (FrontPeers.IsFronted), remote is then the phone's address.
 		public GuardDecision Evaluate(string host, string origin, IPAddress remote, string method,
-			string path, string query, string cookieHeader, string fetchSite = null)
+			string path, string query, string cookieHeader, string fetchSite = null, bool viaFront = false)
 		{
 			// Only our own Host values are served. Stops a web page from
 			// reaching us through DNS rebinding (its own domain pointed at one of
@@ -119,6 +125,14 @@ namespace NOTacMap
 			}
 
 			remote = Normalize(remote);
+			bool secureHost = httpsHost != null && string.Equals(host, httpsHost, StringComparison.OrdinalIgnoreCase);
+			// A request that names the https address can only come through the front, and the front's requests carry the phone's address.
+			// One that looks local or has no address at all means the list of phones missed, or the front was changed. It is never let
+			// in as this PC, whatever else is true.
+			if (secureHost && (remote == null || IPAddress.IsLoopback(remote)))
+			{
+				return GuardDecision.Reject(403, "the secure link only answers through its own front");
+			}
 			if (remote != null && IPAddress.IsLoopback(remote))
 			{
 				return GuardDecision.Allow();
@@ -137,6 +151,12 @@ namespace NOTacMap
 			{
 				return GuardDecision.Reject(403, "not a private network address");
 			}
+			// HttpsOnly: while the secure link runs, the plain link is for this PC only.
+			if (httpsOnly && !viaFront)
+			{
+				return GuardDecision.Reject(403, "other devices may only use the secure link (HttpsOnly)",
+					"This map only answers on the secure link. Open the link with https from the map page on the game PC.");
+			}
 			// Saving settings, the phone link and the LAN switch are for this PC only.
 			if (settingsPost || path == "/lan")
 			{
@@ -144,7 +164,8 @@ namespace NOTacMap
 			}
 
 			string cookie = ReadCookie(cookieHeader, CookieName);
-			if (cookie != null && TokenMatches(cookie))
+			string secureCookie = ReadCookie(cookieHeader, SecureCookieName);
+			if ((cookie != null && TokenMatches(cookie)) || (secureCookie != null && TokenMatches(secureCookie)))
 			{
 				return GuardDecision.Allow();
 			}
@@ -162,13 +183,14 @@ namespace NOTacMap
 				{
 					Status = 302,
 					RedirectTo = remaining.Length > 0 ? target + "?" + remaining : target,
-					SetCookie = CookieName + "=" + Encoding.UTF8.GetString(token)
-						+ "; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000"
+					SetCookie = secureHost
+						? SecureCookieName + "=" + Encoding.UTF8.GetString(token) + "; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=31536000"
+						: CookieName + "=" + Encoding.UTF8.GetString(token) + "; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000"
 				};
 			}
 
 			// Wrong secret and no secret are told apart in the log only.
-			string reason = (cookie != null || given != null) ? "wrong secret" : "no secret in the request";
+			string reason = (cookie != null || secureCookie != null || given != null) ? "wrong secret" : "no secret in the request";
 			return GuardDecision.Reject(401, reason, "Open the phone link or the QR code from the map page on the game PC.");
 		}
 
@@ -244,6 +266,9 @@ namespace NOTacMap
 		public static void Add(IPEndPoint backend, IPAddress phone) { peers[Key(backend)] = phone; }
 		public static void Remove(IPEndPoint backend) { IPAddress gone; peers.TryRemove(Key(backend), out gone); }
 		public static int Count { get { return peers.Count; } }
+
+		// True when this connection was opened by the front, so the request came through the secure link.
+		public static bool IsFronted(IPEndPoint remote) { return remote != null && peers.ContainsKey(Key(remote)); }
 
 		// The address a request really comes from.
 		public static IPAddress Resolve(IPEndPoint remote)
