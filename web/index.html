@@ -419,10 +419,10 @@
     <div class="group" id="lanOn" hidden>
       <h4>Scan or open the link</h4>
       <div class="note">Anyone who has the link can see your map, so show the code only while you need it.</div>
-      <label data-note="Lets the phone keep its screen on while the map is open. The phone's browser warns that it cannot check the certificate, because the plugin makes it itself. The link is still encrypted. Only tap through on a link you got from your own PC. If your phone's browser can show the certificate details, compare the fingerprint below with them. You will probably see the warning again later."><input type="checkbox" id="httpsToggle">Secure link (HTTPS, experimental)</label>
+      <label data-note="Lets the phone keep its screen on while the map is open. The phone's browser warns that it cannot check the certificate, because the plugin makes it itself. The link is still encrypted. Only tap through on a link you got from your own PC. You will probably see the warning again later."><input type="checkbox" id="httpsToggle">Secure link (HTTPS, experimental)</label>
       <div class="note lan-error" id="httpsError" hidden></div>
       <div class="note" id="httpsStartNote" hidden>Starting HTTPS. The certificate is made the first time, this can take a few seconds.</div>
-      <div class="note" id="httpsFingerprintBox" hidden>Certificate SHA-256:<br><span id="httpsFingerprint"></span><br>If your phone's browser can show the certificate details, compare this with them before you tap through.</div>
+      <div class="note" id="httpsFingerprintBox" hidden>Certificate SHA-256, for a desktop browser that shows certificate details:<br><span id="httpsFingerprint"></span></div>
       <div class="note" id="httpsOnlyNote" hidden>HttpsOnly is on in the config: other devices can only use the secure link, the plain link refuses them.</div>
       <button type="button" id="lanReveal" class="mini-btn">Show QR code and link</button>
       <div id="lanSecret" hidden>
