@@ -76,6 +76,16 @@
   }
   #controls button:hover, #controls button.active, #controls button.rotated { color: var(--hud-green); border-color: var(--hud-green); }
   html.game-icons #legendHead, html.game-icons #legend .legend-rows { display: none !important; }
+  .panel details.fold > summary { cursor: pointer; }
+  .panel label[data-note] { position: relative; cursor: help; }
+  .panel label[data-note]::after { content: "?"; flex: none; margin-left: auto; padding: 0 5px; color: var(--hud-dim); opacity: 0.55; font-size: 0.9em; }
+  .panel label:has(select)[data-note]::after { margin-left: 6px; }
+  .note-tip {
+    display: none; position: absolute; left: 0; top: 100%; z-index: 6; max-width: 250px; padding: 4px 7px;
+    background: #020a02; border: 1px solid var(--hud-dim); color: var(--hud-dim); line-height: 1.35; white-space: normal;
+    font-size: calc(10px * var(--text-scale)); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6); pointer-events: none;
+  }
+  .panel label.show-note .note-tip { display: block; }
   #menuRow { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
   #menuRow[hidden] { display: none; }
   .panel {
@@ -356,8 +366,8 @@
       </div>
       <div class="note" id="presetNote"></div>
     </div>
-    <div class="group">
-      <h4>Unit Types</h4>
+    <details class="group fold" data-fold="unitTypes" open>
+      <summary>Unit types</summary>
       <label><input type="checkbox" data-group="unitTypes" data-key="plane" checked>Plane</label>
       <label><input type="checkbox" data-group="unitTypes" data-key="helicopter" checked>Helicopter</label>
       <label><input type="checkbox" data-group="unitTypes" data-key="tank" checked>Tank</label>
@@ -368,22 +378,22 @@
       <label><input type="checkbox" data-group="unitTypes" data-key="vehicle" checked>Vehicle (other)</label>
       <label><input type="checkbox" data-group="unitTypes" data-key="building" checked>Building</label>
       <label><input type="checkbox" data-group="unitTypes" data-key="pilot">Pilot (ejected)</label>
-    </div>
-    <div class="group">
-      <h4>Weapons</h4>
+    </details>
+    <details class="group fold" data-fold="weapons" open>
+      <summary>Weapons</summary>
       <label><input type="checkbox" data-group="weapons" data-key="air2air" checked>Air-to-air</label>
       <label><input type="checkbox" data-group="weapons" data-key="air2ground" checked>Air-to-ground</label>
       <label><input type="checkbox" data-group="weapons" data-key="unlocked" checked>Unlocked / other</label>
-    </div>
-    <div class="group">
-      <h4>Overlays</h4>
+    </details>
+    <details class="group fold" data-fold="overlays">
+      <summary>Overlays</summary>
       <label><input type="checkbox" data-group="overlays" data-key="runwayGuides" checked>Runway approach guides</label>
       <label><input type="checkbox" data-group="overlays" data-key="weaponRange" checked>Weapon range</label>
       <label><input type="checkbox" data-group="overlays" data-key="grid" checked>Grid</label>
       <label><input type="checkbox" data-group="overlays" data-key="rangeRings">Distance rings</label>
       <label><input type="checkbox" data-group="overlays" data-key="scaleBar" checked>Show scale</label>
-    </div>
-    <details class="group">
+    </details>
+    <details class="group fold" data-fold="trails">
       <summary>Trails</summary>
       <label><input type="checkbox" data-group="trails" data-key="friendlyAircraft" checked>Friendly aircraft</label>
       <label><input type="checkbox" data-group="trails" data-key="enemyAircraft" checked>Enemy aircraft</label>
@@ -419,54 +429,41 @@
         <button type="button" id="lanShowScreen" class="mini-btn" title="A full screen with the code, for a device that is not in front of you">QR screen</button>
       </div>
     </div>
-    <div class="group">
-      <h4>When this page opens</h4>
+    <details class="group fold" data-fold="start">
+      <summary>When this page opens</summary>
       <select id="startModeSelect">
         <option value="ask">Ask me</option>
         <option value="here">Show the map here</option>
         <option value="device">Show the phone link</option>
       </select>
-    </div>
+    </details>
   </div>
   <div id="displayPanel" class="panel">
     <div class="group">
-      <h4>Fair play</h4>
       <label><input type="checkbox" data-group="display" data-key="fairPlay">Fair play</label>
       <div class="note">Hides what your cockpit does not show you: the speed and ETA in the missile warning, enemy missiles your warning has not picked up yet, the ATTACKER mark and the RADAR DESTROYED tag. Your other switches stay as they are.</div>
     </div>
-    <div class="group">
-      <h4>Text</h4>
-      <label>Text size
-        <select id="textScaleSelect">
-          <option value="0.85">Small</option>
-          <option value="1">Normal</option>
-          <option value="1.25" selected>Large</option>
-          <option value="1.5">X-Large</option>
+    <details class="group fold" data-fold="view" open>
+      <summary>View</summary>
+      <label data-note="North keeps the map the way it is. Your heading turns the map so that you always fly up the screen. A small compass shows where north is.">Map up
+        <select id="mapUpSelect">
+          <option value="north" selected>North</option>
+          <option value="heading">Your heading</option>
         </select>
       </label>
-      <label><input type="checkbox" data-group="display" data-key="textOutline">Dark outline on text (easier to read on the map)</label>
-      <label><input type="checkbox" data-group="display" data-key="showPilotNames">Show pilot names</label>
-      <label><input type="checkbox" data-group="display" data-key="realNames">Use real names instead of callsigns</label>
-    </div>
-    <div class="group">
-      <h4>Map</h4>
-      <label>Redraws per second when idle
-        <select id="fpsSelect">
-          <option value="5">5 fps (lightest)</option>
-          <option value="8" selected>8 fps</option>
-          <option value="12">12 fps</option>
-          <option value="20">20 fps</option>
-          <option value="30">30 fps (smoothest)</option>
+      <label data-note="Game draws every unit with the icon the game's own map uses, taken from your running game. The legend is hidden then. Buildings keep their own symbol.">Icons
+        <select id="iconStyleSelect">
+          <option value="ours" selected>NOTacMap</option>
+          <option value="game">Game</option>
         </select>
       </label>
-      <label>Units
+      <label data-note="Auto follows the unit setting in the game. Meters: m, km, km/h. Feet: ft, nm, kt.">Units
         <select id="unitsSelect">
           <option value="game" selected>Auto</option>
           <option value="metric">Meters</option>
           <option value="imperial">Feet</option>
         </select>
       </label>
-      <div class="note">Auto follows the unit setting in the game. Meters: m, km, km/h. Feet: ft, nm, kt.</div>
       <label>Which rings
         <select id="ringSelect">
           <option value="all" selected>All four</option>
@@ -476,14 +473,25 @@
           <option value="3">40 km only</option>
         </select>
       </label>
-      <label><input type="checkbox" data-group="display" data-key="showMissileEta" checked>Missile warning shows speed and ETA</label>
-      <div class="note">Beyond the warning tone and the arrows, this is extra information from the map.</div>
-      <label><input type="checkbox" data-group="display" data-key="threatFocus" checked>Mark who fired a missile at you (ATTACKER)</label>
-      <label><input type="checkbox" data-group="display" data-key="sharpCanvas">Sharp text and lines (uses more CPU on this device)</label>
+      <label>Text size
+        <select id="textScaleSelect">
+          <option value="0.85">Small</option>
+          <option value="1">Normal</option>
+          <option value="1.25" selected>Large</option>
+          <option value="1.5">X-Large</option>
+        </select>
+      </label>
+      <label><input type="checkbox" data-group="display" data-key="textOutline">Dark outline on text (easier to read on the map)</label>
       <label><input type="checkbox" data-group="display" data-key="darkMode">Red HUD (night vision)</label>
-    </div>
-    <div class="group">
-      <h4>Marked target in range</h4>
+    </details>
+    <details class="group fold" data-fold="warnings">
+      <summary>Missile warning</summary>
+      <label data-note="Beyond the warning tone and the arrows, this is extra information from the map."><input type="checkbox" data-group="display" data-key="showMissileEta" checked>Warning shows speed and ETA</label>
+      <label data-note="The aircraft that fired a missile at you gets a red ring and the tag ATTACKER, when it is on your map."><input type="checkbox" data-group="display" data-key="threatFocus" checked>Mark who fired at you (ATTACKER)</label>
+      <label data-note="One soft glow at the screen edge when a missile starts coming at you (red) or when the jamming on you starts (yellow). It fades by itself and never repeats."><input type="checkbox" data-group="display" data-key="pulse">Pulse at the screen edge</label>
+    </details>
+    <details class="group fold" data-fold="range">
+      <summary>Marked target in range</summary>
       <label><input type="checkbox" data-group="display" data-key="cueFill" checked>Tint the cone</label>
       <label><input type="checkbox" data-group="display" data-key="cueBrackets" checked>Close in on the target</label>
       <label><input type="checkbox" data-group="display" data-key="cueNumber" checked>Light up the range number</label>
@@ -491,57 +499,41 @@
       <label><input type="checkbox" data-group="display" data-key="cueSteer" checked>Turn arrows</label>
       <label><input type="checkbox" data-group="display" data-key="cueClosing" checked>Distance still to go</label>
       <label><input type="checkbox" data-group="display" data-key="cueCount" checked>Count of targets in range</label>
-    </div>
-    <div class="group">
-      <h4>Map</h4>
-      <label>Map up
-        <select id="mapUpSelect">
-          <option value="north" selected>North</option>
-          <option value="heading">Your heading</option>
-        </select>
-      </label>
-      <div class="note">North keeps the map the way it is. Your heading turns the map so that you always fly up the screen. A small compass shows where north is.</div>
-      <label>Icons
-        <select id="iconStyleSelect">
-          <option value="ours" selected>NOTacMap</option>
-          <option value="game">Game</option>
-        </select>
-      </label>
-      <div class="note">Game draws every unit with the icon the game's own map uses, taken from your running game. The legend is hidden then.</div>
-    </div>
-    <div class="group">
-      <h4>Last position</h4>
-      <label><input type="checkbox" data-group="display" data-key="lastPosition" checked>Mark where you lost your aircraft</label>
-      <div class="note">Your aircraft stays on the map as LAST POSITION until you have a new one, and for 10 seconds after.</div>
-    </div>
-    <div class="group">
-      <h4>Info card</h4>
-      <label><input type="checkbox" data-group="display" data-key="infoCard" checked>Info card when you tap or hover a unit</label>
-      <div class="note">Name, type, side, and distance and bearing from you. Speed, altitude and heading only for your own side.</div>
-    </div>
-    <div class="group">
-      <h4>Pulse</h4>
-      <label><input type="checkbox" data-group="display" data-key="pulse">Pulse at the screen edge</label>
-      <div class="note">One soft glow when a missile starts coming at you (red) or when the jamming on you starts (yellow). It fades by itself and never repeats.</div>
-    </div>
-    <div class="group">
-      <h4>Jamming</h4>
-      <label><input type="checkbox" data-group="display" data-key="jamTag" checked>JAMMED tag on a unit</label>
+    </details>
+    <details class="group fold" data-fold="jamming">
+      <summary>Jamming</summary>
+      <label data-note="The same as the jamming on the game's own map, for the units your side can see."><input type="checkbox" data-group="display" data-key="jamTag" checked>JAMMED tag on a unit</label>
       <label><input type="checkbox" data-group="display" data-key="jamLine" checked>Line to the jammer</label>
       <label><input type="checkbox" data-group="display" data-key="jamMine" checked>Your jammer is on</label>
       <label><input type="checkbox" data-group="display" data-key="jamMe" checked>You are jammed</label>
       <label><input type="checkbox" data-group="display" data-key="jamName" checked>Who jams you</label>
       <label><input type="checkbox" data-group="display" data-key="jamRadar" checked>RADAR DESTROYED tag on a unit</label>
-      <div class="note">The same as the jamming on the game's own map, for the units your side can see.</div>
-    </div>
-    <div class="group">
-      <h4>Page</h4>
+    </details>
+    <details class="group fold" data-fold="marks">
+      <summary>Marks and info</summary>
+      <label data-note="Name, type, side, and distance and bearing from you. Speed, altitude and heading only for your own side."><input type="checkbox" data-group="display" data-key="infoCard" checked>Info card when you tap or hover a unit</label>
+      <label data-note="Your aircraft stays on the map as LAST POSITION until you have a new one, and for 10 seconds after."><input type="checkbox" data-group="display" data-key="lastPosition" checked>Mark where you lost your aircraft</label>
+    </details>
+    <details class="group fold" data-fold="page">
+      <summary>Page and names</summary>
+      <label><input type="checkbox" data-group="display" data-key="showPilotNames">Show pilot names</label>
+      <label><input type="checkbox" data-group="display" data-key="realNames">Use real names instead of callsigns</label>
       <label><input type="checkbox" data-group="display" data-key="closeOnGameExit" checked>Close this tab when the game closes</label>
       <label><input type="checkbox" data-group="display" data-key="sleepWhenHidden" checked>Pause the feed while this tab is hidden (saves FPS)</label>
-      <label><input type="checkbox" data-group="display" data-key="keepScreenOn" checked>Keep the screen on (on the HTTPS link only)</label>
-    </div>
-    <div class="group">
-      <h4>Colors</h4>
+      <label data-note="Browsers only allow this on a secure page, which for a phone means the HTTPS link (DEVICES, secure link)."><input type="checkbox" data-group="display" data-key="keepScreenOn" checked>Keep the screen on (HTTPS link only)</label>
+      <label>Redraws per second when idle
+        <select id="fpsSelect">
+          <option value="5">5 fps (lightest)</option>
+          <option value="8" selected>8 fps</option>
+          <option value="12">12 fps</option>
+          <option value="20">20 fps</option>
+          <option value="30">30 fps (smoothest)</option>
+        </select>
+      </label>
+      <label><input type="checkbox" data-group="display" data-key="sharpCanvas">Sharp text and lines (uses more CPU on this device)</label>
+    </details>
+    <details class="group fold" data-fold="colors">
+      <summary>Colors</summary>
       <div class="color-row" data-color-key="friend">
         <span class="color-label">Your team (human pilots)</span>
         <button type="button" class="color-swatch" title="Pick a color"></button>
@@ -605,7 +597,7 @@
     </div>
     <div class="group feedback-link">
       <a href="https://github.com/Big-LouDE/NOTacMap/issues" target="_blank" rel="noopener noreferrer">Send feedback or report a bug</a>
-    </div>
+    </details>
   </div>
 </div>
 <div id="startScreen" hidden>
@@ -2081,6 +2073,69 @@ settingsReady.then(() => { updatePresetButtons(); });
 
 // The rotate button is for touch screens. It goes off, left (the top of the page at the right of the screen, so the phone
 // is turned to the left to read it), right, off. The choice is kept on the device.
+// Fold-open sections in the panels remember on this device which ones were open.
+const FOLD_KEY = 'notacmap_folds';
+function readFolds() {
+  try { return JSON.parse(localStorage.getItem(FOLD_KEY)) || {}; } catch (e) { return {}; }
+}
+// The sections that start open fire a toggle while the page is set up, those are not choices and are not stored.
+let foldsLive = false;
+setTimeout(() => { foldsLive = true; }, 600);
+document.querySelectorAll('details.fold').forEach(d => {
+  const saved = readFolds()[d.dataset.fold];
+  if (typeof saved === 'boolean') d.open = saved;
+  d.addEventListener('toggle', () => {
+    if (!foldsLive) return;
+    const all = readFolds();
+    all[d.dataset.fold] = d.open;
+    try { localStorage.setItem(FOLD_KEY, JSON.stringify(all)); } catch (e) { /* storage is off, the folds just forget */ }
+    const openPanel = document.querySelector('.panel.open');
+    if (openPanel && typeof fitPanelToScreen === 'function') fitPanelToScreen(openPanel);
+  });
+});
+
+// The explanation of a switch (data-note) shows under it when the mouse rests on it, or when a finger is held on it.
+let noteLabel = null, noteTimer = null, noteHeld = false;
+function hideNote() {
+  clearTimeout(noteTimer);
+  if (noteLabel) noteLabel.classList.remove('show-note');
+  noteLabel = null;
+}
+function showNote(label) {
+  hideNote();
+  let tip = label.querySelector('.note-tip');
+  if (!tip) {
+    tip = document.createElement('span');
+    tip.className = 'note-tip';
+    tip.textContent = label.dataset.note;
+    label.appendChild(tip);
+  }
+  label.classList.add('show-note');
+  noteLabel = label;
+}
+function noteLabelOf(target) { return target && target.closest ? target.closest('.panel label[data-note]') : null; }
+if (matchMedia('(hover: hover)').matches) {
+  document.addEventListener('mouseover', e => {
+    const l = noteLabelOf(e.target);
+    if (l === noteLabel) return;
+    hideNote();
+    if (l) noteTimer = setTimeout(() => showNote(l), 400);
+  });
+}
+document.addEventListener('pointerdown', e => {
+  const l = noteLabelOf(e.target);
+  if (l !== noteLabel) hideNote();
+  noteHeld = false;
+  if (l && e.pointerType === 'touch') noteTimer = setTimeout(() => { showNote(l); noteHeld = true; }, 450);
+});
+['pointerup', 'pointercancel'].forEach(t => document.addEventListener(t, () => { clearTimeout(noteTimer); }));
+document.addEventListener('pointermove', e => { if (e.pointerType === 'touch' && !noteHeld) clearTimeout(noteTimer); });
+// A press that showed a note is not a tap on the switch.
+document.addEventListener('click', e => {
+  if (noteHeld) { e.preventDefault(); e.stopPropagation(); noteHeld = false; }
+}, true);
+document.addEventListener('scroll', hideNote, true);
+
 // MENU: the buttons that are not needed all the time (fullscreen, rotate, devices) sit in a row that opens under the MENU button and
 // closes again after a tap. The MENU button is only there while at least one of them is available on this device.
 const menuBtn = document.getElementById('menuBtn');
