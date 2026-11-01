@@ -522,6 +522,7 @@
       <summary>Marks and info</summary>
       <label data-note="Name, type, side, and distance and bearing from you. Speed, altitude and heading only for your own side."><input type="checkbox" data-group="display" data-key="infoCard" checked>Info card when you tap or hover a unit</label>
       <label data-note="Your aircraft stays on the map as LAST POSITION until you have a new one, and for 10 seconds after."><input type="checkbox" data-group="display" data-key="lastPosition" checked>Mark where you lost your aircraft</label>
+      <label data-note="A ring with the real blast radius (from the game's own numbers) around the marked target while you have a nuclear weapon selected, around a nuclear missile that is on its way, and where one went off, for a minute."><input type="checkbox" data-group="display" data-key="nukeRadius" checked>Nuclear blast radius</label>
     </details>
     <details class="group fold" data-fold="page">
       <summary>Page and names</summary>
@@ -1069,7 +1070,7 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true, mapUp: 'north', iconStyle: 'ours', keepScreenOn: true },
+  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, nukeRadius: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true, mapUp: 'north', iconStyle: 'ours', keepScreenOn: true },
   overlays: { runwayGuides: true, weaponRange: true, grid: true, rangeRings: false, scaleBar: true },
   // Which preset is on ('custom' = the boxes as you set them), and the boxes as they were before a preset was switched on.
   preset: { mode: 'custom', mine: null },
@@ -2600,6 +2601,7 @@ function loadMapImage() {
         lastPlayerPos = null;   // the old map's position means nothing on a new map
         lastPosMark = null; lastPosHadPlayer = false; lastPosPlayer = null;
         attackerMemory.clear();
+        nukeMemory.clear(); nukeBlasts.length = 0;
         bgReady = false;
         bgImage.src = '/mapimage.png?' + Date.now(); // cache-bust when the map changes
       }
@@ -4122,6 +4124,7 @@ function draw() {
 
   drawJamming(ctx, toScreen);
   drawAttackers(ctx, toScreen);
+  drawNukes(ctx, toScreen);
   drawLastPosition(ctx, toScreen);
   drawInfoCard(ctx, toScreen);
   drawEdgePulse(ctx);
@@ -4238,6 +4241,99 @@ function drawAttackers(ctx, toScreen) {
       ctx.fillText(`${a.type} · ${Math.round((now - a.lastLive) / 1000)}s ago`, sx + 22, sy - 14);
     }
     ctx.restore();
+  }
+}
+
+// Nuclear blast radius. The plugin sends the radius of a nuclear missile or bomb (the game's own Shockwave numbers) with the unit, and
+// with each of your weapon stations. Three things are drawn: a ring with the radius around the marked target while the weapon you have
+// selected is nuclear (so you see how far you must be), a dashed ring where a nuclear missile in the air is going (the target, or you
+// when it is coming at you), and a ring where one went off, for a minute, dimming. Fair play leaves out the ones that are not yours
+// or your side's, since your cockpit does not know what is coming.
+const NUKE_KEEP_MS = 60000;
+const NUKE_FADE_MS = 8000;
+const NUKE_DIM_FLOOR = 0.3;
+const nukeMemory = new Map();   // missile id -> the last snapshot of it: { x, z, r, friendly, mine, tx, tz, isIncoming }
+const nukeBlasts = [];          // where one went off: { x, z, r, friendly, t0 }
+
+function updateNukes(snap) {
+  const now = performance.now();
+  const seen = new Set();
+  for (const u of snap.units || []) {
+    if (!u.isMissile || !u.blastRadius) continue;
+    seen.add(u.id);
+    nukeMemory.set(u.id, { id: u.id, x: u.x, z: u.z, r: u.blastRadius, friendly: u.faction === 'friendly', mine: !!u.isMyMissile, tx: u.hasTarget ? u.targetX : null, tz: u.hasTarget ? u.targetZ : null, isIncoming: !!u.isIncomingMissile });
+  }
+  for (const [id, n] of nukeMemory) {
+    if (seen.has(id)) continue;
+    nukeMemory.delete(id);
+    // it went off (or was shot down) about where it was last seen; a target close by is where it was heading
+    let x = n.x, z = n.z;
+    if (n.tx !== null && Math.hypot(n.tx - n.x, n.tz - n.z) < 600) { x = n.tx; z = n.tz; }
+    nukeBlasts.push({ x, z, r: n.r, friendly: n.friendly, t0: now });
+  }
+  for (let i = nukeBlasts.length - 1; i >= 0; i--) if (now - nukeBlasts[i].t0 >= NUKE_KEEP_MS) nukeBlasts.splice(i, 1);
+}
+
+function nukeBlastAlpha(blast, now) {
+  const age = now - blast.t0;
+  if (age >= NUKE_KEEP_MS) return 0;
+  const dim = 1 - (1 - NUKE_DIM_FLOOR) * (age / NUKE_KEEP_MS);
+  const left = NUKE_KEEP_MS - age;
+  return left < NUKE_FADE_MS ? dim * (left / NUKE_FADE_MS) : dim;
+}
+
+function drawBlastRing(ctx, sx, sy, meters, color, alpha, dashed, label) {
+  const r = meters / scale;
+  if (r < 4 || r > 4000) return;
+  if (sx + r < 0 || sx - r > viewWidth || sy + r < 0 || sy - r > viewHeight) return;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  ctx.globalAlpha = alpha * 0.08;
+  ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.setLineDash(dashed ? [8, 5] : []);
+  ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+  if (label) {
+    // the label sits on the ring's top edge, or at the top of the screen when that is off screen
+    jamChip(label, sx, Math.max(16, Math.min(viewHeight - 8, sy - r - 4)), 'center', color);
+  }
+  ctx.restore();
+}
+
+function drawNukes(ctx, toScreen) {
+  if (settings.display.nukeRadius === false || !latest) return;
+  const now = performance.now();
+  const fair = fairPlay();
+  const AMBER = '#ffb000', RED = '#ff2020';
+  // the weapon you have selected
+  const station = (latest.loadout || []).find(l => l.selected && l.blast > 0 && l.ammo > 0);
+  if (station) {
+    const marked = (latest.markedTargets || []).find(m => m.isPrimary && !m.lost && m.name);
+    if (marked) {
+      const [sx, sy] = toScreen(marked.x, marked.z);
+      drawBlastRing(ctx, sx, sy, station.blast, AMBER, 1, true, 'BLAST ' + fmtDistance(station.blast));
+    }
+  }
+  // nuclear missiles in the air
+  for (const n of nukeMemory.values()) {
+    if (fair && !n.friendly) continue;
+    let x = n.x, z = n.z, aimed = false;
+    if (n.tx !== null) { x = n.tx; z = n.tz; aimed = true; }
+    else if (n.isIncoming && latest.player) { x = latest.player.x; z = latest.player.z; aimed = true; }
+    const [sx, sy] = toScreen(x, z);
+    drawBlastRing(ctx, sx, sy, n.r, n.friendly ? AMBER : RED, aimed ? 1 : 0.6, true, (n.friendly ? 'NUKE ' : 'ENEMY NUKE ') + fmtDistance(n.r));
+  }
+  // where one went off
+  for (const b of nukeBlasts) {
+    if (fair && !b.friendly) continue;
+    const a = nukeBlastAlpha(b, now);
+    if (a <= 0) continue;
+    const [sx, sy] = toScreen(b.x, b.z);
+    drawBlastRing(ctx, sx, sy, b.r, b.friendly ? AMBER : RED, a, false, 'BLAST ' + fmtDistance(b.r));
   }
 }
 
@@ -4623,6 +4719,7 @@ function connect() {
     updatePulse(latest);
     updateLastPosition(latest);
     updateAttackers(latest);
+    updateNukes(latest);
     // Speed comes straight from the server (Rigidbody.velocity.magnitude, the
     // same value the cockpit HUD reads), not from position deltas. A
     // background tab gets its events in bursts, which would make a delta

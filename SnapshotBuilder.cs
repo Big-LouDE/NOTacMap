@@ -30,6 +30,7 @@ namespace NOTacMap
 		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public float? jamAge; // jammed units only: seconds since the last jam event (a radar stays jammed for a few seconds after the jamming stops)
 		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public uint? jammedBy; // the unit that jammed it last, only sent when that unit is in this snapshot too (the game's map draws the line only then)
 		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public uint? shooterId; // an incoming missile only: the unit that fired it, sent only when that unit is in this snapshot too
+		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public float blastRadius; // a nuclear missile or bomb only: the radius of its blast in meters, the game's own Shockwave formula (13 x the cube root of the yield)
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isMissile; // any missile or bomb, any faction, lets the client tell enemy ones apart for trail filtering
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isMyMissile; // a missile the local player personally launched
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool isFriendlyMissile; // any friendly-faction missile, mine or a teammate's
@@ -123,6 +124,7 @@ namespace NOTacMap
 		public bool bomb; // a bomb or glide bomb
 		public int ammo;
 		public bool selected;
+		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public float blast; // a nuclear weapon only: the radius of its blast in meters
 	}
 
 	internal class PlayerSnapshot
@@ -277,6 +279,37 @@ namespace NOTacMap
 			return Mathf.Round(value * 10f) / 10f;
 		}
 
+		// The game itself treats a warhead of more than 100000 as a nuclear one (Missile.CheckExclusionZone keeps the AI out of a zone
+		// around its target), and its Shockwave works with a blast radius of 13 x the cube root of the yield, the same numbers are used here.
+		private const float NukeYield = 100000f;
+
+		internal static float BlastRadiusOf(float yield)
+		{
+			return yield > NukeYield ? Mathf.Round(Mathf.Pow(yield, 0.3333f) * 13f / 10f) * 10f : 0f;
+		}
+
+		// Per kind of weapon: the prefab's yield does not change, so it is looked up once.
+		private static readonly Dictionary<WeaponInfo, float> weaponBlast = new Dictionary<WeaponInfo, float>();
+
+		private static float BlastOfWeapon(WeaponInfo info)
+		{
+			if (info == null)
+			{
+				return 0f;
+			}
+			if (!weaponBlast.TryGetValue(info, out float radius))
+			{
+				Missile prefab = info.weaponPrefab != null ? info.weaponPrefab.GetComponent<Missile>() : null;
+				radius = prefab != null ? BlastRadiusOf(prefab.GetYield()) : 0f;
+				weaponBlast[info] = radius;
+				if (radius > 0f)
+				{
+					Plugin.Log.LogInfo($"NOTacMap: '{info.weaponName}' is a nuclear weapon, blast radius {radius} m.");
+				}
+			}
+			return radius;
+		}
+
 		// Weapon.CalcRange() runs an actual iterative drag/ballistics sim, the
 		// cockpit HUD (HUDMissileState) only calls it once a second and holds
 		// the last result in between, so we do the same instead of recomputing
@@ -414,7 +447,8 @@ namespace NOTacMap
 							gun = info.gun,
 							bomb = info.bomb || info.glideBomb,
 							ammo = loadoutStation.Ammo,
-							selected = loadoutStation == station
+							selected = loadoutStation == station,
+							blast = BlastOfWeapon(info)
 						});
 					}
 					if (station != null && station.WeaponInfo.gun == false && station.WeaponInfo.targetRequirements.maxRange > 0f)
@@ -567,6 +601,7 @@ namespace NOTacMap
 					if (unit is Missile missile)
 					{
 						snap.isMissile = true;
+						snap.blastRadius = BlastRadiusOf(missile.GetYield());
 						snap.isMyMissile = playerAircraft != null && missile.owner == playerAircraft;
 						// Any friendly missile is exactly as visible to a teammate as any
 						// other friendly unit already is via trackingDatabase/factionUnits -
