@@ -38,6 +38,10 @@
       <HintPath>$(GameDir)\NuclearOption_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="Mono.Security">
+      <HintPath>$(GameDir)\NuclearOption_Data\Managed\Mono.Security.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="Mirage">
       <HintPath>$(GameDir)\NuclearOption_Data\Managed\Mirage.dll</HintPath>
       <Private>false</Private>

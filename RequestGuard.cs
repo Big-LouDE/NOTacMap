@@ -50,8 +50,9 @@ namespace NOTacMap
 
 		private readonly HashSet<string> allowedHosts;
 		private readonly byte[] token; // null when LAN access is off
+		private readonly string httpsHost; // "address:port" of the HTTPS link, null while HTTPS is off
 
-		public RequestGuard(int port, string lanAddress, string lanToken)
+		public RequestGuard(int port, string lanAddress, string lanToken, int httpsPort = 0)
 		{
 			allowedHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 			{
@@ -62,6 +63,11 @@ namespace NOTacMap
 			{
 				allowedHosts.Add(lanAddress + ":" + port);
 				token = Encoding.UTF8.GetBytes(lanToken);
+				if (httpsPort > 0)
+				{
+					httpsHost = lanAddress + ":" + httpsPort;
+					allowedHosts.Add(httpsHost);
+				}
 			}
 		}
 
@@ -81,9 +87,14 @@ namespace NOTacMap
 			// sends none on GETs and our own address on POSTs.
 			if (origin != null)
 			{
+				// http:// for any of our addresses, https:// only for the HTTPS link while it is on.
 				const string prefix = "http://";
-				if (!origin.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-					|| !allowedHosts.Contains(origin.Substring(prefix.Length)))
+				const string securePrefix = "https://";
+				bool ours = (origin.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+						&& allowedHosts.Contains(origin.Substring(prefix.Length)))
+					|| (httpsHost != null && origin.StartsWith(securePrefix, StringComparison.OrdinalIgnoreCase)
+						&& string.Equals(origin.Substring(securePrefix.Length), httpsHost, StringComparison.OrdinalIgnoreCase));
+				if (!ours)
 				{
 					return GuardDecision.Reject(403, "request comes from another site");
 				}
@@ -218,6 +229,35 @@ namespace NOTacMap
 			}
 			remaining = string.Join("&", rest.ToArray());
 			return value;
+		}
+	}
+
+	// The HTTPS phone link is a TLS front on this PC that passes the bytes on to the web server (TlsFront). Every connection it opens to the
+	// web server is noted here, before the first byte, with the address of the phone it belongs to. The web server then sees a connection
+	// from this PC's own network address and asks this list who it really is. Only the front adds to the list, so nothing on the PC can
+	// pass itself off as a phone, and a request that is not in the list is judged by the address it comes from, as before.
+	internal static class FrontPeers
+	{
+		private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, IPAddress> peers =
+			new System.Collections.Concurrent.ConcurrentDictionary<string, IPAddress>();
+
+		public static void Add(IPEndPoint backend, IPAddress phone) { peers[Key(backend)] = phone; }
+		public static void Remove(IPEndPoint backend) { IPAddress gone; peers.TryRemove(Key(backend), out gone); }
+		public static int Count { get { return peers.Count; } }
+
+		// The address a request really comes from.
+		public static IPAddress Resolve(IPEndPoint remote)
+		{
+			if (remote == null) return null;
+			IPAddress phone;
+			return peers.TryGetValue(Key(remote), out phone) ? phone : remote.Address;
+		}
+
+		private static string Key(IPEndPoint e)
+		{
+			IPAddress a = e.Address;
+			if (a.IsIPv4MappedToIPv6) a = a.MapToIPv4();
+			return a + ":" + e.Port;
 		}
 	}
 

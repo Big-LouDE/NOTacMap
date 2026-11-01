@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using NOTacMap;
@@ -367,6 +369,103 @@ internal static class Program
             Thread.Sleep(300);
         }
 
+        // ===== J. the HTTPS front (TlsFront) in front of a real MapServer, over real TLS
+        {
+            const string tok = "0123456789abcdef0123456789abcdef";
+            Plugin.Log.Lines.Clear();
+            int httpsPort = port + 7;
+            System.Net.ServicePointManager.ServerCertificateValidationCallback = (s, c, ch, e) => true;
+            System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls12;
+            X509Certificate2 cert;
+            using (var rsa = RSA.Create(2048))
+            {
+                var request = new CertificateRequest("CN=NOTacMap test", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+                var made = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(2));
+                cert = new X509Certificate2(made.Export(X509ContentType.Pfx, "x"), "x");
+            }
+            var jc = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }) { Timeout = TimeSpan.FromSeconds(10) };
+            jc.DefaultRequestHeaders.ConnectionClose = true;
+            // The test host's HttpListener (HTTP.sys) matches the Host port, the game's does not, so the plain port is named here.
+            Func<string, string, string, Task<HttpResponseMessage>> viaHttps = (method, path, body) =>
+            {
+                var req = new HttpRequestMessage(new HttpMethod(method), "https://127.0.0.2:" + httpsPort + path);
+                req.Headers.Host = "127.0.0.2:" + port;
+                if (body != null) req.Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+                return jc.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
+            };
+
+            var j = new MapServer(port, null, null);
+            j.ConfigureHttps(true, httpsPort);
+            j.HttpsFrontStart = (address, frontPort, backendPort) => TlsFront.Start(address, frontPort, backendPort, cert);
+            j.Start();
+            j.EnableLan(tok, "127.0.0.2");
+            Console.WriteLine("J: 127.0.0.2 as a stand-in LAN address " + (j.LanActive ? "accepted" : "refused by Windows, J skipped"));
+            if (j.LanActive)
+            {
+                Check("J HTTPS is on and the phone link is an https link", j.HttpsActive && j.LanUrl.StartsWith("https://127.0.0.2:" + httpsPort + "/?t="));
+                r = await Send("GET", B + "/lan");
+                string lanJson = await r.Content.ReadAsStringAsync();
+                Check("J /lan says https is on, wanted, and its port", lanJson.Contains("\"https\":true") && lanJson.Contains("\"httpsWanted\":true") && lanJson.Contains("\"httpsPort\":" + httpsPort));
+                r = await viaHttps("GET", "/about", null);
+                Check("J a page comes through TLS: 200", r.StatusCode == HttpStatusCode.OK && (await r.Content.ReadAsStringAsync()).Contains("\"version\""));
+                r = await viaHttps("POST", "/lan", "{\"https\":true}");
+                Check("J a POST body comes through TLS", r.StatusCode == HttpStatusCode.OK && (await r.Content.ReadAsStringAsync()).Contains("can't be switched"));
+                r = await viaHttps("GET", "/nothing-here", null);
+                Check("J a missing page is a 404 through TLS", r.StatusCode == HttpStatusCode.NotFound);
+
+                var evJ = await viaHttps("GET", "/events", null);
+                var streamJ = await evJ.Content.ReadAsStreamAsync();
+                var bufJ = new byte[256];
+                await streamJ.ReadAsync(bufJ, 0, bufJ.Length);
+                Check("J the event stream opens over TLS", evJ.StatusCode == HttpStatusCode.OK);
+                j.Broadcast("{\"j\":1}");
+                int nj = await streamJ.ReadAsync(bufJ, 0, bufJ.Length);
+                Check("J an event arrives over TLS as it is sent", nj > 0 && System.Text.Encoding.UTF8.GetString(bufJ, 0, nj).Contains("{\"j\":1}"));
+                Check("J while the stream is open the front lists its connection", FrontPeers.Count >= 1);
+                evJ.Dispose();
+                for (int i = 0; i < 40 && FrontPeers.Count > 0; i++) Thread.Sleep(100);
+                Check("J when the connection is gone the list is empty again", FrontPeers.Count == 0);
+
+                j.SetHttps(false);
+                Check("J off: the link is plain again", !j.HttpsActive && j.LanUrl.StartsWith("http://127.0.0.2:" + port + "/?t="));
+                bool secureGone;
+                try { await viaHttps("GET", "/about", null); secureGone = false; } catch (Exception) { secureGone = true; }
+                Check("J off: the https port stops answering", secureGone);
+                r = await Send("GET", "http://127.0.0.2:" + port + "/about");
+                Check("J off: the plain address still answers", r.StatusCode == HttpStatusCode.OK);
+                Check("J off: a wanted-but-off state is shown", (await (await Send("GET", B + "/lan")).Content.ReadAsStringAsync()).Contains("\"https\":false"));
+
+                Check("J on again: it starts and reports true", j.SetHttps(true) && j.HttpsActive);
+                r = await viaHttps("GET", "/about", null);
+                Check("J on again: a page comes through", r.StatusCode == HttpStatusCode.OK);
+
+                // switching LAN off takes the front with it, and on again brings it back (HTTPS was still wanted)
+                j.DisableLan();
+                Check("J LAN off: no front is left", !j.HttpsActive);
+                secureGone = false;
+                try { await viaHttps("GET", "/about", null); } catch (Exception) { secureGone = true; }
+                Check("J LAN off: the https port stops answering", secureGone);
+                j.EnableLan(tok, "127.0.0.2");
+                Check("J LAN on again: the front is back", j.HttpsActive);
+            }
+            // a front that cannot start leaves the plain link working
+            var bad = new MapServer(port + 8, null, null);
+            bad.ConfigureHttps(true, port + 9);
+            bad.HttpsFrontStart = (address, frontPort, backendPort) => { throw new InvalidOperationException("no certificate"); };
+            bad.Start();
+            bad.EnableLan(tok, "127.0.0.2");
+            if (bad.LanActive)
+            {
+                Check("J a front that cannot start: HTTPS stays off, the link stays plain", !bad.HttpsActive && bad.LanUrl.StartsWith("http://"));
+                Check("J a front that cannot start: it is said in the log", Plugin.Log.Lines.Exists(l => l.Contains("HTTPS could not start")));
+                r = await Send("GET", "http://127.0.0.2:" + (port + 8) + "/about");
+                Check("J a front that cannot start: the plain address still answers", r.StatusCode == HttpStatusCode.OK);
+            }
+            bad.Stop();
+            j.Stop();
+            Thread.Sleep(300);
+        }
+
         // ===== G. 1.2.1: Sec-Fetch-Site on /events over real HTTP, and the "new link" request
         {
             Plugin.Log.Lines.Clear();
@@ -414,6 +513,28 @@ internal static class Program
             t = await r.Content.ReadAsStringAsync();
             Check("G newLink: a refusal comes back as an error", newLinkCalls == 2 && t.Contains("\"error\":\"Turn on access from other devices first.\""));
             newLinkAnswer = null;
+            // the HTTPS switch: one of three kinds of request, a real boolean, and the answer carries the HTTPS state
+            int secureCalls = 0; bool secureLast = false; string secureAnswer = null;
+            g.HttpsSwitch = on => { secureCalls++; secureLast = on; return secureAnswer; };
+            r = await postLan("{\"https\":true}");
+            t = await r.Content.ReadAsStringAsync();
+            Check("G https on: 200 and the handler got true", r.StatusCode == HttpStatusCode.OK && secureCalls == 1 && secureLast);
+            r = await postLan("{\"https\":false}");
+            Check("G https off: the handler got false", r.StatusCode == HttpStatusCode.OK && secureCalls == 2 && !secureLast);
+            secureAnswer = "Turn on access from other devices first.";
+            r = await postLan("{\"https\":true}");
+            t = await r.Content.ReadAsStringAsync();
+            Check("G https: a refusal comes back as an error", secureCalls == 3 && t.Contains("\"error\":\"Turn on access from other devices first.\""));
+            secureAnswer = null;
+            r = await postLan("{\"https\":\"yes\"}");
+            Check("G https: not a boolean is 400", (int)r.StatusCode == 400 && secureCalls == 3);
+            r = await postLan("{\"https\":true,\"enabled\":true}");
+            Check("G https together with enabled is 400", (int)r.StatusCode == 400 && secureCalls == 3);
+            r = await postLan("{\"https\":true,\"newLink\":true}");
+            Check("G https together with newLink is 400", (int)r.StatusCode == 400 && secureCalls == 3);
+            r = await postLan("{}");
+            Check("G an empty request is 400", (int)r.StatusCode == 400);
+
             int calls = newLinkCalls;
             r = await postLan("{\"newLink\":false}");
             Check("G newLink false: 400", (int)r.StatusCode == 400);

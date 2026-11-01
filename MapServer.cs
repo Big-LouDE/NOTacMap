@@ -73,6 +73,9 @@ namespace NOTacMap
 		private volatile string lanAddress; // null when LAN access is off, or if it couldn't start
 		private string refusedAddress; // an address Windows turned down, not tried again until the address changes
 		private volatile RequestGuard guard;
+		private bool httpsWanted;  // HTTPS is switched on in DEVICES. It only runs while LAN access runs.
+		private int httpsPort;
+		private IDisposable front; // the TLS front (see TlsFront), null while HTTPS is off
 		private readonly HashSet<string> rejectedLogged = new HashSet<string>();
 
 		// lanToken is null to keep the map on this PC only. lanAddress can be null while
@@ -83,7 +86,7 @@ namespace NOTacMap
 			this.port = port;
 			this.lanAddress = lanAddress;
 			this.lanToken = lanToken;
-			guard = new RequestGuard(port, lanAddress, lanToken);
+			guard = MakeGuard(lanAddress, lanToken);
 		}
 
 		public bool LanActive
@@ -110,6 +113,68 @@ namespace NOTacMap
 		// result convention as LanSwitch.
 		public Func<string> LanNewLink;
 
+		// Set by the plugin. Starts the TLS front for a network address: (address, port of the HTTPS link, port of this web server).
+		// Gives back what stops it, throws when it can't start.
+		public Func<string, int, int, IDisposable> HttpsFrontStart;
+
+		// Set by the plugin. Switches HTTPS on or off for the page's DEVICES panel. Same result convention as LanSwitch.
+		public Func<bool, string> HttpsSwitch;
+
+		public bool HttpsActive { get { return front != null; } }
+		public int HttpsPort { get { return httpsPort; } }
+
+		// Before Start: whether HTTPS was on in the config, and on which port.
+		public void ConfigureHttps(bool wanted, int port)
+		{
+			httpsWanted = wanted;
+			httpsPort = port;
+		}
+
+		private RequestGuard MakeGuard(string address, string token)
+		{
+			return new RequestGuard(port, address, token, front != null ? httpsPort : 0);
+		}
+
+		// The caller holds listenerLock.
+		private void StartFront(string address)
+		{
+			StopFront();
+			if (!httpsWanted || HttpsFrontStart == null || httpsPort <= 0 || address == null) return;
+			try
+			{
+				front = HttpsFrontStart(address, httpsPort, port);
+			}
+			catch (Exception ex)
+			{
+				front = null;
+				Plugin.Log?.LogWarning($"NOTacMap: HTTPS could not start on {address}:{httpsPort} ({ex.Message.Trim()}). The phone link stays on http.");
+			}
+		}
+
+		private void StopFront()
+		{
+			IDisposable old = front;
+			front = null;
+			try { if (old != null) old.Dispose(); } catch { /* it is closing anyway */ }
+		}
+
+		// Switches HTTPS on or off while the game runs. True when it is in the state that was asked for.
+		public bool SetHttps(bool on)
+		{
+			lock (listenerLock)
+			{
+				if (!running) return false;
+				httpsWanted = on;
+				string address = lanAddress;
+				if (address != null)
+				{
+					StartFront(address);
+					guard = MakeGuard(address, lanToken);
+				}
+				return !on || front != null;
+			}
+		}
+
 		// What a phone opens. Contains the secret, so it is only ever shown on
 		// this PC and never logged.
 		public string LanUrl
@@ -117,7 +182,8 @@ namespace NOTacMap
 			get
 			{
 				string address = lanAddress;
-				return address == null ? null : $"http://{address}:{port}/?t={lanToken}";
+				if (address == null) return null;
+				return front != null ? $"https://{address}:{httpsPort}/?t={lanToken}" : $"http://{address}:{port}/?t={lanToken}";
 			}
 		}
 
@@ -200,7 +266,8 @@ namespace NOTacMap
 					HttpListener opened = StartListener(address);
 					lanListener = opened;
 					lanAddress = address;
-					guard = new RequestGuard(port, address, lanToken);
+					StartFront(address);
+					guard = MakeGuard(address, lanToken);
 					StartAccepting(opened, true);
 					return true;
 				}
@@ -213,7 +280,7 @@ namespace NOTacMap
 			Plugin.Log?.LogWarning($"NOTacMap: couldn't listen on {address} for LAN access ({last.Message}). LAN access is off, the map still works on this PC.");
 			refusedAddress = address;
 			lanAddress = null;
-			guard = new RequestGuard(port, null, null);
+			guard = MakeGuard(null, null);
 			return false;
 		}
 
@@ -221,6 +288,7 @@ namespace NOTacMap
 		// holds listenerLock.
 		private void CloseLanListener()
 		{
+			StopFront();
 			HttpListener old = lanListener;
 			lanListener = null; // tells its accept loop to stop
 			try { if (old != null) old.Close(); } catch { }
@@ -297,7 +365,7 @@ namespace NOTacMap
 				lanToken = token;
 				refusedAddress = null;
 				ApplyAddress(address);
-				guard = new RequestGuard(port, lanAddress, lanToken); // a new token also needs a new guard
+				guard = MakeGuard(lanAddress, lanToken); // a new token also needs a new guard
 				if (newToken) DropLanClients(); // a phone with the old link keeps no stream open
 				return true;
 			}
@@ -312,7 +380,7 @@ namespace NOTacMap
 				lanToken = null;
 				refusedAddress = null;
 				CloseLanListener();
-				guard = new RequestGuard(port, null, null);
+				guard = MakeGuard(null, null);
 			}
 		}
 
@@ -331,7 +399,7 @@ namespace NOTacMap
 			}
 			else
 			{
-				guard = new RequestGuard(port, null, null);
+				guard = MakeGuard(null, null);
 			}
 		}
 
@@ -342,6 +410,7 @@ namespace NOTacMap
 			{
 				try { if (listener != null) listener.Stop(); } catch { }
 				try { if (lanListener != null) lanListener.Stop(); } catch { }
+				StopFront();
 			}
 			HttpListenerResponse[] open;
 			lock (clientsLock)
@@ -537,7 +606,8 @@ namespace NOTacMap
 			bool counted = false; // this request holds one of the network request slots
 			try
 			{
-				sender = context.Request.RemoteEndPoint?.Address;
+				// A request that came through the TLS front is judged by the phone's address, not by the front's own connection.
+				sender = FrontPeers.Resolve(context.Request.RemoteEndPoint);
 				fromNetwork = sender != null && !IPAddress.IsLoopback(sender.IsIPv4MappedToIPv6 ? sender.MapToIPv4() : sender);
 				if (fromNetwork)
 				{
@@ -560,7 +630,7 @@ namespace NOTacMap
 
 				RequestGuard usedGuard = guard;
 				GuardDecision decision = usedGuard.Evaluate(request.Headers["Host"], request.Headers["Origin"],
-					request.RemoteEndPoint?.Address, method, path, request.Url.Query, request.Headers["Cookie"],
+					sender, method, path, request.Url.Query, request.Headers["Cookie"],
 					request.Headers["Sec-Fetch-Site"]);
 				if (decision.Status == 302)
 				{
@@ -781,22 +851,29 @@ namespace NOTacMap
 
 						bool turnOn = false;
 						bool newLink = false;
+						bool secureAsked = false;
+						bool secureOn = false;
 						try
 						{
 							var body = Newtonsoft.Json.Linq.JObject.Parse(Encoding.UTF8.GetString(buffer, 0, total));
 							var flag = body["enabled"];
 							var fresh = body["newLink"];
+							var secure = body["https"];
 							bool hasFlag = flag != null;
 							bool hasFresh = fresh != null;
-							// Exactly one of the two, and it has to be a real boolean.
-							if (hasFlag == hasFresh
+							bool hasSecure = secure != null;
+							// Exactly one of the three, and it has to be a real boolean.
+							if ((hasFlag ? 1 : 0) + (hasFresh ? 1 : 0) + (hasSecure ? 1 : 0) != 1
 								|| (hasFlag && flag.Type != Newtonsoft.Json.Linq.JTokenType.Boolean)
+								|| (hasSecure && secure.Type != Newtonsoft.Json.Linq.JTokenType.Boolean)
 								|| (hasFresh && (fresh.Type != Newtonsoft.Json.Linq.JTokenType.Boolean || !(bool)fresh)))
 							{
 								Reject(context, 400);
 								return;
 							}
-							if (hasFlag) turnOn = (bool)flag; else newLink = true;
+							if (hasFlag) turnOn = (bool)flag;
+							else if (hasSecure) { secureAsked = true; secureOn = (bool)secure; }
+							else newLink = true;
 						}
 						catch (Newtonsoft.Json.JsonException)
 						{
@@ -808,6 +885,11 @@ namespace NOTacMap
 							Func<string> makeLink = LanNewLink;
 							error = makeLink == null ? "A new link can't be made from here." : makeLink();
 						}
+						else if (secureAsked)
+						{
+							Func<bool, string> secureHandler = HttpsSwitch;
+							error = secureHandler == null ? "HTTPS can't be switched from here." : secureHandler(secureOn);
+						}
 						else
 						{
 							Func<bool, string> handler = LanSwitch;
@@ -818,7 +900,7 @@ namespace NOTacMap
 					string lanUrl = LanUrl;
 					string json = lanUrl == null
 						? "{\"enabled\":false"
-						: "{\"enabled\":true,\"url\":\"" + lanUrl + "\"";
+						: "{\"enabled\":true,\"url\":\"" + lanUrl + "\",\"https\":" + (front != null ? "true" : "false") + ",\"httpsWanted\":" + (httpsWanted ? "true" : "false") + ",\"httpsPort\":" + httpsPort;
 					if (error != null) json += ",\"error\":" + Newtonsoft.Json.JsonConvert.ToString(error);
 					json += "}";
 					byte[] bytes = Encoding.UTF8.GetBytes(json);
@@ -933,7 +1015,7 @@ namespace NOTacMap
 		// PC are not logged.
 		private void LogRejected(HttpListenerRequest request, GuardDecision decision)
 		{
-			IPAddress from = request.RemoteEndPoint?.Address;
+			IPAddress from = FrontPeers.Resolve(request.RemoteEndPoint);
 			if (from == null || IPAddress.IsLoopback(from)) return;
 			string key = from + "|" + decision.Reason;
 			lock (rejectedLogged)

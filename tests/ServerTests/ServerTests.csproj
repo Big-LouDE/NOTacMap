@@ -10,6 +10,7 @@
   <ItemGroup>
     <Compile Include="..\..\MapServer.cs" />
     <Compile Include="..\..\RequestGuard.cs" />
+    <Compile Include="..\..\TlsFront.cs" />
     <Compile Include="Program.cs" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>

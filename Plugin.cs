@@ -36,6 +36,8 @@ namespace NOTacMap
 		private ConfigEntry<float> updateInterval;
 		private ConfigEntry<bool> autoOpenBrowser;
 		private ConfigEntry<bool> allowLan;
+		private ConfigEntry<bool> httpsEnabled;
+		private ConfigEntry<int> httpsPort;
 		private ConfigEntry<string> lanAddress;
 		private ConfigEntry<string> lanToken;
 		private MapServer server;
@@ -118,6 +120,12 @@ namespace NOTacMap
 				null,
 				new ConfigurationManagerAttributes { Browsable = false }));
 
+			httpsEnabled = Config.Bind("Server", "HttpsEnabled", false,
+				"EXPERIMENTAL. Offer the phone link over https, so the phone's browser can keep the screen on while the map is open (browsers only allow that on a secure page). Needs access from other devices. The browser warns that the connection is not private, because the certificate is made by this plugin and not by a company, tap through the warning. The map page switches this for you (DEVICES) and keeps this value in step.");
+			httpsPort = Config.Bind("Server", "HttpsPort", 8124, new ConfigDescription(
+				"The port of the https phone link, next to the normal port. Change it only if something else uses it. Takes effect the next time the game starts or HTTPS is switched.",
+				new AcceptableValueRange<int>(1024, 65535)));
+
 			string lan = null;
 			string token = null;
 			// With no address in the config, the plugin follows the PC's own address, so a new
@@ -153,6 +161,9 @@ namespace NOTacMap
 			server = new MapServer(port.Value, lan, token);
 			server.LanSwitch = SwitchLan;
 			server.LanNewLink = NewLink;
+			server.HttpsSwitch = SwitchHttps;
+			server.HttpsFrontStart = StartHttpsFront;
+			server.ConfigureHttps(httpsEnabled.Value && httpsPort.Value != port.Value, httpsPort.Value);
 			try
 			{
 				server.Start();
@@ -286,6 +297,51 @@ namespace NOTacMap
 				}
 				allowLan.Value = true;
 				Log.LogInfo("NOTacMap: LAN access turned on from the map page. Other devices on this network can open the map with the link shown there.");
+				return null;
+			}
+		}
+
+		// Makes (or loads) the certificate for this address and starts the TLS front.
+		private IDisposable StartHttpsFront(string address, int frontPort, int backendPort)
+		{
+			string folder = System.IO.Path.GetDirectoryName(typeof(MapServer).Assembly.Location);
+			System.Security.Cryptography.X509Certificates.X509Certificate2 certificate = TlsCertificate.LoadOrCreate(folder, address);
+			IDisposable started = TlsFront.Start(address, frontPort, backendPort, certificate);
+			Log.LogInfo($"NOTacMap: HTTPS (experimental) is on at https://{address}:{frontPort}/ . The phone's browser will warn that the connection is not private, the certificate is made by this plugin. Tap through the warning.");
+			return started;
+		}
+
+		// The HTTPS switch in the page's DEVICES panel (this PC only).
+		private string SwitchHttps(bool on)
+		{
+			lock (lanSwitchLock)
+			{
+				if (on)
+				{
+					if (!server.LanActive)
+					{
+						return "Turn on access from other devices first.";
+					}
+					if (httpsPort.Value == port.Value)
+					{
+						return "HttpsPort in the config is the same as Port. Give it another one.";
+					}
+				}
+				bool worked = server.SetHttps(on);
+				try
+				{
+					httpsEnabled.Value = on;
+					Config.Save();
+				}
+				catch (Exception ex)
+				{
+					Log.LogWarning($"NOTacMap: couldn't save the HTTPS choice to the config ({ex.Message}).");
+				}
+				if (!worked)
+				{
+					return $"HTTPS could not start on port {httpsPort.Value}. Something else may use it, or Windows said no. The link stays on http.";
+				}
+				Log.LogInfo(on ? "NOTacMap: HTTPS turned on from the map page." : "NOTacMap: HTTPS turned off from the map page.");
 				return null;
 			}
 		}

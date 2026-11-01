@@ -190,6 +190,42 @@ internal static class Program
         Check("page: phone link from another app, cross-site, goes through", Ask(lan, LH, null, Phone, path: "/", query: "t=" + TOKEN, fetchSite: "cross-site").Status == 302);
         Check("settings read: cross-site header does not matter here", Ask(off, "localhost:8123", null, Pc, path: "/settings", fetchSite: "cross-site").Status == 0);
 
+        // ---- the HTTPS phone link (TLS front): its own port, its own origin, and the phone's real address
+        var https = new RequestGuard(8123, "192.168.1.10", TOKEN, 8124);
+        string HH = "192.168.1.10:8124";
+        Check("https: page by the https host with the secret", Ask(https, HH, null, Phone, query: "t=" + TOKEN).Status == 302);
+        Check("https: cookie on the https host", Ask(https, HH, null, Phone, cookie: "notacmap_t=" + TOKEN).Status == 0);
+        Check("https: no secret is still refused", Ask(https, HH, null, Phone).Status == 401);
+        Check("https: the plain host still works", Ask(https, LH, null, Phone, cookie: "notacmap_t=" + TOKEN).Status == 0);
+        Check("https: its own origin is ours", Ask(https, HH, "https://" + HH, Phone, cookie: "notacmap_t=" + TOKEN).Status == 0);
+        Check("https: its own origin, different case", Ask(https, HH, "HTTPS://192.168.1.10:8124", Phone, cookie: "notacmap_t=" + TOKEN).Status == 0);
+        Check("https: another https origin is refused", Ask(https, HH, "https://evil.com", Phone, cookie: "notacmap_t=" + TOKEN).Status == 403);
+        Check("https: https origin with the plain port is refused", Ask(https, HH, "https://192.168.1.10:8123", Phone, cookie: "notacmap_t=" + TOKEN).Status == 403);
+        Check("https: a rebinding host on the https port is refused", Ask(https, "evil.com:8124", null, Phone, cookie: "notacmap_t=" + TOKEN).Status == 403);
+        Check("https: the https host is refused while HTTPS is off", Ask(lan, HH, null, Phone, cookie: "notacmap_t=" + TOKEN).Status == 403);
+        Check("https: an https origin is refused while HTTPS is off", Ask(lan, LH, "https://" + LH, Phone, cookie: "notacmap_t=" + TOKEN).Status == 403);
+        Check("https: the phone cannot switch LAN or HTTPS", Ask(https, HH, "https://" + HH, Phone, "POST", "/lan", cookie: "notacmap_t=" + TOKEN).Status == 403);
+        Check("https: events same-origin", Ask(https, HH, null, Phone, path: "/events", cookie: "notacmap_t=" + TOKEN, fetchSite: "same-origin").Status == 0);
+
+        // The peer list: a connection the front opened is judged by the phone behind it, any other one by its own address.
+        var front = new IPEndPoint(IPAddress.Parse("192.168.1.10"), 50001);
+        var other = new IPEndPoint(IPAddress.Parse("192.168.1.10"), 50002);
+        FrontPeers.Add(front, Phone);
+        Check("front: a listed connection resolves to the phone", FrontPeers.Resolve(front).Equals(Phone));
+        Check("front: an unlisted port of the same address stays as it is", FrontPeers.Resolve(other).Equals(other.Address));
+        Check("front: another address with a listed port stays as it is", FrontPeers.Resolve(new IPEndPoint(IPAddress.Parse("192.168.1.99"), 50001)).Equals(IPAddress.Parse("192.168.1.99")));
+        Check("front: a loopback connection with that port stays loopback", IPAddress.IsLoopback(FrontPeers.Resolve(new IPEndPoint(IPAddress.Loopback, 50001))));
+        Check("front: the mapped form of the address finds the entry", FrontPeers.Resolve(new IPEndPoint(IPAddress.Parse("::ffff:192.168.1.10"), 50001)).Equals(Phone));
+        Check("front: null stays null", FrontPeers.Resolve(null) == null);
+        // a request through the front is judged as the phone: it needs the secret, a direct request from this PC does not
+        Check("front: through the front without the secret is refused", Ask(https, HH, null, FrontPeers.Resolve(front)).Status == 401);
+        Check("front: through the front with the secret is let in", Ask(https, HH, null, FrontPeers.Resolve(front), cookie: "notacmap_t=" + TOKEN).Status == 0);
+        Check("front: this PC on loopback is still trusted", Ask(https, "localhost:8123", null, FrontPeers.Resolve(new IPEndPoint(IPAddress.Loopback, 50777))).Status == 0);
+        Check("front: this PC through its own network address needs the secret, as before", Ask(https, LH, null, FrontPeers.Resolve(other)).Status == 401);
+        FrontPeers.Remove(front);
+        Check("front: removed, the connection is judged by its own address again", FrontPeers.Resolve(front).Equals(front.Address));
+        Check("front: the list is empty again", FrontPeers.Count == 0);
+
         Console.WriteLine($"\n{pass} passed, {fail} failed");
         Environment.Exit(fail == 0 ? 0 : 1);
     }
