@@ -168,7 +168,9 @@ namespace NOTacMap
 			basic.Critical = true;
 			builder.Extensions.Add(basic);
 			var usage = new KeyUsageExtension();
-			usage.KeyUsage = KeyUsages.digitalSignature | KeyUsages.keyEncipherment;
+			// Signing only: the connection uses ECDHE, which needs just the signature. (The game's Mono.Security writes only this bit even
+			// when keyEncipherment is asked for, so this says what the file really has, and no key exchange by encryption is allowed.)
+			usage.KeyUsage = KeyUsages.digitalSignature;
 			usage.Critical = true;
 			builder.Extensions.Add(usage);
 			var purpose = new ExtendedKeyUsageExtension();

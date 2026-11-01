@@ -158,6 +158,8 @@
   #devicesPanel .note { white-space: normal; max-width: 260px; margin: 2px 0 4px; }
   #devicesPanel select { width: 100%; box-sizing: border-box; padding: 3px 2px; }
   #devicesPanel canvas { margin: 8px 0 4px; }
+  #httpsFingerprint { word-break: break-all; color: var(--hud-green); }
+  #devicesPanel { min-width: 262px; }
   .lan-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .feedback-link a { color: var(--hud-green); text-decoration: underline; }
   .lan-row { display: flex; gap: 4px; align-items: center; }
@@ -257,6 +259,11 @@
 
   /* Panels never taller or wider than the screen, scrolling inside if needed. */
   .panel { box-sizing: border-box; max-width: calc(var(--vw, 100vw) - 28px); overflow: auto; }
+  /* Scrollbars in the same look as the rest: thin, the dim HUD color, no track. (The webkit rules are for older browsers.) */
+  .panel, #colorPicker, #legend .legend-rows, #startScreen { scrollbar-width: thin; scrollbar-color: var(--hud-dim) transparent; }
+  .panel::-webkit-scrollbar, #colorPicker::-webkit-scrollbar, #legend .legend-rows::-webkit-scrollbar, #startScreen::-webkit-scrollbar { width: 6px; height: 6px; }
+  .panel::-webkit-scrollbar-thumb, #colorPicker::-webkit-scrollbar-thumb, #legend .legend-rows::-webkit-scrollbar-thumb, #startScreen::-webkit-scrollbar-thumb { background: var(--hud-dim); border-radius: 3px; }
+  .panel::-webkit-scrollbar-track, #colorPicker::-webkit-scrollbar-track, #legend .legend-rows::-webkit-scrollbar-track, #startScreen::-webkit-scrollbar-track { background: transparent; }
 
   /* Touch screens: bigger targets for fingers. */
   @media (pointer: coarse) {
@@ -412,8 +419,7 @@
     <div class="group" id="lanOn" hidden>
       <h4>Scan or open the link</h4>
       <div class="note">Anyone who has the link can see your map, so show the code only while you need it.</div>
-      <label><input type="checkbox" id="httpsToggle">Secure link (HTTPS, experimental)</label>
-      <div class="note" id="httpsNote">Lets the phone keep its screen on while the map is open. The phone's browser warns that the connection is not private, because the certificate is made by this plugin. Tap through the warning, once for each browser session.</div>
+      <label data-note="Lets the phone keep its screen on while the map is open. The phone's browser warns that the connection is not private, because the certificate is made by this plugin. Tap through the warning, once for each browser session."><input type="checkbox" id="httpsToggle">Secure link (HTTPS, experimental)</label>
       <div class="note lan-error" id="httpsError" hidden></div>
       <div class="note" id="httpsStartNote" hidden>Starting HTTPS. The certificate is made the first time, this can take a few seconds.</div>
       <div class="note" id="httpsFingerprintBox" hidden>Certificate SHA-256:<br><span id="httpsFingerprint"></span><br>Compare this with the certificate details on your phone before you tap through.</div>
@@ -597,10 +603,10 @@
         <button type="button" class="color-swatch" title="Pick a color"></button>
         <button type="button" class="color-reset" title="Reset to default (follow the game theme)">&#8634;</button>
       </div>
-    </div>
+    </details>
     <div class="group feedback-link">
       <a href="https://github.com/Big-LouDE/NOTacMap/issues" target="_blank" rel="noopener noreferrer">Send feedback or report a bug</a>
-    </details>
+    </div>
   </div>
 </div>
 <div id="startScreen" hidden>

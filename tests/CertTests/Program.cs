@@ -33,14 +33,14 @@ internal static class Program
     static void Check(string name, bool ok) { if (ok) pass++; else { fail++; Console.WriteLine("FAIL: " + name); } }
     const string Password = "notacmap";
 
-    // The same shape as the game makes: CA false (critical), digital signature + key enciphering, server authentication, the address as the only name.
+    // The same shape as the game makes: CA false (critical), digital signature only, server authentication, the address as the only name.
     static byte[] MakeLike(string address, DateTime notAfter)
     {
         using (var rsa = RSA.Create(2048))
         {
             var request = new CertificateRequest("CN=NOTacMap", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
-            request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, true));
+            request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, true));
             request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new Oid("1.3.6.1.5.5.7.3.1") }, false));
             var san = new SubjectAlternativeNameBuilder();
             san.AddIpAddress(IPAddress.Parse(address));
@@ -58,12 +58,12 @@ internal static class Program
             var basic = e as X509BasicConstraintsExtension;
             if (basic != null) { sawBasic = true; caFalse = !basic.CertificateAuthority; basicCritical = basic.Critical; }
             var usage = e as X509KeyUsageExtension;
-            if (usage != null) { sawUsage = true; usageOk = (usage.KeyUsages & X509KeyUsageFlags.DigitalSignature) != 0 && (usage.KeyUsages & X509KeyUsageFlags.KeyEncipherment) != 0 && (usage.KeyUsages & X509KeyUsageFlags.KeyCertSign) == 0; }
+            if (usage != null) { sawUsage = true; usageOk = usage.KeyUsages == X509KeyUsageFlags.DigitalSignature; }
             var eku = e as X509EnhancedKeyUsageExtension;
             if (eku != null) { sawPurpose = true; serverAuth = eku.EnhancedKeyUsages.Count == 1 && eku.EnhancedKeyUsages[0].Value == "1.3.6.1.5.5.7.3.1"; }
         }
         Check(label + ": basic constraints are there, not a CA, critical", sawBasic && caFalse && basicCritical);
-        Check(label + ": key usage is signature and key enciphering only", sawUsage && usageOk);
+        Check(label + ": key usage is digital signature only", sawUsage && usageOk);
         Check(label + ": extended key usage is exactly server authentication", sawPurpose && serverAuth);
         string[] names = TlsCertificate.AddressesInCertificate(c);
         Check(label + ": it names exactly the network address, nothing else", names != null && names.Length == 1 && names[0] == address);
