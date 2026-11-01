@@ -2466,6 +2466,46 @@ function paintWater() {
   }
   cctx.putImageData(img, 0, 0);
   waterCanvas = c;
+  paintOcean();
+}
+
+// The open sea around the map. Past the map's edge the picture used to be the plain page background; now it is water in the Water
+// color, getting darker the further out it goes (like deep ocean), so zooming all the way out looks like a map in the middle of the
+// sea. Made once as a small image (it is smooth, so it can be stretched) and drawn under the map; beyond it the deepest color is
+// filled. It changes with the Water color and the map size, nothing is computed per frame.
+let oceanCanvas = null;
+let oceanReach = 0;        // meters from the map's edge to the deepest color
+let oceanDeepStyle = '';
+const OCEAN_PIXELS = 160;  // width of the small image
+const OCEAN_FADE = 0.75;   // the deepest color is reached this many map lengths from the edge
+const OCEAN_DEEPEST = 0.35;  // brightness of the deepest water against the Water color
+
+function paintOcean() {
+  if (!mapInfo) return;
+  const water = settings.colors.water || DEFAULT_SETTINGS.colors.water;
+  const W = mapInfo.mapSizeX, H = mapInfo.mapSizeY;
+  const reach = Math.max(W, H) * OCEAN_FADE;
+  const totalW = W + 2 * reach, totalH = H + 2 * reach;
+  const cw = OCEAN_PIXELS, ch = Math.max(2, Math.round(OCEAN_PIXELS * totalH / totalW));
+  const c = oceanCanvas || document.createElement('canvas');
+  c.width = cw; c.height = ch;
+  const cctx = c.getContext('2d');
+  const img = cctx.createImageData(cw, ch);
+  for (let py = 0, i = 0; py < ch; py++) {
+    const wz = ((py + 0.5) / ch - 0.5) * totalH;
+    for (let px = 0; px < cw; px++, i += 4) {
+      const wx = ((px + 0.5) / cw - 0.5) * totalW;
+      const d = Math.hypot(Math.max(Math.abs(wx) - W / 2, 0), Math.max(Math.abs(wz) - H / 2, 0));
+      let t = Math.min(1, d / reach);
+      t = t * t * (3 - 2 * t);
+      const k = 1 - (1 - OCEAN_DEEPEST) * t;
+      img.data[i] = Math.round(water.r * k); img.data[i + 1] = Math.round(water.g * k); img.data[i + 2] = Math.round(water.b * k); img.data[i + 3] = 255;
+    }
+  }
+  cctx.putImageData(img, 0, 0);
+  oceanCanvas = c;
+  oceanReach = reach;
+  oceanDeepStyle = `rgb(${Math.round(water.r * OCEAN_DEEPEST)}, ${Math.round(water.g * OCEAN_DEEPEST)}, ${Math.round(water.b * OCEAN_DEEPEST)})`;
 }
 
 // The sea mask from the ocean depth map, or null when the plugin has none (an older plugin, or a map without one).
@@ -2748,6 +2788,21 @@ function drawBackground(origin) {
   const sx1 = cx + (bottomRight.x - origin.x) / scale, sy1 = cy - (bottomRight.z - origin.z) / scale;
   ctx.save();
   if (viewHeadingDeg) { ctx.translate(cx, cy); ctx.rotate(-viewHeadingDeg * Math.PI / 180); ctx.translate(-cx, -cy); }
+  if (oceanCanvas) {
+    // the sea around the map: the deepest color everywhere, the fade from the edge on top, both with the map's own area left out
+    const R = Math.hypot(viewWidth, viewHeight) / 2 + 2;
+    const ox0 = cx + (-mapInfo.mapSizeX / 2 - oceanReach - origin.x) / scale, ox1 = cx + (mapInfo.mapSizeX / 2 + oceanReach - origin.x) / scale;
+    const oy0 = cy - (mapInfo.mapSizeY / 2 + oceanReach - origin.z) / scale, oy1 = cy - (-mapInfo.mapSizeY / 2 - oceanReach - origin.z) / scale;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(cx - R, cy - R, 2 * R, 2 * R);
+    ctx.rect(Math.min(sx0, sx1), Math.min(sy0, sy1), Math.abs(sx1 - sx0), Math.abs(sy1 - sy0));
+    ctx.clip('evenodd');
+    ctx.fillStyle = oceanDeepStyle;
+    ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
+    ctx.drawImage(oceanCanvas, ox0, oy0, ox1 - ox0, oy1 - oy0);
+    ctx.restore();
+  }
   ctx.globalAlpha = 0.55;
   ctx.drawImage(bgCanvas, sx0, sy0, sx1 - sx0, sy1 - sy0);
   ctx.globalAlpha = 1;
