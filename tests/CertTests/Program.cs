@@ -64,6 +64,8 @@ internal static class Program
         }
         Check(label + ": basic constraints are there, not a CA, critical", sawBasic && caFalse && basicCritical);
         Check(label + ": key usage is digital signature only", sawUsage && usageOk);
+        // .NET and OpenSSL read a badly written key usage without a word, Chrome refuses the certificate (ERR_CERT_INVALID), so the bytes are checked
+        Check(label + ": key usage is written as valid DER", TlsCertificate.KeyUsageIsSound(c));
         Check(label + ": extended key usage is exactly server authentication", sawPurpose && serverAuth);
         string[] names = TlsCertificate.AddressesInCertificate(c);
         Check(label + ": it names exactly the network address, nothing else", names != null && names.Length == 1 && names[0] == address);
@@ -101,6 +103,16 @@ internal static class Program
     static void Run(string dir)
     {
         const string A = "192.168.1.10", B = "192.168.1.20";
+        // the encodings of the key usage: what Mono.Security wrote for two flags (A0 with 7 unused bits, which Chrome refuses) and the valid ones
+        Check("key usage bytes: digital signature alone (7 unused bits) is sound", TlsCertificate.KeyUsageBytesAreSound(new byte[] { 0x03, 0x02, 0x07, 0x80 }));
+        Check("key usage bytes: signature + key encipherment written right (5 unused bits) is sound", TlsCertificate.KeyUsageBytesAreSound(new byte[] { 0x03, 0x02, 0x05, 0xA0 }));
+        Check("key usage bytes: signature + key encipherment with 7 unused bits (what the game wrote) is not", !TlsCertificate.KeyUsageBytesAreSound(new byte[] { 0x03, 0x02, 0x07, 0xA0 }));
+        Check("key usage bytes: no bits set is not", !TlsCertificate.KeyUsageBytesAreSound(new byte[] { 0x03, 0x02, 0x00, 0x00 }));
+        Check("key usage bytes: key encipherment alone (no signature) is not", !TlsCertificate.KeyUsageBytesAreSound(new byte[] { 0x03, 0x02, 0x05, 0x20 }));
+        Check("key usage bytes: trailing zero bits that could be dropped is not", !TlsCertificate.KeyUsageBytesAreSound(new byte[] { 0x03, 0x02, 0x00, 0x80 }));
+        Check("key usage bytes: more than 7 unused bits is not", !TlsCertificate.KeyUsageBytesAreSound(new byte[] { 0x03, 0x02, 0x08, 0x00 }));
+        Check("key usage bytes: wrong tag is not", !TlsCertificate.KeyUsageBytesAreSound(new byte[] { 0x04, 0x02, 0x07, 0x80 }));
+        Check("key usage bytes: nothing is not", !TlsCertificate.KeyUsageBytesAreSound(null) && !TlsCertificate.KeyUsageBytesAreSound(new byte[0]));
         var c = TlsCertificate.LoadOrCreate(dir, A);
         Check("a certificate is made", c != null && c.HasPrivateKey);
         Check("it is saved in the folder it was given", File.Exists(Path.Combine(dir, "https-cert.pfx")));

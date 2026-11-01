@@ -22,6 +22,7 @@ namespace NOTacMap
 		private const string FileName = "https-cert.pfx";
 		private const int Days = 365;
 		private const string SanOid = "2.5.29.17";
+		private const string KeyUsageOid = "2.5.29.15";
 		private const string ServerAuthOid = "1.3.6.1.5.5.7.3.1";
 
 		// What makes the PKCS12 bytes. The tests put another one in, because the game's Mono.Security only runs inside the game.
@@ -79,8 +80,36 @@ namespace NOTacMap
 			if (certificate == null || !certificate.HasPrivateKey) return false;
 			if (certificate.NotAfter.ToUniversalTime() <= DateTime.UtcNow.AddDays(30)) return false;
 			if (certificate.NotBefore.ToUniversalTime() > DateTime.UtcNow) return false;
+			if (!KeyUsageIsSound(certificate)) return false;
 			string[] names = AddressesInCertificate(certificate);
 			return names != null && names.Length == 1 && names[0] == address;
+		}
+
+		// The key usage is there, says digital signature, and is written the way DER wants it. A certificate with it written wrongly is
+		// refused by Chrome as ERR_CERT_INVALID while OpenSSL and .NET read it without complaint: the game's Mono.Security wrote two flags
+		// with the unused bits of one, so a certificate made like that is made again.
+		internal static bool KeyUsageIsSound(X509Certificate2 certificate)
+		{
+			foreach (System.Security.Cryptography.X509Certificates.X509Extension extension in certificate.Extensions)
+			{
+				if (extension.Oid != null && extension.Oid.Value == KeyUsageOid) return KeyUsageBytesAreSound(extension.RawData);
+			}
+			return false;
+		}
+
+		// BIT STRING: tag 3, length, number of unused bits (0 to 7), the bits. The unused bits have to be zero and the last byte has to
+		// have a set bit (DER writes no more bits than it needs), and the first bit is digital signature.
+		internal static bool KeyUsageBytesAreSound(byte[] der)
+		{
+			if (der == null || der.Length < 4 || der[0] != 0x03) return false;
+			int length = der[1];
+			if (length < 2 || length > 3 || der.Length != 2 + length) return false;
+			int unused = der[2];
+			if (unused > 7) return false;
+			byte last = der[der.Length - 1];
+			if (last == 0 || (last & ((1 << unused) - 1)) != 0) return false;
+			if ((last & (1 << unused)) == 0) return false;   // the last byte's lowest used bit must be set
+			return (der[3] & 0x80) != 0;
 		}
 
 		// The network addresses in the certificate's subject alternative name, read from the raw bytes (the text form of the extension
