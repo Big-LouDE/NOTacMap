@@ -50,6 +50,7 @@ namespace NOTacMap
 		private float mapCheckTimer;
 		private bool themeDumped;
 		private volatile bool broadcastInFlight;
+		private float lastSlowBuildLog = -100f;
 
 		// One snapshot goes out at a time (broadcastInFlight), so the serializer and its buffer are reused. The text is written
 		// straight into the buffer as UTF-8, with the event stream framing around it. Going through a json string, an
@@ -498,9 +499,11 @@ namespace NOTacMap
 				LogOnce("building the map", ex);
 			}
 			buildStopwatch.Stop();
-			// Logged when it is slow enough to matter for frame time.
-			if (buildStopwatch.ElapsedMilliseconds > 3)
+			// Logged when it is slow enough to matter for frame time: a real hitch, and not more than once every 15 seconds (it runs five
+			// times a second, so a busy server at 4 or 5 ms every time would fill the log).
+			if (buildStopwatch.ElapsedMilliseconds > 8 && Time.realtimeSinceStartup - lastSlowBuildLog > 15f)
 			{
+				lastSlowBuildLog = Time.realtimeSinceStartup;
 				Log.LogWarning($"NOTacMap: Build() took {buildStopwatch.ElapsedMilliseconds}ms on the main thread ({snapshot?.units.Count ?? 0} units, {snapshot?.airbases.Count ?? 0} airbases)");
 			}
 
