@@ -823,6 +823,7 @@ namespace NOTacMap
 						return;
 					}
 					context.Response.ContentType = "image/png";
+					context.Response.Headers.Add("Cache-Control", "no-store"); // the browser does not keep it either
 					context.Response.ContentLength64 = MapImageCapture.Png.Length;
 					context.Response.OutputStream.Write(MapImageCapture.Png, 0, MapImageCapture.Png.Length);
 					context.Response.Close();
@@ -838,6 +839,7 @@ namespace NOTacMap
 						return;
 					}
 					context.Response.ContentType = "image/png";
+					context.Response.Headers.Add("Cache-Control", "no-store"); // the browser does not keep it either
 					context.Response.ContentLength64 = MapImageCapture.WaterPng.Length;
 					context.Response.OutputStream.Write(MapImageCapture.WaterPng, 0, MapImageCapture.WaterPng.Length);
 					context.Response.Close();
@@ -867,6 +869,7 @@ namespace NOTacMap
 					context.Response.AddHeader("X-Orient", unitIcon.Orient ? "1" : "0");
 					context.Response.AddHeader("X-Size", unitIcon.Size.ToString(System.Globalization.CultureInfo.InvariantCulture));
 					context.Response.AddHeader("X-Sprite", unitIcon.Sprite ?? "");
+					context.Response.Headers.Add("Cache-Control", "no-store"); // the browser does not keep it either
 					context.Response.ContentLength64 = unitIcon.Png.Length;
 					context.Response.OutputStream.Write(unitIcon.Png, 0, unitIcon.Png.Length);
 					context.Response.Close();

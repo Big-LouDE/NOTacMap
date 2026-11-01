@@ -419,7 +419,7 @@
     <div class="group" id="lanOn" hidden>
       <h4>Scan or open the link</h4>
       <div class="note">Anyone who has the link can see your map, so show the code only while you need it.</div>
-      <label data-note="Lets the phone keep its screen on while the map is open. The phone's browser warns that the connection is not private, because the certificate is made by this plugin. Tap through the warning, once for each browser session."><input type="checkbox" id="httpsToggle">Secure link (HTTPS, experimental)</label>
+      <label data-note="Lets the phone keep its screen on while the map is open. The phone's browser warns that it cannot check the certificate, because the plugin makes it itself. The link is still encrypted. Only tap through on a link you got from your own PC, and compare the fingerprint below. You will probably see the warning again later."><input type="checkbox" id="httpsToggle">Secure link (HTTPS, experimental)</label>
       <div class="note lan-error" id="httpsError" hidden></div>
       <div class="note" id="httpsStartNote" hidden>Starting HTTPS. The certificate is made the first time, this can take a few seconds.</div>
       <div class="note" id="httpsFingerprintBox" hidden>Certificate SHA-256:<br><span id="httpsFingerprint"></span><br>Compare this with the certificate details on your phone before you tap through.</div>
@@ -450,7 +450,7 @@
   <div id="displayPanel" class="panel">
     <div class="group">
       <label><input type="checkbox" data-group="display" data-key="fairPlay">Fair play</label>
-      <div class="note">Hides what your cockpit does not show you: the speed and ETA in the missile warning, enemy missiles your warning has not picked up yet, who fired at you (ATTACKER), the RADAR DESTROYED tag and the rings of enemy nuclear missiles. Your other switches stay as they are.</div>
+      <div class="note">Hides what your cockpit does not show you: the speed and ETA in the missile warning, enemy missiles your warning has not picked up yet, who fired at you (ATTACKER), the RADAR DESTROYED tag and the rings of enemy nuclear missiles, in the air and where they went off. Your other switches stay as they are.</div>
     </div>
     <details class="group fold" data-fold="view" open>
       <summary>View</summary>
