@@ -523,7 +523,7 @@
       <label data-note="Name, type, side, and distance and bearing from you. Speed, altitude and heading only for your own side."><input type="checkbox" data-group="display" data-key="infoCard" checked>Info card when you tap or hover a unit</label>
       <label data-note="Your aircraft stays on the map as LAST POSITION until you have a new one, and for 10 seconds after."><input type="checkbox" data-group="display" data-key="lastPosition" checked>Mark where you lost your aircraft</label>
       <label data-note="A ring with the real blast radius (from the game's own numbers) around the marked target while you have a nuclear weapon selected, around a nuclear missile that is on its way, and where one went off, for a minute."><input type="checkbox" data-group="display" data-key="nukeRadius" checked>Nuclear blast radius</label>
-      <label data-note="While an unguided bomb is selected: where it would land if you let it go now, worked out the way the cockpit's own bombing display does it, with the time the bomb needs to fall. For a nuclear bomb the blast ring is drawn around that point."><input type="checkbox" data-group="display" data-key="bombImpact" checked>Bomb impact point</label>
+      <label data-note="While an unguided bomb is selected: where it would land if you let it go now, worked out the way the cockpit's own bombing display does it, with the time the bomb needs to fall. The bomb's blast ring is drawn around that point (the real blast radius of a nuclear bomb, how far the blast and fragments reach for an ordinary one)."><input type="checkbox" data-group="display" data-key="bombImpact" checked>Bomb impact point</label>
     </details>
     <details class="group fold" data-fold="page">
       <summary>Page and names</summary>
@@ -4362,6 +4362,9 @@ function drawBombImpact(ctx, toScreen) {
     ctx.beginPath(); ctx.moveTo(sx - 12, sy); ctx.lineTo(sx - 4, sy); ctx.moveTo(sx + 4, sy); ctx.lineTo(sx + 12, sy);
     ctx.moveTo(sx, sy - 12); ctx.lineTo(sx, sy - 4); ctx.moveTo(sx, sy + 4); ctx.lineTo(sx, sy + 12); ctx.stroke();
     const dist = Math.hypot(b.x - latest.player.x, b.z - latest.player.z);
+    // an ordinary bomb: how far its blast and fragments reach (a nuclear one gets its ring from drawNukes)
+    const bomb = (latest.loadout || []).find(l => l.selected && l.reach > 0 && l.ammo > 0);
+    if (bomb && settings.display.nukeRadius !== false) drawBlastRing(ctx, sx, sy, bomb.reach, '#ffb000', 1, false, 'BLAST ' + fmtDistance(bomb.reach));
     jamChip(`IMPACT ${fmtDistance(dist)} · ${b.fallTime.toFixed(1)}s`, sx + 16, sy - 10, 'left', '#ffffff');
   }
   ctx.restore();

@@ -125,6 +125,7 @@ namespace NOTacMap
 		public int ammo;
 		public bool selected;
 		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public float blast; // a nuclear weapon only: the radius of its blast in meters
+		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public float reach; // an unguided bomb that is not nuclear: how far its blast and fragments reach in meters
 	}
 
 	internal class PlayerSnapshot
@@ -390,6 +391,31 @@ namespace NOTacMap
 			return yield > NukeYield ? Mathf.Round(Mathf.Pow(yield, 0.3333f) * 13f / 10f) * 10f : 0f;
 		}
 
+		// How far the blast and fragments of an ordinary bomb reach: the game's DamageEffects.BlastFrag looks for things to hurt within 20 x the
+		// cube root of the yield. It is the furthest the bomb can hurt, not where everything is destroyed.
+		internal static float ReachOf(float yield)
+		{
+			return yield > 0f && yield <= NukeYield ? Mathf.Round(Mathf.Pow(yield, 0.3333f) * 20f) : 0f;
+		}
+
+		private static readonly Dictionary<WeaponInfo, float> weaponReach = new Dictionary<WeaponInfo, float>();
+
+		private static float ReachOfWeapon(WeaponInfo info)
+		{
+			if (info == null || !info.bomb || info.glideBomb)
+			{
+				return 0f;
+			}
+			if (!weaponReach.TryGetValue(info, out float reach))
+			{
+				Missile prefab = info.weaponPrefab != null ? info.weaponPrefab.GetComponent<Missile>() : null;
+				reach = prefab != null ? ReachOf(prefab.GetYield()) : 0f;
+				weaponReach[info] = reach;
+				Plugin.Log.LogInfo($"NOTacMap: bomb '{info.weaponName}': blast reach {reach} m.");
+			}
+			return reach;
+		}
+
 		// Per kind of weapon: the prefab's yield does not change, so it is looked up once.
 		private static readonly Dictionary<WeaponInfo, float> weaponBlast = new Dictionary<WeaponInfo, float>();
 
@@ -550,7 +576,8 @@ namespace NOTacMap
 							bomb = info.bomb || info.glideBomb,
 							ammo = loadoutStation.Ammo,
 							selected = loadoutStation == station,
-							blast = BlastOfWeapon(info)
+							blast = BlastOfWeapon(info),
+							reach = ReachOfWeapon(info)
 						});
 					}
 					if (station != null && station.WeaponInfo.gun == false && station.WeaponInfo.targetRequirements.maxRange > 0f)
