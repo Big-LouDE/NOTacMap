@@ -24,7 +24,7 @@ namespace NOTacMap
         public static FakeLog Log = new FakeLog();
         public static string ThemeJson = null;
         public const string PluginVersion = "1.3.0";
-        public const string BuildLabel = "beta2";
+        public const string BuildLabel = "";
         public const string TestedGameVersion = "0.34.6";
         public static string GameVersion = "0.35.1";
     }

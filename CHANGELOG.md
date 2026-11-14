@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.3.0
+
+Added
+- Where an unguided bomb will land: with a bomb selected, a mark shows the impact point, worked out the way the cockpit's bombing display does it, and a ring around it shows how far the blast and the fragments reach
+- Nuclear weapons show their blast radius, from the game's own numbers: around your marked target (or the bomb's impact point) while a nuclear weapon is selected, around nuclear missiles in the air, and where one went off. A missile that was shot down or did not explode gets no ring
+- Jamming on the map, like on the game's own map: a JAMMED tag on units whose radar is jammed, a line to the jammer, "YOUR JAMMER ON" when you jam and "YOU ARE JAMMED" with who jams you. A RADAR DESTROYED tag shows on a unit whose radar was shot away. Each part has its own switch
+- ATTACKER: the aircraft that fired a missile at you gets a red ring and the tag ATTACKER. The ring stays for 30 seconds after the missile is gone, dimming, and says what it was and how long ago
+- Fair play, a switch at the top of DISPLAY: it hides what your cockpit does not show you (speed and ETA of incoming missiles, missiles your warning has not picked up, who fired at you, RADAR DESTROYED and the rings of enemy nuclear missiles). Your other switches stay as they are
+- Info card: tap a unit, or hover it with a mouse, to see its name, type, side, and the distance and bearing from you. Your own side also shows altitude, heading and speed. An enemy only shows what the game's own tooltip shows
+- LAST POSITION: when you lose your aircraft, its symbol stays where you were, dimming slowly, and stays 10 seconds after you have a new one
+- Heading up: DISPLAY > Map up > Your heading turns the map so you always fly up the screen, with a small compass. A button under RECENTER switches between the two
+- Game icons: DISPLAY > Icons > Game draws every unit with the icon of the game's own map, taken from your running game
+- The sea goes on past the edge of the map and gets darker the further out you go. Inside the map it is placed where the game says the sea is, in a deep blue you can change under DISPLAY, Water
+- Units in DISPLAY: Auto follows the unit setting in the game, or pick Meters or Feet (ft, knots, nautical miles). Idea from Hollow-Ruin
+- Presets at the top of FILTER: All, Minimal, and two Combat views. Combat reads the weapons you carry and shows only what they can hit
+- When a marked target is inside your weapon cone: the cone is tinted, the brackets around the target close in, the range number lights up and a slow fade plays once. Arrows show which way to turn when the target is in range but off to the side, a line shows how far is left until it is in range, and a small chip counts how many of your marked targets are in range. Each has its own switch
+- Distance rings (5, 10, 20 and 40 km, or 2, 5, 10 and 20 nm) and a scale bar, both in FILTER. The rings are off by default
+- A switch for the speed and the time to impact in the incoming missile box
+- Pulse, off by default: one soft glow along the screen edge when a missile starts coming at you (red) or the jamming on you starts (yellow)
+- A rotate button for phones and tablets, and a MENU button that holds fullscreen, rotate and devices
+- An experimental secure link (HTTPS), off by default: DEVICES > Secure link lets a phone keep its screen on. It opens a second port (8124) with a certificate the plugin makes itself, so the phone warns that it cannot check it. It has had no outside security review yet. The notes in DEVICES and in the README say what that means
+- The log and the Help window say so when your game is not the version NOTacMap was last checked with (now 0.34.6)
+
+Changed
+- DISPLAY and FILTER are in folded sections now, and a switch with a ? has a note: hold the mouse over it, or touch and hold
+- Zoom follows how far you scroll and, on a map you have moved, zooms toward the cursor. A pinch keeps you in the center while the map follows you
+- When you die or eject, the map stays where you were instead of jumping to the middle
+- Helicopter icons come from the game's own data, so mods with their own helicopters work without an update
+- The grid reference (like Gh98) is in the bottom right corner now. It sat on top of the HELP tag, and the status text and buttons covered the grid numbers along the top
+- The snapshot is written straight into a reused buffer, which is about a third of the allocation on a busy server
+- The map picture and the unit icons are sent with no-store, so a changed map or icon is never shown stale
+- The description in the README and on Thunderstore says the map is made first for HOTAS pilots and also works for anyone who wants more information on a second monitor, a tablet or a phone
+
+Fixed
+- An enemy missile that your cockpit warning has not picked up yet is drawn as a missile needle, not a plane arrow (also in 1.2.4)
+- A browser tab that was hidden when the game closed now closes too (also in 1.2.4)
+- Icon capture does nothing on a frame that is already slow, so it cannot add to a hitch
+
 ## 1.2.4
 
 Fixed

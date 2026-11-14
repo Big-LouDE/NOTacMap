@@ -1,6 +1,6 @@
 {
   "name": "NOTacMap",
-  "version_number": "1.2.4",
+  "version_number": "1.3.0",
   "website_url": "https://github.com/Big-LouDE/NOTacMap",
   "description": "Second-screen map for Nuclear Option, made for HOTAS pilots and anyone who wants more information on a second monitor or phone. Shows units, airbases, missile warnings, trails and your weapon's range in a browser page. Nothing to set up per map.",
   "dependencies": [
