@@ -86,6 +86,7 @@
     font-size: calc(10px * var(--text-scale)); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6); pointer-events: none;
   }
   .panel label.show-note .note-tip { display: block; }
+  .exp-tag { flex: none; padding: 0 5px; border: 1px solid #ffb020; border-radius: 3px; color: #ffb020; font-size: 0.78em; letter-spacing: 0.06em; line-height: 1.5; }
   #menuRow { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
   #menuRow[hidden] { display: none; }
   .panel {
@@ -419,7 +420,7 @@
     <div class="group" id="lanOn" hidden>
       <h4>Scan or open the link</h4>
       <div class="note">Anyone who has the link can see your map, so show the code only while you need it.</div>
-      <label data-note="Lets the phone keep its screen on while the map is open. The phone's browser warns that it cannot check the certificate, because the plugin makes it itself. The link is still encrypted. Only tap through on a link you got from your own PC. You will probably see the warning again later."><input type="checkbox" id="httpsToggle">Secure link (HTTPS, experimental)</label>
+      <label data-note="Lets the phone keep its screen on while the map is open. The phone's browser warns that it cannot check the certificate, because the plugin makes it itself. The link is still encrypted. Only tap through on a link you got from your own PC. You will probably see the warning again later."><input type="checkbox" id="httpsToggle">Secure link (HTTPS) <span class="exp-tag">EXPERIMENTAL</span></label>
       <div class="note lan-error" id="httpsError" hidden></div>
       <div class="note" id="httpsStartNote" hidden>Starting HTTPS. The certificate is made the first time, this can take a few seconds.</div>
       <div class="note" id="httpsFingerprintBox" hidden>Certificate SHA-256, for a desktop browser that shows certificate details:<br><span id="httpsFingerprint"></span></div>

@@ -20,8 +20,13 @@ Added
 - A switch for the speed and the time to impact in the incoming missile box
 - Pulse, off by default: one soft glow along the screen edge when a missile starts coming at you (red) or the jamming on you starts (yellow)
 - A rotate button for phones and tablets, and a MENU button that holds fullscreen, rotate and devices
-- An experimental secure link (HTTPS), off by default: DEVICES > Secure link lets a phone keep its screen on. It opens a second port (8124) with a certificate the plugin makes itself, so the phone warns that it cannot check it. It has had no outside security review yet. The notes in DEVICES and in the README say what that means
+- An experimental secure link (HTTPS), off by default and marked EXPERIMENTAL in DEVICES: DEVICES > Secure link lets a phone keep its screen on. It opens a second port (8124) with a certificate the plugin makes itself, so the phone warns that it cannot check it. It has had no outside security review yet. The notes in DEVICES and in the README say what that means
 - The log and the Help window say so when your game is not the version NOTacMap was last checked with (now 0.34.6)
+
+Still welcome: outside testing
+- The secure link has had no outside security review. If you know TLS, a look at TlsFront.cs, TlsCertificate.cs and RequestGuard.cs is the most useful help I can get
+- Edge cases I have not tried: Samsung Internet, Safari and Firefox on the secure link, a phone that goes to sleep and wakes up, a session of several hours, a modded helicopter, the game's own icons with modded units, and Linux
+- Tell me in the Discussions tab or open an issue
 
 Changed
 - DISPLAY and FILTER are in folded sections now, and a switch with a ? has a note: hold the mouse over it, or touch and hold
