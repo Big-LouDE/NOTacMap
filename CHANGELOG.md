@@ -26,7 +26,7 @@ Added
 
 Still welcome: outside testing
 - The secure link has had no outside security review. If you know TLS, a look at TlsFront.cs, TlsCertificate.cs and RequestGuard.cs is the most useful help I can get
-- Edge cases I have not tried: Samsung Internet, Safari and Firefox on the secure link, a phone that goes to sleep and wakes up, a session of several hours, a modded helicopter, the game's own icons with modded units, and Linux
+- Edge cases I have not tried: Safari and Firefox on the secure link, a phone that goes to sleep and wakes up, a session of several hours, a modded helicopter, the game's own icons with modded units, and Linux
 - Tell me in the Discussions tab or open an issue
 
 Changed
