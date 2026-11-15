@@ -16,7 +16,7 @@ A second-screen map for Nuclear Option. Made first for HOTAS pilots: it follows 
 - Runway approach lines, and fading trails behind moving units. FILTER picks which kinds of trails show, and the grid can be switched off too
 - FILTER and DISPLAY (top right) control what's shown, how it looks, and the colors. Saved to a `settings.json` next to the plugin. A dark outline on text keeps labels readable over the terrain (switch it off in DISPLAY). Tap the legend to open or close it, and the Help button next to it explains the symbols and the settings. Heads up if you stream: teammates' real Steam names are shown on the map by default. Untick "Use real names instead of callsigns" in DISPLAY and they get random callsigns instead.
 - The background map comes from the game's own terrain texture, so any map works. Pan, zoom, and a button to recenter on you
-- Optional LAN mode to open the map on a phone or tablet on your home network. Off by default, touch works
+- Optional LAN mode to open the map on a phone or tablet on your home network. Off by default, touch works. An experimental secure link (HTTPS) lets the phone keep its screen on
 - Light on frame rate: redraws slowly when idle, speeds up when you pan or zoom, and sleeps while the tab is hidden
 
 Want the details? [FEATURES.md](https://github.com/Big-LouDE/NOTacMap/blob/master/FEATURES.md) explains each feature and setting.
@@ -41,11 +41,13 @@ Once access from other devices is on, it stays on after a restart until you swit
 
 Only devices on a private network address (192.168.x.x, 10.x.x.x, 172.16 to 31.x.x or 169.254.x.x) are accepted, and they need the secret in the link. The New link button in DEVICES makes a new link and cuts off every device that has the old one. Deleting `LanToken` from the config and restarting the game does the same. Switching access off and on again keeps the same link.
 
-Anyone who has the link can see your map, and the connection isn't encrypted, so use it at home and not on public wifi. Don't forward the port (router port forwarding, WSL2 or `netsh portproxy`, a reverse proxy): anything forwarded to this PC looks like it comes from the PC itself and needs no secret. Saving settings only works from the PC, so a phone keeps its own display settings.
+Anyone who has the link can see your map, and the normal connection isn't encrypted, so use it at home and not on public wifi. Don't forward the port (router port forwarding, WSL2 or `netsh portproxy`, a reverse proxy): anything forwarded to this PC looks like it comes from the PC itself and needs no secret. Saving settings only works from the PC, so a phone keeps its own display settings.
 
 If Windows won't let the game listen on the network, the page and the log say so, and the map keeps working on the PC.
 
-**Keeping the screen on.** The page can't do it, so set a longer screen timeout on the phone. On Android you can also turn on "Stay awake" in the developer options, which keeps the screen on while it charges. On an iPhone, set Auto-Lock to Never. The reason: a web page may only keep a screen awake over HTTPS, and this map is plain HTTP on your home network.
+**Keeping the screen on.** A web page may only keep a screen awake over HTTPS, and the normal link is plain HTTP on your home network. So on the normal link, set a longer screen timeout on the phone. On Android you can also turn on "Stay awake" in the developer options, which keeps the screen on while it charges. On an iPhone, set Auto-Lock to Never.
+
+**Secure link (experimental).** DEVICES has a "Secure link (HTTPS)" switch, and so has the screen you get after picking "On another device". It starts a second address on a second port (8124) with a certificate the plugin makes itself, and the page on that link keeps the phone's screen on. The phone's browser warns that it cannot check the certificate, because the plugin makes it itself. The link is still encrypted. Only tap through on a link you got from your own PC. As far as I know, Chrome and Samsung Internet on Android don't show a certificate fingerprint, so there is nothing to compare on the phone. You will probably see the warning again later. The certificate and its private key are in `BepInEx/cache/https-cert.pfx` on your PC. The file is protected only by a fixed password that is in the source code, so anyone who can read your BepInEx folder can use the key. It is off by default, it has had no outside security review yet, and I have only tried it with Chrome on Android so far. Testing it from outside is still welcome: other browsers (Samsung Internet, Safari, Firefox), a phone that goes to sleep and wakes up, and a long session. Someone who knows TLS taking a look at the code would help most. Tell me in the Discussions tab or open an issue.
 
 ## How it works
 
