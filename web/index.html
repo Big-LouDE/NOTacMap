@@ -209,6 +209,7 @@
   .start-remember { display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 8px; }
   .start-remember input { accent-color: var(--hud-green); width: 18px; height: 18px; }
   .start-note { color: var(--hud-dim); font-size: 0.85em; margin-top: 6px; }
+  .start-https { margin: 14px 0 0; }
   .start-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
   .start-actions button { padding: 8px 12px; }
   #startQr { display: block; margin: 8px 0; image-rendering: pixelated; max-width: 100%; height: auto; }
@@ -641,12 +642,20 @@
         <li>Scan this code with its camera, or type the link into its browser.</li>
         <li>This tab draws nothing for now. The map starts when the device connects.</li>
       </ol>
+      <label class="start-remember start-https"><input type="checkbox" id="startHttps">Secure link (HTTPS) <span class="exp-tag">EXPERIMENTAL</span></label>
+      <div class="start-note">Lets the phone keep its screen on. Its browser warns that it cannot check the certificate, because the plugin makes it itself. The link is still encrypted. Only tap through on a link you got from your own PC. It has had no outside security review yet.</div>
+      <div class="start-error" id="startHttpsError" hidden></div>
+      <div class="start-note" id="startHttpsStartNote" hidden>Starting HTTPS. The certificate is made the first time, this can take a few seconds.</div>
       <div class="start-actions"><button type="button" id="startReveal">Show QR code and link</button></div>
       <div id="startSecret" hidden>
         <canvas id="startQr" title="Scan with the phone camera"></canvas>
         <div class="lan-row"><input id="startUrl" type="text" readonly><button type="button" id="startCopy" class="mini-btn">copy</button></div>
       </div>
       <div class="start-note">The code stays hidden until you show it, so nobody next to you can scan it by accident. Anyone who has the link can see your map, so keep it to yourself.</div>
+      <div class="start-actions">
+        <button type="button" id="startNewLink" title="Makes a new secret link and cuts off every device that has the old one">New link</button>
+        <button type="button" id="startLanOff">Turn off access from other devices</button>
+      </div>
       <div class="start-actions">
         <button type="button" id="startShowHere">Show the map here too</button>
         <button type="button" id="startBack">Change my choice</button>
@@ -1737,8 +1746,10 @@ function applyLan(info) {
   lanInfo = url ? info : null;
   document.getElementById('lanToggle').checked = !!url;
   document.getElementById('httpsToggle').checked = !!(url && (info.https || info.httpsStarting));
+  document.getElementById('startHttps').checked = document.getElementById('httpsToggle').checked;
   const starting = !!(url && info.httpsStarting);
   document.getElementById('httpsStartNote').hidden = !starting;
+  document.getElementById('startHttpsStartNote').hidden = !starting;
   const fingerprint = url && info.https && info.certSha256 ? info.certSha256 : '';
   document.getElementById('httpsFingerprint').textContent = fingerprint;
   document.getElementById('httpsFingerprintBox').hidden = !fingerprint;
@@ -1891,15 +1902,23 @@ document.getElementById('lanReveal').addEventListener('click', () => {
   if (document.getElementById('lanSecret').hidden) showSecret(); else hideSecret();
 });
 
-document.getElementById('lanNewLink').addEventListener('click', () => {
+// New link, in DEVICES and on the "other device" screen. The error shows in both places.
+function askNewLink() {
   if (!confirm('This makes a new link and cuts off every device that has the old one. Continue?')) return;
   showLanError('');
-  postLan({ newLink: true }).then(res => { if (res.error) showLanError(res.error); });
-});
+  showHttpsError('');
+  postLan({ newLink: true }).then(res => {
+    if (res.error) { showLanError(res.error); showHttpsError(res.error); }
+  });
+}
+document.getElementById('lanNewLink').addEventListener('click', askNewLink);
+document.getElementById('startNewLink').addEventListener('click', askNewLink);
 function showHttpsError(message) {
-  const line = document.getElementById('httpsError');
-  line.textContent = message || '';
-  line.hidden = !message;
+  for (const id of ['httpsError', 'startHttpsError']) {
+    const line = document.getElementById(id);
+    line.textContent = message || '';
+    line.hidden = !message;
+  }
 }
 // While HTTPS is starting (the certificate is made on a worker thread), the answer to /lan says so, and the page asks again
 // until it is up or has failed.
@@ -1912,13 +1931,26 @@ function pollHttps() {
     refreshLan();
   }, 700);
 }
-document.getElementById('httpsToggle').addEventListener('change', e => {
+function changeHttps(e) {
   showHttpsError('');
   httpsPollCount = 0;
   const want = e.target.checked;
   postLan({ https: want }).then(res => {
     if (res.error) showHttpsError(res.error);
   });
+}
+document.getElementById('httpsToggle').addEventListener('change', changeHttps);
+document.getElementById('startHttps').addEventListener('change', changeHttps);
+// "Turn off" on the other-device screen. A remembered "On another device" would turn access
+// back on at the next start, so it goes back to asking.
+document.getElementById('startLanOff').addEventListener('click', () => {
+  showLanError('');
+  if (settings.display.startMode === 'device') {
+    settings.display.startMode = 'ask';
+    document.getElementById('startModeSelect').value = 'ask';
+    saveSettings();
+  }
+  setLan(false);
 });
 document.getElementById('lanToggle').addEventListener('change', e => {
   showLanError('');

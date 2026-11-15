@@ -21,6 +21,7 @@ Added
 - Pulse, off by default: one soft glow along the screen edge when a missile starts coming at you (red) or the jamming on you starts (yellow)
 - A rotate button for phones and tablets, and a MENU button that holds fullscreen, rotate and devices
 - An experimental secure link (HTTPS), off by default and marked EXPERIMENTAL in DEVICES: DEVICES > Secure link lets a phone keep its screen on. It opens a second port (8124) with a certificate the plugin makes itself, so the phone warns that it cannot check it. It has had no outside security review yet. The notes in DEVICES and in the README say what that means
+- The screen after "On another device" has the Secure link switch, New link and "Turn off access from other devices" next to the QR code, so the link can be set up in one place. Turning access off there sets a remembered "On another device" back to "Ask me"
 - The log and the Help window say so when your game is not the version NOTacMap was last checked with (now 0.34.6)
 
 Still welcome: outside testing

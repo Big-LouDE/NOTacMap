@@ -32,7 +32,7 @@ Requires BepInEx 5, which the mod manager installs for you.
 Off by default. To open the map on another device on your home network:
 
 1. Start the game. The map page on your PC first asks where you want to see the map. Pick "On another device".
-2. The first time, a prompt says what that opens up. Confirm it, then press "Show QR code and link". Open the link, or scan the code with the camera, on the other device once. The phone remembers the link afterwards.
+2. The first time, a prompt says what that opens up. Confirm it. On the next screen you can switch on the experimental Secure link, then press "Show QR code and link". Open the link, or scan the code with the camera, on the other device once. The phone remembers the link afterwards.
 3. If Windows asks about the firewall, allow it on private networks only.
 
 "Remember my choice" is ticked by default, so you are only asked the first time. Untick it if you want to be asked every time.
