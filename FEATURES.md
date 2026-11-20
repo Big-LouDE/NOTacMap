@@ -138,7 +138,7 @@ FILTER has a folded section for trails with five switches: friendly aircraft, en
 
 Presets, at the top: All, Combat (all my weapons), Combat (selected weapon), Minimal and My choice. Combat reads the weapons on your own aircraft and ticks only what they can hit, and it follows your loadout, so a weapon you run out of drops out. The first Combat uses everything you carry, the second only the weapon you have selected. Minimal shows planes, helicopters, weapon range and missile trails. My choice goes back to the boxes the way you set them.
 
-Unit types: Plane, Helicopter, Tank, APC, Radar, AA / SAM, Ship, Vehicle (other), Building and Pilot (ejected). All are on except Pilot.
+Unit types: Plane, Helicopter, Tank, APC, Radar, AA / SAM, Ship, Vehicle (other), Building and Pilot (ejected). All are on except Pilot. Below them, "Neutral units" hides units that belong to neither side, like neutral buildings, whatever their type. Friendly and enemy units, missiles and airbases are not affected. The All preset turns it on again, Minimal and Combat leave it as you set it.
 
 Weapons: Air-to-air, Air-to-ground and Unlocked / other. All on.
 

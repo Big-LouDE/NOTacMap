@@ -387,6 +387,7 @@
       <label><input type="checkbox" data-group="unitTypes" data-key="vehicle" checked>Vehicle (other)</label>
       <label><input type="checkbox" data-group="unitTypes" data-key="building" checked>Building</label>
       <label><input type="checkbox" data-group="unitTypes" data-key="pilot">Pilot (ejected)</label>
+      <label data-note="Units that belong to neither side, like neutral buildings. Friendly and enemy units are not affected. Missiles and airbases are always shown."><input type="checkbox" data-group="unitTypes" data-key="neutral" checked>Neutral units</label>
     </details>
     <details class="group fold" data-fold="weapons" open>
       <summary>Weapons</summary>
@@ -1080,7 +1081,7 @@ function applyDarkMode() {
 // remember or re-type a URL. The server treats this as an opaque blob -
 // the schema lives entirely here.
 const DEFAULT_SETTINGS = {
-  unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false },
+  unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false, neutral: true },
   weapons: { air2air: true, air2ground: true, unlocked: true },
   display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, nukeRadius: true, bombImpact: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true, mapUp: 'north', iconStyle: 'ours', keepScreenOn: true },
   overlays: { runwayGuides: true, weaponRange: true, grid: true, rangeRings: false, scaleBar: true },
@@ -2319,6 +2320,12 @@ function setFont(px, bold) {
 // being its own ungoverned category.
 function unitTypeVisible(category) {
   return settings.unitTypes[category === 'generic' ? 'plane' : category];
+}
+
+// Units of no side (neutral buildings and the like) have their own box, next to the unit types. It
+// is not a type: it hides them whatever they are, and friendly and enemy units are never touched.
+function unitSideVisible(u) {
+  return u.faction !== 'neutral' || settings.unitTypes.neutral;
 }
 
 // Your own missile always shows regardless of the filter, there's no
@@ -3745,7 +3752,7 @@ function draw() {
         if (u.isMissile && !u.isIncomingMissile && fairPlay()) return;   // no line behind a missile that is not drawn
         color = u.isIncomingMissile ? '#ff2020' : unitColor(u);
       } else {
-        if (!unitTypeVisible(classifyUnit(u))) return;
+        if (!unitTypeVisible(classifyUnit(u)) || !unitSideVisible(u)) return;
         const allowed = u.baseType === 'aircraft' && u.faction === 'friendly' ? tf.friendlyAircraft
           : u.baseType === 'aircraft' && u.faction === 'enemy' ? tf.enemyAircraft
           : tf.other;
@@ -3851,7 +3858,7 @@ function draw() {
     }
 
     const category = classifyUnit(u);
-    if (!unitTypeVisible(category)) return;
+    if (!unitTypeVisible(category) || !unitSideVisible(u)) return;
     infoPicks.push({ id: u.id, x: sx, y: sy });
     ctx.fillStyle = unitColor(u);
     // Buildings keep our own symbol: the game stretches a building's icon to its real footprint, which makes a blob here.
@@ -4626,7 +4633,7 @@ function drawJamming(ctx, toScreen) {
   // A unit whose radar is destroyed (the radar part, not the unit). Your cockpit and the game's map do not tell you this, so Fair play hides it.
   if (d.jamRadar !== false && !fairPlay()) {
     for (const u of units) {
-      if (!u.radarDestroyed || (p && u.id === p.id)) continue;
+      if (!u.radarDestroyed || (p && u.id === p.id) || !unitSideVisible(u)) continue;
       const rp = toScreen(u.x, u.z);
       if (rp[0] < -100 || rp[0] > viewWidth + 100 || rp[1] < -100 || rp[1] > viewHeight + 100) continue;
       jamChip('RADAR DESTROYED', rp[0] + 10, rp[1] - 12, 'left', '#ff9020');
@@ -4634,7 +4641,7 @@ function drawJamming(ctx, toScreen) {
   }
   let mineCount = 0;
   for (const u of units) {
-    if (!u.jammed || (p && u.id === p.id)) continue;
+    if (!u.jammed || (p && u.id === p.id) || !unitSideVisible(u)) continue;
     const vp = toScreen(u.x, u.z);
     const mine = !!(p && p.id && u.jammedBy === p.id && !(u.jamAge > JAM_MINE_MAX_AGE));
     if (mine) mineCount++;
@@ -4650,7 +4657,7 @@ function drawJamming(ctx, toScreen) {
     // waves leave your icon toward what you jam
     const pp = toScreen(p.x, p.z);
     for (const u of units) {
-      if (!u.jammed || u.jammedBy !== p.id || u.jamAge > JAM_MINE_MAX_AGE) continue;
+      if (!u.jammed || u.jammedBy !== p.id || u.jamAge > JAM_MINE_MAX_AGE || !unitSideVisible(u)) continue;
       const tp = toScreen(u.x, u.z);
       const ang = Math.atan2(tp[1] - pp[1], tp[0] - pp[0]);
       ctx.strokeStyle = 'rgba(255,224,32,0.85)';
