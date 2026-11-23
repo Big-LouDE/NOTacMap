@@ -19,6 +19,7 @@
     --passive-ping: #2a5a34;
     --hud-green: #3fdb5e;
     --hud-dim: #1f7a35;
+    --combat: #ffb020; /* FILTER button and bar while a Combat view hides units */
     --text-scale: 1; /* Display > Text size in the filter panel; applied via calc() below and via setFont() for canvas text */
   }
   /* Night mode (?theme=dark): red-tinted HUD/UI text to preserve night
@@ -51,6 +52,24 @@
     color: var(--hud-green); font-size: calc(13px * var(--text-scale)); letter-spacing: 0.05em;
     text-shadow: 0 0 4px rgba(63,219,94,0.5);
   }
+  /* Combat view on: says what is hidden, with a way back to All. Full for a few seconds, then small. Bottom middle,
+     clear of the phone's home bar. */
+  #combatBar {
+    position: absolute; left: 12px; right: 12px; margin: 0 auto; width: fit-content; bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    display: flex; align-items: center; gap: 10px; padding: 6px 10px;
+    background: rgba(0, 0, 0, 0.8); border: 1px solid var(--combat); color: var(--combat);
+    font-size: calc(11px * var(--text-scale)); font-weight: bold; letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap;
+  }
+  #combatBar[hidden] { display: none; }
+  #combatBar .txt { white-space: normal; }
+  #combatBar .detail { font-weight: normal; }
+  #combatBar button {
+    background: transparent; border: 1px solid var(--combat); color: var(--combat); cursor: pointer;
+    font: inherit; letter-spacing: inherit; text-transform: inherit; padding: 4px 10px;
+  }
+  #combatBar .short, #combatBar.small .full, #combatBar.small .detail { display: none; }
+  #combatBar.small .short { display: inline; }
+  #filterBtn.combat { color: var(--combat) !important; border-color: var(--combat) !important; box-shadow: 0 0 8px rgba(255, 176, 32, 0.6); }
   #themeWarning {
     position: absolute; bottom: 44px; left: 14px;
     color: var(--hostile); font-size: calc(11px * var(--text-scale));
@@ -326,6 +345,15 @@
     #gridRef { right: 8px; }
     #themeWarning { left: 8px; max-width: calc(var(--vw, 100vw) - 110px); }
   }
+  /* A phone held upright: the full bar on two lines, and a bigger button for the thumb. */
+  @media (max-width: 500px) {
+    #combatBar { bottom: calc(40px + env(safe-area-inset-bottom, 0px)); } /* above the scale bar and the grid reference */
+    #combatBar:not(.small) .head { display: block; }
+    #combatBar:not(.small) .sep1 { display: none; }
+  }
+  @media (pointer: coarse) {
+    #combatBar button { padding: 8px 14px; }
+  }
 </style>
 </head>
 <body>
@@ -351,6 +379,10 @@
 </div>
 </div>
 <div id="gridRef"></div>
+<div id="combatBar" hidden>
+  <span class="txt"><span class="head"><span class="full">combat view</span><span class="short">combat</span></span><span class="detail"><span class="sep1"> &middot; </span><span id="combatWhat"></span></span> &middot; <span id="combatHidden"></span></span>
+  <button type="button" id="combatShowAll" title="Back to the All preset. Your own boxes stay under My choice."><span class="full">show all</span><span class="short">all</span></button>
+</div>
 <div id="themeWarning">Live theme not loaded yet - showing fallback palette. It will switch over by itself once you're in a mission.</div>
 <div id="controls">
   <button id="recenterBtn">&#8982; recenter on me</button>
@@ -679,7 +711,7 @@
     <p>The circle or cone around you is the range of the weapon you have selected.</p>
     <p>LEGEND (top left) lists every symbol.</p>
     <h3>Settings</h3>
-    <p>FILTER: unit types, weapon kinds, overlays, trails and presets. Combat shows only what your weapons can hit.</p>
+    <p>FILTER: unit types, weapon kinds, overlays, trails and presets. Combat shows only what your weapons can hit. While it hides something, the FILTER button is amber and a bar at the bottom says how many units are hidden, with a button back to All.</p>
     <p>DISPLAY: what the map shows, the look, names and colors. Hold the mouse over a switch, or touch and hold it, for a note.</p>
     <p>Fair play, at the top of DISPLAY, hides what your cockpit does not show you.</p>
     <p>Range rings and a scale bar help to judge distances. Both are in FILTER.</p>
@@ -2109,10 +2141,12 @@ function setPreset(mode) {
   if (settings.preset.mode === 'custom') settings.preset.mine = snapshotFilters();
   settings.preset.mode = mode;
   combatKey = '';
+  combatSummary = null;
   if (mode === 'all') applyFilterValues(PRESET_ALL);
   else if (mode === 'minimal') applyFilterValues(PRESET_MINIMAL);
   updatePresetButtons(mode === 'combatAll' || mode === 'combatSelected' ? 'Waiting for your weapons...' : '');
   if (mode === 'combatAll' || mode === 'combatSelected') updateCombat(lastLoadout);
+  updateCombatBar();
   saveSettings();
 }
 
@@ -2122,6 +2156,7 @@ function noteManualFilterChange(group) {
   settings.preset.mode = 'custom';
   settings.preset.mine = snapshotFilters();
   updatePresetButtons();
+  updateCombatBar();
 }
 
 // Called with every snapshot. In a Combat view the boxes follow the loadout (no save for each change, the next save carries them).
@@ -2133,12 +2168,67 @@ function updateCombat(loadout) {
   const key = mode + '|' + (result ? JSON.stringify(result.values) : 'none');
   if (key === combatKey) return;
   combatKey = key;
-  if (result) applyFilterValues(result.values);
+  if (result) { applyFilterValues(result.values); combatSummary = result.summary; }
   updatePresetButtons(result ? 'Combat view: ' + result.summary + '.' : (lastLoadout ? 'No weapon with ammo, so nothing is changed.' : 'Waiting for your weapons...'));
 }
 
 document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => setPreset(b.dataset.preset)));
-settingsReady.then(() => { updatePresetButtons(); });
+settingsReady.then(() => { updatePresetButtons(); updateCombatBar(); });
+
+// While a Combat view hides units, the FILTER button turns amber and a bar at the bottom says what is hidden.
+// The bar comes up in full when the hiding starts (or what is shown changes), and shrinks after a few seconds.
+// Units off screen do not count, only the ones the filter hides. Ejected pilots are hidden in every preset.
+const COMBAT_BAR_FULL_MS = 5000;
+let combatSummary = null;   // what the Combat view shows, e.g. "air targets"
+let combatBarState = '';    // what the bar showed last, to know when to bring it up in full again
+let combatBarTimer = null;
+const combatBar = document.getElementById('combatBar');
+
+function combatHiddenCount() {
+  if (!latest || !latest.units) return 0;
+  let n = 0;
+  for (const u of latest.units) {
+    if (u.isPlayer || u.isMissile || u.isFriendlyMissile || u.isIncomingMissile || u.isMyMissile) continue;
+    const category = classifyUnit(u);
+    if (category === 'pilot') continue;
+    if (!unitTypeVisible(category) || !unitSideVisible(u)) n++;
+  }
+  return n;
+}
+
+function updateCombatBar() {
+  const mode = settings.preset.mode;
+  const on = mode === 'combatAll' || mode === 'combatSelected';
+  const btn = document.getElementById('filterBtn');
+  if (btn.classList.contains('combat') !== on) {
+    btn.classList.toggle('combat', on);
+    btn.innerHTML = on ? '&#9776; filter: combat' : '&#9776; filter';
+  }
+  const hidden = on && combatSummary ? combatHiddenCount() : 0;
+  if (!hidden) {
+    combatBar.hidden = true;
+    combatBarState = '';
+    return;
+  }
+  document.getElementById('combatWhat').textContent = combatSummary + ' only';
+  document.getElementById('combatHidden').textContent = hidden + ' hidden';
+  const state = mode + '|' + combatSummary;
+  if (state !== combatBarState) {
+    combatBarState = state;
+    combatBar.classList.remove('small');
+    clearTimeout(combatBarTimer);
+    combatBarTimer = setTimeout(() => combatBar.classList.add('small'), COMBAT_BAR_FULL_MS);
+  }
+  combatBar.hidden = false;
+}
+
+document.getElementById('combatShowAll').addEventListener('click', () => setPreset('all'));
+
+// The top edge of the bar, so the "YOU ARE JAMMED" chip at the bottom sits above it instead of under it.
+// offsetTop and not the bounding box: the phone rotate setting turns the whole page.
+function combatBarTop() {
+  return combatBar.hidden ? Infinity : combatBar.offsetTop;
+}
 
 // The rotate button is for touch screens. It goes off, left (the top of the page at the right of the screen, so the phone
 // is turned to the left to read it), right, off. The choice is kept on the device.
@@ -4690,7 +4780,7 @@ function drawJamming(ctx, toScreen) {
         const brg = (Math.atan2(dx, dz) * 180 / Math.PI + 360) % 360;
         label += ` by ${jammer.name.trim()} (${Math.round(brg)}°, ${fmtDistance(Math.hypot(dx, dz))})`;
       }
-      jamChip(label, W / 2, H - 26, 'center');
+      jamChip(label, W / 2, Math.min(H - 26, combatBarTop() - 16), 'center');
     }
   }
 }
@@ -4785,6 +4875,7 @@ function connect() {
     latest = JSON.parse(e.data);
     if (latest.player) { lastPlayerPos = { x: latest.player.x, z: latest.player.z }; lastPlayerHeading = latest.player.heading; }
     updateCombat(latest.loadout);
+    updateCombatBar();
     incomingMissileActive = (latest.units || []).some(u => u.isIncomingMissile);
     updateTrails(latest);
     updateMarked(latest);
