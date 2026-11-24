@@ -527,6 +527,7 @@
       </label>
       <label><input type="checkbox" data-group="display" data-key="textOutline">Dark outline on text (easier to read on the map)</label>
       <label><input type="checkbox" data-group="display" data-key="darkMode">Red HUD (night vision)</label>
+      <label data-note="Keys you set in the game's BepInEx config (section Keys): one switches between Combat and All, two zoom in and out. Untick this on a device that should keep its own view, for example a phone that always shows Combat."><input type="checkbox" data-group="display" data-key="followKeys" checked>Follow the keys</label>
     </details>
     <details class="group fold" data-fold="warnings">
       <summary>Missile warning</summary>
@@ -711,7 +712,7 @@
     <p>The circle or cone around you is the range of the weapon you have selected.</p>
     <p>LEGEND (top left) lists every symbol.</p>
     <h3>Settings</h3>
-    <p>FILTER: unit types, weapon kinds, overlays, trails and presets. Combat shows only what your weapons can hit. While it hides something, the FILTER button is amber and a bar at the bottom says how many units are hidden, with a button back to All. Combat is off again each time the map opens.</p>
+    <p>FILTER: unit types, weapon kinds, overlays, trails and presets. Combat shows only what your weapons can hit. While it hides something, the FILTER button is amber and a bar at the bottom says how many units are hidden, with a button back to All. Combat is off again each time the map opens. You can also switch between Combat and All, and zoom, with keys you set in the game's BepInEx config (section Keys), for example from a joystick button with JoyToKey.</p>
     <p>DISPLAY: what the map shows, the look, names and colors. Hold the mouse over a switch, or touch and hold it, for a note.</p>
     <p>Fair play, at the top of DISPLAY, hides what your cockpit does not show you.</p>
     <p>Range rings and a scale bar help to judge distances. Both are in FILTER.</p>
@@ -1115,10 +1116,10 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false, neutral: true },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, nukeRadius: true, bombImpact: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true, mapUp: 'north', iconStyle: 'ours', keepScreenOn: true },
+  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, nukeRadius: true, bombImpact: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true, mapUp: 'north', iconStyle: 'ours', keepScreenOn: true, followKeys: true },
   overlays: { runwayGuides: true, weaponRange: true, grid: true, rangeRings: false, scaleBar: true },
   // Which preset is on ('custom' = the boxes as you set them), and the boxes as they were before a preset was switched on.
-  preset: { mode: 'custom', mine: null },
+  preset: { mode: 'custom', mine: null, lastCombat: 'combatAll' },
   trails: { friendlyAircraft: true, enemyAircraft: true, friendlyMissiles: true, enemyMissiles: true, other: true },
   // Every fixed (non-theme) color on the map, customizable. hudText is the
   // one exception: {r:-1,g:-1,b:-1} means "keep following the game's own
@@ -2140,6 +2141,7 @@ function setPreset(mode) {
   }
   if (settings.preset.mode === 'custom') settings.preset.mine = snapshotFilters();
   settings.preset.mode = mode;
+  if (mode === 'combatAll' || mode === 'combatSelected') settings.preset.lastCombat = mode;
   combatKey = '';
   combatSummary = null;
   if (mode === 'all') applyFilterValues(PRESET_ALL);
@@ -2235,6 +2237,26 @@ function updateCombatBar() {
 }
 
 document.getElementById('combatShowAll').addEventListener('click', () => setPreset('all'));
+
+// Keys from the game (BepInEx config, section Keys). The game counts the presses and sends the counts with every snapshot,
+// the page acts on what is new since the last one. The first count after connecting is only noted, and a smaller count
+// means the game was restarted.
+const KEY_ZOOM_STEP = 1.5;
+let lastKeys = null;
+function applyGameKeys(k) {
+  if (!k) return;
+  const before = lastKeys;
+  lastKeys = k;
+  if (!before || settings.display.followKeys === false) return;
+  const diff = key => (k[key] || 0) - (before[key] || 0);
+  if (diff('combat') < 0 || diff('zoomIn') < 0 || diff('zoomOut') < 0) return;
+  if (diff('combat') % 2 === 1) {
+    const mode = settings.preset.mode;
+    setPreset(mode === 'combatAll' || mode === 'combatSelected' ? 'all' : (settings.preset.lastCombat || 'combatAll'));
+  }
+  const zoom = diff('zoomOut') - diff('zoomIn');
+  if (zoom) scale = clampScale(scale * Math.pow(KEY_ZOOM_STEP, zoom));
+}
 
 // The top edge of the bar, so the "YOU ARE JAMMED" chip at the bottom sits above it instead of under it.
 // offsetTop and not the bounding box: the phone rotate setting turns the whole page.
@@ -4877,6 +4899,7 @@ function connect() {
   const thisSource = new EventSource('/events');
   source = thisSource;
   source.onopen = () => {
+    lastKeys = null; // presses made while this page was away don't count
     refreshLan();
     everConnected = true;
     failedAttempts = 0;
@@ -4885,6 +4908,7 @@ function connect() {
   };
   source.onmessage = e => {
     latest = JSON.parse(e.data);
+    applyGameKeys(latest.keys);
     if (latest.player) { lastPlayerPos = { x: latest.player.x, z: latest.player.z }; lastPlayerHeading = latest.player.heading; }
     updateCombat(latest.loadout);
     updateCombatBar();

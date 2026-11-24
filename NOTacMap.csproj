@@ -54,6 +54,18 @@
       <HintPath>$(GameDir)\NuclearOption_Data\Managed\UnityEngine.ImageConversionModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(GameDir)\NuclearOption_Data\Managed\UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>$(GameDir)\NuclearOption_Data\Managed\Unity.TextMeshPro.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(GameDir)\NuclearOption_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="com.rlabrecque.steamworks.net">
       <HintPath>$(GameDir)\NuclearOption_Data\Managed\com.rlabrecque.steamworks.net.dll</HintPath>
       <Private>false</Private>

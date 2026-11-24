@@ -181,6 +181,15 @@ namespace NOTacMap
 		public BombImpactSnapshot bombImpact; // your own selected unguided bomb only
 		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
 		public List<LoadoutStation> loadout; // your own weapon stations, only while you are in an aircraft
+		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+		public KeyPresses keys; // the map keys from the config, counted since the game started; missing until one was pressed
+	}
+
+	internal class KeyPresses
+	{
+		public int combat;
+		public int zoomIn;
+		public int zoomOut;
 	}
 
 	internal static class SnapshotBuilder
