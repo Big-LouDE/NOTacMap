@@ -711,7 +711,7 @@
     <p>The circle or cone around you is the range of the weapon you have selected.</p>
     <p>LEGEND (top left) lists every symbol.</p>
     <h3>Settings</h3>
-    <p>FILTER: unit types, weapon kinds, overlays, trails and presets. Combat shows only what your weapons can hit. While it hides something, the FILTER button is amber and a bar at the bottom says how many units are hidden, with a button back to All.</p>
+    <p>FILTER: unit types, weapon kinds, overlays, trails and presets. Combat shows only what your weapons can hit. While it hides something, the FILTER button is amber and a bar at the bottom says how many units are hidden, with a button back to All. Combat is off again each time the map opens.</p>
     <p>DISPLAY: what the map shows, the look, names and colors. Hold the mouse over a switch, or touch and hold it, for a note.</p>
     <p>Fair play, at the top of DISPLAY, hides what your cockpit does not show you.</p>
     <p>Range rings and a scale bar help to judge distances. Both are in FILTER.</p>
@@ -2173,7 +2173,19 @@ function updateCombat(loadout) {
 }
 
 document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => setPreset(b.dataset.preset)));
-settingsReady.then(() => { updatePresetButtons(); updateCombatBar(); });
+// A Combat view does not come back by itself: when the page opens, the boxes you had before it are back
+// (My choice, or All if there never was one). You switch Combat on again when you want it.
+settingsReady.then(() => {
+  let note = '';
+  if (settings.preset.mode === 'combatAll' || settings.preset.mode === 'combatSelected') {
+    if (settings.preset.mine) { applyFilterValues(settings.preset.mine); settings.preset.mode = 'custom'; }
+    else { applyFilterValues(PRESET_ALL); settings.preset.mode = 'all'; }
+    note = 'Combat was on last time. It starts off, pick it again if you want it.';
+    saveSettings();
+  }
+  updatePresetButtons(note);
+  updateCombatBar();
+});
 
 // While a Combat view hides units, the FILTER button turns amber and a bar at the bottom says what is hidden.
 // The bar comes up in full when the hiding starts (or what is shown changes), and shrinks after a few seconds.
