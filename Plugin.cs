@@ -462,6 +462,7 @@ namespace NOTacMap
 			DumpThemeOnce();
 			RadarCheck.TryOnce();
 			RadarCheck.Watch();
+			OwnRadar.Update();
 			ReadKeys();
 
 			mapCheckTimer += Time.unscaledDeltaTime;

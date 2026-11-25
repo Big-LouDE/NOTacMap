@@ -17,6 +17,8 @@
     --hostile-sel: #ffb199;
     --neutral: #7fae7f;
     --passive-ping: #2a5a34;
+    --target-ping: rgba(255, 0, 0, 0.5);   /* fallbacks for the game's radar warning colors, the live theme replaces them */
+    --detected-ping: rgba(255, 255, 0, 0.25);
     --hud-green: #3fdb5e;
     --hud-dim: #1f7a35;
     --combat: #ffb020; /* FILTER button and bar while a Combat view hides units */
@@ -539,6 +541,15 @@
       <div class="note" id="controlsNote">A key, or a button on your joystick, HOTAS or gamepad, for each. Press Set, click into the game window (the game only reads keys and buttons while it is in front), then press the key or button you want, within 15 seconds. Esc cancels. Pick one the game doesn't use.</div>
       <label data-note="Untick this on a device that should keep its own view, for example a phone that always shows Combat."><input type="checkbox" data-group="display" data-key="followKeys" checked>Follow the keys</label>
     </details>
+    <details class="group fold" data-fold="radar">
+      <summary>Your radar</summary>
+      <label data-note="The radar's range number from the game, as a thin outline: a cone where your radar looks, or a circle for an all-round radar. A small fighter is only seen well inside it, a big ship or bomber near the edge. Gone while your radar is off."><input type="checkbox" data-group="display" data-key="radarCone" checked>Radar cone</label>
+      <label data-note="Off: the whole cone lights up once each time your radar scans, which is what the game tells. On: a line crosses the cone instead. It looks like a radar scope, but the radar does not really scan from one side to the other."><input type="checkbox" data-group="display" data-key="radarSweep">Sweep instead of a flash</label>
+      <label data-note="An aircraft your radar just found gets a line from you and DETECTED for its first 3 scans, weaker each time. One that is off the screen gets its tag at the edge, with name and distance."><input type="checkbox" data-group="display" data-key="findLines" checked>Lines to new finds</label>
+      <label data-note="Corner brackets on what your own radar and eyes see right now. Close ones are grouped with a count. Hidden when you zoom far out."><input type="checkbox" data-group="display" data-key="findBrackets" checked>Brackets on your finds</label>
+      <label data-note="When an enemy radar looks at you, a line from it to you, like on the game's own map: strong red while it is locked on you (4 s), yellow when it found you (2 s), faint when it only swept over you (1 s)."><input type="checkbox" data-group="display" data-key="warnLines" checked>Radar warning lines</label>
+      <label data-note="The faint lines come often. Untick to keep only found you and locked on you."><input type="checkbox" data-group="display" data-key="warnFaint" checked>Faint lines (swept over you)</label>
+    </details>
     <details class="group fold" data-fold="warnings">
       <summary>Missile warning</summary>
       <label data-note="Beyond the warning tone and the arrows, this is extra information from the map."><input type="checkbox" data-group="display" data-key="showMissileEta" checked>Warning shows speed and ETA</label>
@@ -641,6 +652,26 @@
         <button type="button" class="color-swatch" title="Pick a color"></button>
         <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
       </div>
+      <div class="color-row" data-color-key="myRadar">
+        <span class="color-label">Your radar and finds</span>
+        <button type="button" class="color-swatch" title="Pick a color"></button>
+        <button type="button" class="color-reset" title="Reset to default">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="warnLock">
+        <span class="color-label">Radar warning: locked on you</span>
+        <button type="button" class="color-swatch" title="Pick a color"></button>
+        <button type="button" class="color-reset" title="Reset to default (the game's color)">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="warnFound">
+        <span class="color-label">Radar warning: found you</span>
+        <button type="button" class="color-swatch" title="Pick a color"></button>
+        <button type="button" class="color-reset" title="Reset to default (the game's color)">&#8634;</button>
+      </div>
+      <div class="color-row" data-color-key="warnSwept">
+        <span class="color-label">Radar warning: swept over you</span>
+        <button type="button" class="color-swatch" title="Pick a color"></button>
+        <button type="button" class="color-reset" title="Reset to default (the game's color)">&#8634;</button>
+      </div>
       <div class="color-row" data-color-key="water">
         <span class="color-label">Water</span>
         <button type="button" class="color-swatch" title="Pick a color"></button>
@@ -722,7 +753,7 @@
     <p>The circle or cone around you is the range of the weapon you have selected.</p>
     <p>LEGEND (top left) lists every symbol.</p>
     <h3>Settings</h3>
-    <p>FILTER: unit types, weapon kinds, overlays, trails and presets. Combat shows only what your weapons can hit. While it hides something, the FILTER button is amber and a bar at the bottom says how many units are hidden, with a button back to All. Combat is off again each time the map opens. You can also switch between Combat and All, and zoom, with keys you set in the game's BepInEx config (section Keys), for example from a joystick button with JoyToKey.</p>
+    <p>FILTER: unit types, weapon kinds, overlays, trails and presets. Combat shows only what your weapons can hit. While it hides something, the FILTER button is amber and a bar at the bottom says how many units are hidden, with a button back to All. Combat is off again each time the map opens. You can also switch between Combat and All, and zoom, with keys you set in the game's BepInEx config (section Keys), or with a joystick, HOTAS or gamepad button (F1 > NOTacMap > Keys). DISPLAY > Your radar shows your radar's cone with a flash on each scan, lines and DETECTED on new finds, and the game's radar warning lines.</p>
     <p>DISPLAY: what the map shows, the look, names and colors. Hold the mouse over a switch, or touch and hold it, for a note.</p>
     <p>Fair play, at the top of DISPLAY, hides what your cockpit does not show you.</p>
     <p>Range rings and a scale bar help to judge distances. Both are in FILTER.</p>
@@ -1126,7 +1157,7 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false, neutral: true },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, nukeRadius: true, bombImpact: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true, mapUp: 'north', iconStyle: 'ours', keepScreenOn: true, followKeys: true },
+  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, nukeRadius: true, bombImpact: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true, mapUp: 'north', iconStyle: 'ours', keepScreenOn: true, followKeys: true, radarCone: true, radarSweep: false, warnLines: true, warnFaint: true, findLines: true, findBrackets: true },
   overlays: { runwayGuides: true, weaponRange: true, grid: true, rangeRings: false, scaleBar: true },
   // Which preset is on ('custom' = the boxes as you set them), and the boxes as they were before a preset was switched on.
   preset: { mode: 'custom', mine: null, lastCombat: 'combatAll' },
@@ -1147,6 +1178,11 @@ const DEFAULT_SETTINGS = {
     runwayGuide: { r: 120, g: 200, b: 190 },
     weaponRange: { r: 90, g: 130, b: 150 },
     weaponRangeArmed: { r: 255, g: 120, b: 0 },
+    myRadar: { r: 180, g: 140, b: 255 },
+    // -1: the game's own color from the live theme, like hudText
+    warnLock: { r: -1, g: -1, b: -1 },
+    warnFound: { r: -1, g: -1, b: -1 },
+    warnSwept: { r: -1, g: -1, b: -1 },
     water: { r: 18, g: 52, b: 96 },
     hudText: { r: -1, g: -1, b: -1 }
   }
@@ -1224,8 +1260,10 @@ function themeHudGreen() {
 
 // hudText's sentinel (-1) means "following the live theme", so the swatch
 // shows whatever --hud-green is right now, not an invalid color.
+const THEME_COLOR_VARS = { hudText: '--hud-green', warnLock: '--target-ping', warnFound: '--detected-ping', warnSwept: '--passive-ping' };
 function updateSwatch(row, c) {
-  row.querySelector('.color-swatch').style.background = c.r < 0 ? themeHudGreen() : rgbStr(c);
+  const v = THEME_COLOR_VARS[row.dataset.colorKey] || '--hud-green';
+  row.querySelector('.color-swatch').style.background = c.r < 0 ? (getComputedStyle(document.documentElement).getPropertyValue(v).trim() || themeHudGreen()) : rgbStr(c);
 }
 
 function syncColorRow(row) {
@@ -3727,7 +3765,7 @@ const boostRendering = () => { boostUntil = performance.now() + 1500; };
 window.addEventListener('pointermove', e => { if (e.buttons) boostRendering(); }, { passive: true });
 
 function animationActive() {
-  if (incomingMissileActive || lockLosses.size > 0 || inRangeAnimating()) return true;
+  if (incomingMissileActive || lockLosses.size > 0 || inRangeAnimating() || radarAnimating()) return true;
   const now = performance.now();
   for (const m of markedMemory.values()) {
     if (m.lostAt !== null) return true; // the LOST marker spins the whole time
@@ -4344,6 +4382,9 @@ function draw() {
 
   if (settings.overlays.weaponRange && latest.weaponRange && latest.weaponRange.armed && settings.display.cueCount) drawInRangeCount(ctx);
 
+  drawRadarWarnings(ctx, toScreen);
+  drawOwnRadar(ctx, toScreen);
+  drawFinds(ctx, toScreen);
   drawJamming(ctx, toScreen);
   drawAttackers(ctx, toScreen);
   drawNukes(ctx, toScreen);
@@ -4799,6 +4840,182 @@ function jamDashedLine(a, b, alpha, width) {
   ctx.restore();
 }
 
+// ---- Your own radar (OwnRadar.cs sends it): cone, scan flash or sweep, radar warnings, and marks on your finds.
+// Fair play hides the cone and the marks (the game's map does not draw them). The warning lines are the game's own, they stay.
+let latestAt = 0;
+let radarFlashAt = -1e9;
+let radarScansSeen = null;
+const RADAR_FLASH_MS = 900, RADAR_SWEEP_MS = 700;
+function noteRadarScan(r) {
+  if (!r) { radarScansSeen = null; return; }
+  if (radarScansSeen !== null && r.scans > radarScansSeen && r.on) radarFlashAt = performance.now();
+  radarScansSeen = r.scans;
+}
+function radarAnimating() {
+  return performance.now() - radarFlashAt < RADAR_FLASH_MS + 200 || !!(latest && latest.radarWarnings && latest.radarWarnings.length);
+}
+function myRadarRgb() { const c = settings.colors.myRadar || { r: 180, g: 140, b: 255 }; return `${c.r},${c.g},${c.b}`; }
+// "rgba(255,0,0,0.5)" or "#ff0000" from a CSS variable, as "r,g,b"
+function cssRgb(varName, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  let m = v.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/);
+  if (m) return `${Math.round(m[1])},${Math.round(m[2])},${Math.round(m[3])}`;
+  m = v.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i);
+  if (m) return `${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)}`;
+  return fallback;
+}
+function warnRgb(kind) {
+  const key = kind === 'target' ? 'warnLock' : kind === 'detected' ? 'warnFound' : 'warnSwept';
+  const c = settings.colors[key];
+  if (c && c.r >= 0) return `${c.r},${c.g},${c.b}`;
+  return kind === 'target' ? cssRgb('--target-ping', '255,0,0') : kind === 'detected' ? cssRgb('--detected-ping', '255,255,0') : cssRgb('--passive-ping', '255,255,255');
+}
+
+function drawOwnRadar(ctx, toScreen) {
+  const p = latest && latest.player, r = p && p.radar;
+  if (!r || !r.on || settings.display.radarCone === false || fairPlay() || !(r.range > 0)) return;
+  const [sx, sy] = toScreen(p.x, p.z);
+  const rad = r.range / scale;
+  if (!(rad > 4)) return;
+  const rgb = myRadarRgb();
+  const half = (r.cone || 0) * Math.PI / 180;
+  const head = relHeading(r.yaw) * Math.PI / 180 - Math.PI / 2;
+  const shape = () => {
+    ctx.beginPath();
+    if (half > 0) { ctx.moveTo(sx, sy); ctx.arc(sx, sy, rad, head - half, head + half); ctx.closePath(); }
+    else ctx.arc(sx, sy, rad, 0, Math.PI * 2);
+  };
+  ctx.save();
+  ctx.setLineDash(r.jammed ? [4, 6] : []);
+  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = `rgba(${rgb},0.75)`;
+  shape(); ctx.stroke();
+  const since = performance.now() - radarFlashAt;
+  if (settings.display.radarSweep) {
+    const t = since / RADAR_SWEEP_MS;
+    if (t < 1.6) {
+      const lo = half > 0 ? head - half : -Math.PI / 2, span = half > 0 ? 2 * half : 2 * Math.PI;
+      const a = lo + Math.min(t, 1) * span, fade = t < 1 ? 1 : 1 - (t - 1) / 0.6;
+      const a0 = Math.max(lo, a - 0.35);
+      if (ctx.createConicGradient && a > a0) {
+        const g = ctx.createConicGradient(a0, sx, sy), sp = (a - a0) / (2 * Math.PI);
+        g.addColorStop(0, `rgba(${rgb},0)`); g.addColorStop(Math.max(0.0001, sp), `rgba(${rgb},${0.28 * fade})`); g.addColorStop(Math.min(1, sp + 0.0001), `rgba(${rgb},0)`);
+        ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.arc(sx, sy, rad, a0, a); ctx.closePath(); ctx.fill();
+      }
+      if (t < 1) { ctx.strokeStyle = `rgba(${rgb},${0.9 * fade})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + Math.cos(a) * rad, sy + Math.sin(a) * rad); ctx.stroke(); }
+    }
+  } else if (since < RADAR_FLASH_MS) {
+    const f = 1 - since / RADAR_FLASH_MS;
+    ctx.fillStyle = `rgba(${rgb},${0.22 * f})`; shape(); ctx.fill();
+    ctx.strokeStyle = `rgba(${rgb},${0.9 * f})`; ctx.lineWidth = 2; shape(); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// The game's own radar warning lines (DynamicMap.ShowRadarPing): from the radar to you, newest per radar,
+// strong for a lock (4 s), medium when it found you (2 s), faint when it only swept over you (1 s), fading out.
+function drawRadarWarnings(ctx, toScreen) {
+  const p = latest && latest.player, list = latest && latest.radarWarnings;
+  if (!p || !list || settings.display.warnLines === false) return;
+  const extra = (performance.now() - latestAt) / 1000;
+  const LIFE = { target: 4, detected: 2, passive: 1 }, ALPHA = { target: 0.5, detected: 0.25, passive: 0.125 }, WIDTH = { target: 3, detected: 2, passive: 1.5 };
+  const newest = new Map();
+  for (const w of list) { const o = newest.get(w.emitter); if (!o || w.age < o.age) newest.set(w.emitter, w); }
+  const byId = new Map((latest.units || []).map(u => [u.id, u]));
+  const [px, py] = toScreen(p.x, p.z);
+  ctx.save();
+  for (const w of newest.values()) {
+    if (w.kind === 'passive' && settings.display.warnFaint === false) continue;
+    const life = LIFE[w.kind] || 1, age = w.age + extra;
+    if (age >= life) continue;
+    const u = byId.get(w.emitter);
+    const [ex, ey] = u ? toScreen(u.x, u.z) : toScreen(w.x, w.z);
+    // the game's map fades the line slowly over its life; a little faster here, so it is gone when it ends
+    const a = (ALPHA[w.kind] || 0.125) * (1 - age / life * 0.6) * 1.6;
+    ctx.strokeStyle = `rgba(${warnRgb(w.kind)},${Math.min(1, a)})`;
+    ctx.lineWidth = WIDTH[w.kind] || 1.5;
+    ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(px, py); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// What YOUR radar and eyes see. Rule: no unit on the map, no mark; a unit the filter hides gets no mark either.
+// A new aircraft found by your radar: a line from you and DETECTED for its first 3 scans, weaker each time; then a bracket.
+const FIND_LINE_ALPHA = [0, 0.9, 0.55, 0.25];
+const FIND_BRACKETS_MAX_SCALE = 150; // m per pixel; zoomed out further than this, no brackets
+function drawFinds(ctx, toScreen) {
+  const p = latest && latest.player, finds = latest && latest.finds;
+  if (!p || !finds || !finds.length || fairPlay()) return;
+  const d = settings.display;
+  if (d.findLines === false && d.findBrackets === false) return;
+  const byId = new Map((latest.units || []).map(u => [u.id, u]));
+  const rgb = myRadarRgb();
+  const [px, py] = toScreen(p.x, p.z);
+  const brackets = [];
+  ctx.save();
+  for (const f of finds) {
+    const u = byId.get(f.id);
+    if (!u || u.faction === 'friendly' || u.isPlayer) continue;
+    if (u.isMissile || u.isIncomingMissile || u.isFriendlyMissile || u.isMyMissile) continue;
+    const cat = classifyUnit(u);
+    if (cat === 'pilot' || !unitTypeVisible(cat) || !unitSideVisible(u)) continue;
+    const [x, y] = toScreen(u.x, u.z);
+    const air = cat === 'plane' || cat === 'helicopter';
+    if (air && f.radar && f.pings >= 1 && f.pings <= 3 && d.findLines !== false) {
+      const a = FIND_LINE_ALPHA[f.pings];
+      ctx.strokeStyle = `rgba(${rgb},${a * 0.85})`; ctx.lineWidth = 1.5; ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x, y); ctx.stroke();
+      findTag(ctx, u, x, y, px, py, rgb, Math.min(1, a + 0.1));
+    } else if (d.findBrackets !== false && scale <= FIND_BRACKETS_MAX_SCALE) {
+      if (x > -20 && x < viewWidth + 20 && y > -20 && y < viewHeight + 20) brackets.push([x, y]);
+    }
+  }
+  // close ones become one bracket with a count
+  const R = 22, used = new Array(brackets.length).fill(false);
+  ctx.strokeStyle = `rgb(${rgb})`; ctx.fillStyle = `rgb(${rgb})`; ctx.lineWidth = 1.5;
+  for (let i = 0; i < brackets.length; i++) {
+    if (used[i]) continue;
+    const group = [brackets[i]]; used[i] = true;
+    for (let j = i + 1; j < brackets.length; j++) {
+      if (!used[j] && Math.hypot(brackets[j][0] - brackets[i][0], brackets[j][1] - brackets[i][1]) < R) { group.push(brackets[j]); used[j] = true; }
+    }
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of group) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+    const s = 10;
+    findBracket(ctx, x0 - s, y0 - s, x1 + s, y1 + s);
+    if (group.length > 1) { setFont(10, true); ctx.fillText(String(group.length), x1 + s + 3, y0 - s + 8); }
+  }
+  ctx.restore();
+}
+function findBracket(ctx, x0, y0, x1, y1) {
+  const k = 4;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0 + k); ctx.lineTo(x0, y0); ctx.lineTo(x0 + k, y0);
+  ctx.moveTo(x1 - k, y0); ctx.lineTo(x1, y0); ctx.lineTo(x1, y0 + k);
+  ctx.moveTo(x1, y1 - k); ctx.lineTo(x1, y1); ctx.lineTo(x1 - k, y1);
+  ctx.moveTo(x0 + k, y1); ctx.lineTo(x0, y1); ctx.lineTo(x0, y1 - k);
+  ctx.stroke();
+}
+// DETECTED over the find, or at the screen edge on the line to it, with name and distance, when it is off the screen
+function findTag(ctx, u, x, y, px, py, rgb, a) {
+  const W = viewWidth, H = viewHeight;
+  const off = x < 0 || y < 0 || x > W || y > H;
+  let tx = x, ty = y - 13, text = 'DETECTED';
+  if (off) {
+    const ts = [x < 0 ? (0 - px) / (x - px) : 9, x > W ? (W - px) / (x - px) : 9, y < 0 ? (0 - py) / (y - py) : 9, y > H ? (H - py) / (y - py) : 9].filter(v => v > 0);
+    const t = Math.min(...ts) * 0.96;
+    tx = px + (x - px) * t; ty = py + (y - py) * t;
+    const dist = Math.hypot(u.x - latest.player.x, u.z - latest.player.z);
+    text = 'DETECTED ' + (u.type || u.name || '') + ' ' + fmtDistance(dist);
+  }
+  setFont(10, true);
+  const tw = ctx.measureText(text).width;
+  tx = Math.min(Math.max(4, tx - tw / 2), W - tw - 4);
+  ty = Math.min(Math.max(12, ty), H - 6);
+  ctx.lineWidth = 3; ctx.strokeStyle = `rgba(0,0,0,${0.8 * a})`; ctx.strokeText(text, tx, ty);
+  ctx.fillStyle = `rgba(${rgb},${a})`; ctx.fillText(text, tx, ty);
+}
+
 function drawJamming(ctx, toScreen) {
   const d = settings.display;
   if (!d.jamTag && !d.jamLine && !d.jamMine && !d.jamMe && !d.jamRadar) return;
@@ -4964,7 +5181,9 @@ function connect() {
   };
   source.onmessage = e => {
     latest = JSON.parse(e.data);
+    latestAt = performance.now();
     applyGameKeys(latest.keys);
+    noteRadarScan(latest.player && latest.player.radar);
     if (latest.player) { lastPlayerPos = { x: latest.player.x, z: latest.player.z }; lastPlayerHeading = latest.player.heading; }
     updateCombat(latest.loadout);
     updateCombatBar();

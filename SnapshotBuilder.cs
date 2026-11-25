@@ -140,6 +140,7 @@ namespace NOTacMap
 		public float y;
 		public float z;
 		public float heading;
+		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public RadarSnapshot radar; // your own radar, see OwnRadar
 	}
 
 	// Where an unguided bomb of your selected station would hit if you let it go now, worked out the way the cockpit's own bombing display does it.
@@ -183,6 +184,10 @@ namespace NOTacMap
 		public List<LoadoutStation> loadout; // your own weapon stations, only while you are in an aircraft
 		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
 		public KeyPresses keys; // the map keys from the config, counted since the game started; missing until one was pressed
+		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+		public List<FindSnapshot> finds; // what YOUR radar and eyes see right now (OwnRadar)
+		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+		public List<RadarWarningSnapshot> radarWarnings; // radar warnings on YOUR aircraft in the last 4 s, like the game's own map
 	}
 
 	internal class KeyPresses
@@ -1031,6 +1036,7 @@ namespace NOTacMap
 				snapshot.waypoints.Add(new WaypointSnapshot { x = wp.x, z = wp.z });
 			}
 
+			OwnRadar.Fill(snapshot, playerAircraft);
 			return snapshot;
 		}
 	}
