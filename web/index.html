@@ -811,6 +811,18 @@
 <canvas id="map"></canvas>
 
 <script>
+// Errors inside this page go to the mod's flight log (F1 > NOTacMap > Flight log), at most 10 per page load. Only the message
+// and the line, never the page address: on a phone the address can hold the link's secret.
+(() => {
+  let sent = 0;
+  const report = text => {
+    if (sent >= 10 || !text) return;
+    sent++;
+    try { fetch('/diag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: String(text).slice(0, 300) }) }).catch(() => {}); } catch (e) { /* nothing to do */ }
+  };
+  window.addEventListener('error', e => report((e.message || 'error') + (e.lineno ? ' (line ' + e.lineno + ':' + (e.colno || 0) + ')' : '')));
+  window.addEventListener('unhandledrejection', e => report('unhandled: ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason))));
+})();
 const canvas = document.getElementById('map');
 // willReadFrequently hints the browser to back this canvas with a CPU/
 // software surface instead of a GPU one. We don't use any GPU-accelerated

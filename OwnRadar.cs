@@ -33,6 +33,9 @@ namespace NOTacMap
 		}
 
 		private static Aircraft watched;
+		internal static Aircraft Watched => watched;
+		private static bool wasOn, wasJammed;
+		private static readonly HashSet<uint> loggedFinds = new HashSet<uint>(), loggedEmitters = new HashSet<uint>();
 		private static Radar radar;
 		private static readonly List<TargetDetector> detectors = new List<TargetDetector>();
 		private static readonly Dictionary<TargetDetector, Action<Unit>> handlers = new Dictionary<TargetDetector, Action<Unit>>();
@@ -73,8 +76,13 @@ namespace NOTacMap
 		{
 			finds.Clear();
 			warnings.Clear();
+			loggedFinds.Clear();
+			loggedEmitters.Clear();
 			scans = 0;
 			radar = aircraft.radar as Radar;
+			wasOn = radar != null && radar.activated;
+			wasJammed = false;
+			if (radar == null) FlightLog.RadarLine("This plane has no radar, only eyes.");
 			var all = new List<TargetDetector>(aircraft.GetComponentsInChildren<TargetDetector>(true));
 			if (aircraft.radar != null && !all.Contains(aircraft.radar)) all.Add(aircraft.radar);
 			foreach (TargetDetector d in all)
@@ -121,6 +129,14 @@ namespace NOTacMap
 				f.radar = true;
 			}
 			f.lastSeen = Time.unscaledTime;
+			if (watched != null && loggedFinds.Count < 300 && loggedFinds.Add(id))
+			{
+				var c = System.Globalization.CultureInfo.InvariantCulture;
+				GlobalPosition me = det.GetScanPoint().GlobalPosition(), it = target.GlobalPosition();
+				string type = target.definition != null ? target.definition.unitName : "a unit";
+				string side = target.NetworkHQ == null ? "no side" : target.NetworkHQ == watched.NetworkHQ ? "your side" : "enemy";
+				FlightLog.RadarLine("Your " + (det is Radar ? "radar" : "eyes") + " found a " + type + " (" + side + ") at " + (FastMath.Distance(me, it) / 1000f).ToString("0.0", c) + " km, you at " + me.y.ToString("0", c) + " m, it at " + it.y.ToString("0", c) + " m, size on radar " + target.RCS.ToString("0.###", c) + ".");
+			}
 		}
 
 		private static void OnWarning(Aircraft.OnRadarWarning e)
@@ -136,6 +152,14 @@ namespace NOTacMap
 				time = Time.unscaledTime
 			});
 			if (warnings.Count > 64) warnings.RemoveAt(0);
+			string kind = warnings[warnings.Count - 1].kind;
+			FlightLog.Warning(kind);
+			if (watched != null && loggedEmitters.Count < 100 && kind != "passive" && loggedEmitters.Add(e.emitter.persistentID.Id))
+			{
+				string type = e.emitter.definition != null ? e.emitter.definition.unitName : "a unit";
+				float d = FastMath.Distance(watched.GlobalPosition(), p) / 1000f;
+				FlightLog.RadarLine("Radar warning: a " + type + " " + (kind == "target" ? "locked on you" : "found you") + " from " + d.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " km.");
+			}
 		}
 
 		// Main thread, while the snapshot is built.
@@ -151,6 +175,9 @@ namespace NOTacMap
 				Transform scanner = radar.GetScanPoint();
 				Vector3 f = scanner != null ? scanner.forward : aircraft.transform.forward;
 				float cone = RadarCone != null ? (float)RadarCone.GetValue(radar) : 0f;
+				if (radar.activated != wasOn) { wasOn = radar.activated; FlightLog.RadarLine("You switched your radar " + (wasOn ? "on" : "off") + "."); }
+				bool jammedNow = radar.IsJammed();
+				if (jammedNow != wasJammed) { wasJammed = jammedNow; FlightLog.RadarLine(jammedNow ? "Your radar is jammed." : "Your radar is no longer jammed."); }
 				snapshot.player.radar = new RadarSnapshot
 				{
 					on = radar.activated,

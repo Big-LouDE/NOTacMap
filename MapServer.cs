@@ -117,6 +117,11 @@ namespace NOTacMap
 		// takes ("learn" | "clear" | "cancel", action name) and returns null when it worked, or a short message for the user.
 		private readonly HashSet<string> devicesSeen = new HashSet<string>();
 		public Func<string> ControlsState;
+		// Set by the plugin: an error inside the map page (text, came from another device).
+		public Action<string, bool> PageError;
+		// Set by the plugin: a screen opened the map (from another device, over the secure link, device number).
+		public Action<bool, bool, int> ScreenOpened;
+		private int localScreensLogged;
 		public Func<string, string, string> ControlsCommand;
 
 		// Set by the plugin. Makes a new secret for the phone link and cuts off the old one. Same
@@ -277,6 +282,8 @@ namespace NOTacMap
 			}
 			return n;
 		}
+
+		internal int ScreenCount => ClientCount;
 
 		private int ClientCount
 		{
@@ -744,9 +751,15 @@ namespace NOTacMap
 						{
 							if (devicesSeen.Add(device))
 							{
-								Plugin.Log.LogInfo("NOTacMap: a device at " + device + " opened the map" + (FrontPeers.IsFronted(request.RemoteEndPoint) ? " (secure link)" : "") + ".");
+								bool secure = FrontPeers.IsFronted(request.RemoteEndPoint);
+								Plugin.Log.LogInfo("NOTacMap: a device at " + device + " opened the map" + (secure ? " (secure link)" : "") + ".");
+								ScreenOpened?.Invoke(true, secure, devicesSeen.Count); // a number, never the address
 							}
 						}
+					}
+					else if (Interlocked.Increment(ref localScreensLogged) <= 3)
+					{
+						ScreenOpened?.Invoke(false, false, 0);
 					}
 					// Closed tabs only drop out of the list when a write to them
 					// fails, and the first write to a dead socket can still
@@ -1092,6 +1105,37 @@ namespace NOTacMap
 					context.Response.Headers.Add("Cache-Control", "no-store");
 					context.Response.ContentLength64 = bytes.Length;
 					context.Response.OutputStream.Write(bytes, 0, bytes.Length);
+					context.Response.Close();
+					return;
+				}
+
+				if (path == "/diag" && context.Request.HttpMethod == "POST")
+				{
+					// An error inside the map page, for the flight log. Small bodies only, plain text out.
+					string contentType = context.Request.ContentType ?? "";
+					if (!contentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase) || context.Request.ContentLength64 > MaxLanBodyBytes)
+					{
+						Reject(context, 415);
+						return;
+					}
+					byte[] buffer = new byte[MaxLanBodyBytes + 1];
+					int total = 0, read;
+					Stream input = context.Request.InputStream;
+					while (total < buffer.Length && (read = input.Read(buffer, total, buffer.Length - total)) > 0) total += read;
+					try
+					{
+						var body = Newtonsoft.Json.Linq.JObject.Parse(Encoding.UTF8.GetString(buffer, 0, Math.Min(total, MaxLanBodyBytes)));
+						string text = (string)body["message"] ?? "";
+						var clean = new StringBuilder();
+						foreach (char ch in text) if (!char.IsControl(ch) && clean.Length < 300) clean.Append(ch);
+						Action<string, bool> hook = PageError;
+						if (hook != null && clean.Length > 0) hook(clean.ToString(), fromNetwork);
+					}
+					catch (Exception)
+					{
+						// not json, nothing to write
+					}
+					context.Response.StatusCode = 204;
 					context.Response.Close();
 					return;
 				}

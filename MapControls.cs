@@ -241,7 +241,9 @@ namespace NOTacMap
 				{
 					if (j != null) names.Add(j.name + " (" + j.buttonCount + " buttons" + (j.isConnected ? "" : ", not connected") + ")");
 				}
-				Plugin.Log.LogInfo("NOTacMap keys: waiting for a key or button. Controllers the game sees: " + (names.Count == 0 ? "none" : string.Join("; ", names.ToArray())) + ".");
+				string seen = names.Count == 0 ? "none" : string.Join("; ", names.ToArray());
+				Plugin.Log.LogInfo("NOTacMap keys: waiting for a key or button. Controllers the game sees: " + seen + ".");
+				FlightLog.Controls("Setting a map key. Controllers the game sees: " + seen + ".");
 			}
 			catch (Exception ex)
 			{
@@ -252,6 +254,7 @@ namespace NOTacMap
 		private void Done(int i, string what)
 		{
 			Plugin.Log.LogInfo("NOTacMap keys: " + ActionNames[i] + " is now " + what + ".");
+			FlightLog.Controls("Map key set: " + ActionNames[i] + " is now " + what + ".");
 			config.Save();
 			lastResult = ActionNames[i] + " is now " + what + ".";
 			learning = -1;

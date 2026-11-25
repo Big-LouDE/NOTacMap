@@ -120,7 +120,8 @@ namespace NOTacMap
 			bool settingsPost = method == "POST" && path == "/settings";
 			bool lanPost = method == "POST" && path == "/lan";
 			bool controlsPost = method == "POST" && path == "/controls";
-			if (method != "GET" && method != "HEAD" && !settingsPost && !lanPost && !controlsPost)
+			bool diagPost = method == "POST" && path == "/diag"; // errors from the map page for the flight log, also from a phone
+			if (method != "GET" && method != "HEAD" && !settingsPost && !lanPost && !controlsPost && !diagPost)
 			{
 				return GuardDecision.Reject(405, "method not allowed");
 			}

@@ -175,6 +175,7 @@ namespace NOTacMap
 
 			// No key or button is set at first, so nothing clashes with the game's own bindings.
 			controls = new MapControls(Config);
+			FlightLog.Init(Config);
 
 			string lan = null;
 			string token = null;
@@ -212,6 +213,8 @@ namespace NOTacMap
 			server.LanSwitch = SwitchLan;
 			server.ControlsState = controls.StateJson;
 			server.ControlsCommand = controls.Command;
+			server.PageError = FlightLog.PageError;
+			server.ScreenOpened = FlightLog.Screen;
 			server.LanNewLink = NewLink;
 			server.HttpsSwitch = SwitchHttps;
 			server.HttpsFrontStart = StartHttpsFront;
@@ -463,6 +466,7 @@ namespace NOTacMap
 			RadarCheck.TryOnce();
 			RadarCheck.Watch();
 			OwnRadar.Update();
+			FlightLog.Update(OwnRadar.Watched, server.ScreenCount, controls.Presses());
 			ReadKeys();
 
 			mapCheckTimer += Time.unscaledDeltaTime;
@@ -515,6 +519,7 @@ namespace NOTacMap
 				LogOnce("building the map", ex);
 			}
 			buildStopwatch.Stop();
+			if (snapshot != null) FlightLog.Build((float)buildStopwatch.Elapsed.TotalMilliseconds, snapshot.units.Count);
 			// Logged when it is slow enough to matter for frame time: a real hitch, and not more than once every 15 seconds (it runs five
 			// times a second, so a busy server at 4 or 5 ms every time would fill the log).
 			if (buildStopwatch.ElapsedMilliseconds > 8 && Time.realtimeSinceStartup - lastSlowBuildLog > 15f)
@@ -535,7 +540,9 @@ namespace NOTacMap
 				{
 					try
 					{
-						server.BroadcastEvent(SerializeEvent(snapshot));
+						byte[] message = SerializeEvent(snapshot);
+						FlightLog.Sent(message.Length);
+						server.BroadcastEvent(message);
 					}
 					catch (Exception ex)
 					{
@@ -598,10 +605,12 @@ namespace NOTacMap
 				}
 			}
 			Log.LogError($"NOTacMap: a problem while {what}: {ex}. This is logged once, the map keeps trying.");
+			FlightLog.Error(what, ex);
 		}
 
 		private void OnDestroy()
 		{
+			FlightLog.Close();
 			networkWatch?.Dispose();
 			server?.Stop();
 		}
