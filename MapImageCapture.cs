@@ -22,6 +22,9 @@ namespace NOTacMap
 
 		private static MapSettings lastCaptured;
 
+		// The map of the mission that is running now has been read (a mission change destroys the old MapSettings).
+		internal static bool Current => lastCaptured != null;
+
 		private static float nextRecheck;
 
 		// Call this every couple of seconds from Plugin.Update(). FindObjectOfType is not cheap (about

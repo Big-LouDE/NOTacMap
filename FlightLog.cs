@@ -30,6 +30,8 @@ namespace NOTacMap
 		private static float flightStart;
 		private static Aircraft flying;
 		private static readonly List<string> beforeFlight = new List<string>(); // things that happened between flights
+		private static readonly List<string> earlyLines = new List<string>(); // this flight, before its file is open
+		private static bool pendingStart;
 
 		// numbers for the line every minute
 		private static float nextMinute;
@@ -39,6 +41,7 @@ namespace NOTacMap
 		private static int[] pressesAtMinute = new int[3];
 		private static int warnLock, warnFound, warnSwept;
 		private static int pageErrors;
+		private static int missilesRadar, missilesEyes;
 
 		internal static void Init(ConfigFile cfg)
 		{
@@ -128,8 +131,7 @@ namespace NOTacMap
 				{
 					file = new StreamWriter(fileName, false, new UTF8Encoding(false)) { AutoFlush = true };
 				}
-				flightStart = Time.unscaledTime;
-				nextMinute = Time.unscaledTime + 60f;
+				nextMinute = flightStart + 60f;
 				string plane = aircraft.definition != null ? aircraft.definition.unitName : "an aircraft";
 				Write("NOTacMap flight log. NOTacMap " + Plugin.PluginVersion + (Plugin.BuildLabel.Length > 0 ? " " + Plugin.BuildLabel : "") + ", Nuclear Option " + Plugin.GameVersion + ", map " + map + ".", false);
 				Write("Started " + DateTime.Now.ToString("d MMM yyyy, HH:mm:ss", CultureInfo.InvariantCulture) + ". Times below are minutes:seconds into the flight. Player names, chat, server names and addresses are never written.", false);
@@ -142,6 +144,8 @@ namespace NOTacMap
 						foreach (string s in beforeFlight) file.WriteLine("  " + s);
 					}
 					beforeFlight.Clear();
+					foreach (string s in earlyLines) file.WriteLine(s);
+					earlyLines.Clear();
 				}
 				if (Want(settingsAtStart)) WriteSettings();
 				Prune();
@@ -200,7 +204,9 @@ namespace NOTacMap
 			{
 				if (file == null)
 				{
-					if (on != null && on.Value && beforeFlight.Count < 100) beforeFlight.Add(DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture) + "  " + line);
+					if (on == null || !on.Value) return;
+					if (pendingStart) { if (earlyLines.Count < 200) earlyLines.Add((stamp ? StampSafe() : "") + line); }
+					else if (beforeFlight.Count < 100) beforeFlight.Add(DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture) + "  " + line);
 					return;
 				}
 				try { file.WriteLine((stamp ? StampSafe() : "") + line); }
@@ -242,11 +248,20 @@ namespace NOTacMap
 			{
 				if (flying != null) EndFlight(now == null ? "You left the aircraft, or it was lost." : "You changed aircraft.");
 				flying = now;
-				if (now != null)
+				pendingStart = false;
+				earlyLines.Clear();
+				if (now != null && on.Value)
 				{
+					// the file waits until the mod has read this mission's map (its name goes into the file), at most 20 s
 					flightStartWall = DateTime.Now;
-					StartFlight(now);
+					flightStart = Time.unscaledTime;
+					pendingStart = true;
 				}
+			}
+			if (pendingStart && flying != null && (MapImageCapture.Current || Time.unscaledTime - flightStart > 20f))
+			{
+				pendingStart = false;
+				StartFlight(flying);
 			}
 			float dt = Time.unscaledDeltaTime * 1000f;
 			frameSum += dt; frames++; if (dt > frameMax) frameMax = dt;
@@ -274,9 +289,11 @@ namespace NOTacMap
 				pressesAtMinute = new[] { presses.combat, presses.zoomIn, presses.zoomOut };
 			}
 			if (Want(radar) && warnLock + warnFound + warnSwept > 0) parts.Add("radar warnings on you: locked " + warnLock + ", found you " + warnFound + ", swept over you " + warnSwept);
+			if (Want(radar) && missilesRadar + missilesEyes > 0) parts.Add("missiles and rockets seen: " + missilesRadar + " by your radar, " + missilesEyes + " by your eyes");
 			if (parts.Count > 0) Write("In the last minute: " + string.Join("; ", parts.ToArray()) + ".");
 			buildMsSum = 0; buildMsMax = 0; builds = 0; bytesSum = 0; bytesCount = 0; frameSum = 0; frameMax = 0; frames = 0;
 			warnLock = warnFound = warnSwept = 0;
+			missilesRadar = missilesEyes = 0;
 		}
 
 		internal static void Build(float ms, int units)
@@ -316,6 +333,12 @@ namespace NOTacMap
 		internal static void RadarLine(string line)
 		{
 			if (Want(radar)) Write(line);
+		}
+
+		// A missile or rocket one of your sensors saw for the first time: only counted, they come in volleys.
+		internal static void MissileSeen(bool byRadar)
+		{
+			if (byRadar) missilesRadar++; else missilesEyes++;
 		}
 
 		internal static void Warning(string kind)

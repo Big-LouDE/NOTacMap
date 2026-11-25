@@ -132,6 +132,8 @@ namespace NOTacMap
 			Stats.Found(target, det is Radar);
 			if (watched != null && loggedFinds.Count < 300 && loggedFinds.Add(id))
 			{
+				if (target is Missile) { FlightLog.MissileSeen(det is Radar); return; }
+				if (target.NetworkHQ == null && target.RCS <= 0f) return; // props without a side (camo nets, pallets)
 				var c = System.Globalization.CultureInfo.InvariantCulture;
 				GlobalPosition me = det.GetScanPoint().GlobalPosition(), it = target.GlobalPosition();
 				string type = target.definition != null ? target.definition.unitName : "a unit";
