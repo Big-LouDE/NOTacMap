@@ -1,8 +1,6 @@
 # NOTacMap
 
-A live tactical map for [Nuclear Option](https://store.steampowered.com/app/2168680/Nuclear_Option/), for a second monitor. A BepInEx plugin reads game state and serves it to a page in your browser. Nothing to calibrate or set up per map.
-
-A second-screen map for Nuclear Option. Made first for HOTAS pilots: it follows your aircraft by itself, so you don't need the mouse during a flight. It also works for anyone who wants more information on a second monitor, a tablet or a phone. Works in multiplayer. Tested on official and community servers. It only shows what your own game already knows and sends nothing to the server. Last checked with Nuclear Option 0.34.6.
+A live second-screen map for [Nuclear Option](https://store.steampowered.com/app/2168680/Nuclear_Option/). A BepInEx plugin reads game state and serves it to a page in your browser, with nothing to set up per map. Made first for HOTAS pilots: it follows your aircraft by itself, so you don't need the mouse during a flight. It also works for anyone who wants more information on a second monitor, a tablet or a phone. Works in multiplayer. Tested on official and community servers. It only shows what your own game already knows and sends nothing to the server. Last checked with Nuclear Option 0.34.6.
 
 ## Features
 
@@ -15,9 +13,12 @@ A second-screen map for Nuclear Option. Made first for HOTAS pilots: it follows 
 - Weapon range ring: a circle at your weapon's base range that turns into a cone along your heading once you mark a target. The range matches the cockpit HUD. When a marked target is inside the cone the map tells you: a tinted cone, closing brackets, arrows to turn and the distance still to go
 - FILTER presets, including a Combat view that reads your weapons and shows only what they can hit. Distance rings and a scale bar. Units in meters or feet, or following the game
 - Who fired at you (ATTACKER, kept for 30 seconds after the missile is gone), jamming like the game's own map (JAMMED, the line to the jammer, YOUR JAMMER ON, RADAR DESTROYED), an info card on tap or hover, and LAST POSITION where you lost your aircraft
-- Nuclear blast radius from the game's own numbers, and for unguided bombs the impact point as on the cockpit's pipper, with a ring for the blast
+- Nuclear blast radius from the game's own numbers, and for unguided bombs the impact point, meant to match the cockpit's pipper, with a ring for the blast
 - The map can turn so that your heading is up. Under DISPLAY the icons can be the game's own, and the sea follows the coast in the Water color and carries on past the map's edge
 - Fair play: one switch that hides what your cockpit doesn't show you
+- Your radar: a thin violet outline of your radar's range from the game, a cone or a circle, that lights up each time your radar really scans. Aircraft your radar just found get a line and DETECTED for a few scans, then a bracket, and enemy radars on you show as the game's own warning lines
+- STATS: this life, this round and all time, with kills, assists, deaths, K/D per plane and what your sensors found. It opens by itself when a round ends and with the game's scoreboard (Esc)
+- Map keys for flying without the mouse: Combat or All, zoom in and zoom out on any key, or on a joystick, HOTAS or gamepad button (F1 > NOTacMap > Keys). On a PlayStation controller the touchpad works too
 - A MENU button at the top right holds fullscreen, rotate (for a phone or tablet) and devices. An optional pulse (off by default) lights the screen edge once when a missile starts coming at you
 - Runway approach lines, and fading trails behind moving units. FILTER picks which kinds of trails show, and the grid can be switched off too
 - FILTER and DISPLAY (top right) control what's shown, how it looks, and the colors. A dark outline on text keeps labels readable over the terrain (switch it off in DISPLAY). Tap the legend to open or close it, and the Help button next to it explains the symbols and the settings
@@ -33,7 +34,7 @@ Sharing marked targets between teammates who both have the mod. The game doesn't
 
 ## How it works
 
-The plugin (`NOTacMap.dll`) runs inside the game and starts a local HTTP server (`http://127.0.0.1:8123/` by default). Only this PC can reach it, unless you turn on LAN access (see Phone or tablet). It only reads data your client already has, and never asks the game server for anything extra or sends networked commands. Marked targets and locks only show what the game's own tracker knows. Other websites can't read it or change your settings. The page (`web/index.html`) is a single HTML/JS file that connects over Server-Sent Events and draws on a canvas.
+The plugin (`NOTacMap.dll`) runs inside the game and starts a local HTTP server (`http://127.0.0.1:8123/` by default). Only this PC can reach it, unless you turn on LAN access (see Phone or tablet). It only reads data your client already has, and never asks the game server for anything extra or sends networked commands. For STATS it hooks the game's own kill messages with HarmonyX, read-only: it copies their values and the game's code runs unchanged. Marked targets and locks only show what the game's own tracker knows. Other websites can't read it or change your settings. The page (`web/index.html`) is a single HTML/JS file that connects over Server-Sent Events and draws on a canvas.
 
 ## Installation
 
@@ -69,13 +70,17 @@ If Windows won't let the game listen on the network, the page and the log say so
 
 **Keeping the screen on.** A web page may only keep a screen awake over HTTPS, and the normal link is plain HTTP on your home network. So on the normal link, set a longer screen timeout on the phone. On Android you can also turn on "Stay awake" in the developer options, which keeps the screen on while it charges. On an iPhone, set Auto-Lock to Never.
 
-**Secure link (experimental).** DEVICES has a "Secure link (HTTPS)" switch, and so has the screen you get after picking "On another device". It starts a second address on a second port (8124) with a certificate the plugin makes itself, and the page on that link keeps the phone's screen on. The phone's browser warns that it cannot check the certificate, because the plugin makes it itself. The link is still encrypted. Only tap through on a link you got from your own PC. As far as I know, Chrome and Samsung Internet on Android don't show a certificate fingerprint, so there is nothing to compare on the phone. You will probably see the warning again later. The certificate and its private key are in `BepInEx/cache/https-cert.pfx` on your PC. The file is protected only by a fixed password that is in the source code, so anyone who can read your BepInEx folder can use the key. It is off by default, it has had no outside security review yet, and I have only tried it with Chrome and Samsung Internet on Android so far. Testing it from outside is still welcome: other browsers (Safari, Firefox), a phone that goes to sleep and wakes up, and a long session. Someone who knows TLS taking a look at the code would help most. Tell me in the Discussions tab or open an issue.
+**Secure link (experimental).** DEVICES has a "Secure link (HTTPS)" switch, and so has the screen you get after picking "On another device". It starts a second address on a second port (8124) with a certificate the plugin makes itself, and the page on that link keeps the phone's screen on. With `HttpsOnly` set to true in the config, other devices have to use the secure link and the plain link refuses them. This PC is not affected.
+
+The phone's browser warns that it cannot check the certificate, because the plugin makes it itself. The link is still encrypted. Only tap through on a link you got from your own PC. As far as I know, Chrome and Samsung Internet on Android don't show a certificate fingerprint, so there is nothing to compare on the phone. You will probably see the warning again later.
+
+The certificate and its private key are in `BepInEx/cache/https-cert.pfx` on your PC. The file is protected only by a fixed password that is in the source code, so anyone who can read your BepInEx folder can use the key. It is off by default, it has had no outside security review yet, and I have only tried it with Chrome and Samsung Internet on Android so far. Testing it from outside is still welcome: other browsers (Safari, Firefox), a phone that goes to sleep and wakes up, and a long session. Someone who knows TLS taking a look at the code would help most. Tell me in the Discussions tab or open an issue.
 
 ## Configuration
 
 All settings are on screen. **FILTER** covers presets, unit types, weapon categories, overlays, and trails. **DISPLAY** covers what the map shows beyond the units (jamming, who fired, blast rings and so on), text size, redraw rate, pilot names, the red HUD (night vision), and colors. Hold the mouse over a switch, or touch and hold it on a phone, and a short note says what it does. Both save to `settings.json` next to the plugin. Heads up if you stream: teammates' real Steam names are shown on the map by default. Untick "Use real names instead of callsigns" in DISPLAY and they get random callsigns instead.
 
-A few things live in the BepInEx config instead, `BepInEx/config/com.bigloude.notacmap.cfg` (or press F1 if you have the BepInEx Configuration Manager): the port, the update rate, opening the page automatically, access from other devices, and the secure link (`HttpsEnabled`, `HttpsPort` and `HttpsOnly`). Each entry has a plain description.
+A few things live in the BepInEx config instead, `BepInEx/config/com.bigloude.notacmap.cfg` (or press F1 if you have the BepInEx Configuration Manager): the port, the update rate, opening the page automatically, access from other devices, the secure link (`HttpsEnabled`, `HttpsPort` and `HttpsOnly`), the map keys (F1 > NOTacMap > Keys, press Set and then the key or button) and the flight log. Each entry has a plain description.
 
 ## Troubleshooting
 
@@ -88,6 +93,8 @@ A few things live in the BepInEx config instead, `BepInEx/config/com.bigloude.no
 **The phone can't open the link.** Both devices need to be on the same wifi, and the access switch under DEVICES has to be on. If Windows asks about the firewall, allow it on private networks. The link changes when the PC changes network, and "New link" cuts off the old one, so open DEVICES and scan the current code again.
 
 **Where is the log?** In `BepInEx/LogOutput.log` in the game folder. The lines with NOTacMap say what the mod is doing and why a request was turned away. It never contains your phone link.
+
+**Flight log (test versions).** In a beta, the mod also writes one plain text file per flight to `BepInEx/NOTacMap-logs`, the newest 20 kept. F1 > NOTacMap > Flight log says exactly what is in it, can switch it off part by part, and has a button that opens the folder. It never writes player names, chat, server names, network addresses, the phone link's secret or pictures, and nothing is sent anywhere. To help with a bug, drag the file of that flight into an issue or the Discussions. GitHub issues are public, so read the file before you attach it. A normal release has no flight log, or has it off.
 
 ## Feedback and bugs
 
@@ -104,8 +111,9 @@ Claude helped out here and there while I was building this, mostly to make sense
 - [BepInEx](https://github.com/BepInEx/BepInEx) (LGPL-2.1): mod loader
 - [Newtonsoft.Json](https://github.com/JamesNK/Newtonsoft.Json) (MIT): JSON serialization
 - [Mirage](https://github.com/MirageNet/Mirage) (MIT): referenced read-only against the game's own networking types, not redistributed
+- [HarmonyX](https://github.com/BepInEx/HarmonyX) (MIT): comes with BepInEx, used to read the game's kill messages for STATS, not redistributed
 
-No in-game assets are bundled. The background map is captured from the game's own terrain texture on your machine each time the plugin loads, and is never stored.
+No in-game assets are bundled. The background map is captured from the game's own terrain texture on your machine each time the plugin loads, and the game's own icons (DISPLAY > Icons > Game) are read from the running game. Neither is ever stored.
 
 ## License
 
