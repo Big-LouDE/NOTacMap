@@ -244,9 +244,11 @@ namespace NOTacMap
 		internal static void Update(Aircraft now, int clients, KeyPresses presses)
 		{
 			if (on == null) return;
-			if (now != flying)
+			// Plain reference checks: when a mission is unloaded, Unity reports the old aircraft as null, and the flight still has
+			// to be closed (EndFlight does nothing if no file is open).
+			if (!ReferenceEquals(now, flying))
 			{
-				if (flying != null) EndFlight(now == null ? "You left the aircraft, or it was lost." : "You changed aircraft.");
+				EndFlight(now == null ? "You left the aircraft, or it was lost." : ReferenceEquals(flying, null) ? "" : "You changed aircraft or left the mission.");
 				flying = now;
 				pendingStart = false;
 				earlyLines.Clear();
