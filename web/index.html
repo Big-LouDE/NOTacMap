@@ -2183,7 +2183,9 @@ function setPreset(mode) {
   if (mode === 'custom') {
     if (settings.preset.mine) applyFilterValues(settings.preset.mine);
     settings.preset.mode = 'custom';
+    combatSummary = null;
     updatePresetButtons();
+    updateCombatBar();
     saveSettings();
     return;
   }
