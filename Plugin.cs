@@ -41,12 +41,9 @@ namespace NOTacMap
 		private ConfigEntry<bool> httpsOnly;
 		private ConfigEntry<string> lanAddress;
 		private ConfigEntry<string> lanToken;
-		private ConfigEntry<KeyboardShortcut> combatKey;
-		private ConfigEntry<KeyboardShortcut> zoomInKey;
-		private ConfigEntry<KeyboardShortcut> zoomOutKey;
-		// How often each key was pressed since the game started. The count goes out with every snapshot and the page acts on
-		// the difference, so a press is not lost when a snapshot is skipped, and every open map sees the same presses.
-		private int combatPresses, zoomInPresses, zoomOutPresses;
+		// The map's keys and controller buttons (DISPLAY > Keys). Their press counts go out with every snapshot and the page acts
+		// on the difference, so a press is not lost when a snapshot is skipped, and every open map sees the same presses.
+		private MapControls controls;
 		private MapServer server;
 		private Timer networkWatch;
 		private string pendingLan = NoPendingLan;
@@ -172,13 +169,8 @@ namespace NOTacMap
 			httpsOnly = Config.Bind("Server", "HttpsOnly", false,
 				"EXPERIMENTAL, only means something while HTTPS runs. When on, other devices can only use the https link and the plain http link answers them with a refusal. This PC is not affected. Off by default. Takes effect the next time the game starts or the network address changes.");
 
-			// No key is set at first, so nothing clashes with the game's own bindings. A joystick button works through a tool
-			// that turns it into a key press (JoyToKey and the like), because the game window has the focus in flight.
-			const string keyNote = " Pick a key the game does not use, best an F-key or one with Ctrl or Alt. Nothing happens while you type in the chat. Every map that has DISPLAY > Follow the keys on reacts.";
-			combatKey = Config.Bind("Keys", "CombatOrAll", KeyboardShortcut.Empty,
-				"Switches the map between your Combat view and All. From any other preset it goes to the Combat view you used last." + keyNote);
-			zoomInKey = Config.Bind("Keys", "ZoomIn", KeyboardShortcut.Empty, "Zooms the map in one step." + keyNote);
-			zoomOutKey = Config.Bind("Keys", "ZoomOut", KeyboardShortcut.Empty, "Zooms the map out one step." + keyNote);
+			// No key or button is set at first, so nothing clashes with the game's own bindings.
+			controls = new MapControls(Config);
 
 			string lan = null;
 			string token = null;
@@ -214,6 +206,8 @@ namespace NOTacMap
 
 			server = new MapServer(port.Value, lan, token);
 			server.LanSwitch = SwitchLan;
+			server.ControlsState = controls.StateJson;
+			server.ControlsCommand = controls.Command;
 			server.LanNewLink = NewLink;
 			server.HttpsSwitch = SwitchHttps;
 			server.HttpsFrontStart = StartHttpsFront;
@@ -462,6 +456,8 @@ namespace NOTacMap
 			}
 
 			DumpThemeOnce();
+			RadarCheck.TryOnce();
+			RadarCheck.Watch();
 			ReadKeys();
 
 			mapCheckTimer += Time.unscaledDeltaTime;
@@ -524,10 +520,7 @@ namespace NOTacMap
 
 			if (snapshot != null)
 			{
-				if (combatPresses + zoomInPresses + zoomOutPresses > 0)
-				{
-					snapshot.keys = new KeyPresses { combat = combatPresses, zoomIn = zoomInPresses, zoomOut = zoomOutPresses };
-				}
+				snapshot.keys = controls.Presses();
 				broadcastInFlight = true;
 				// Serialization and the socket write don't need the Unity API, and the
 				// write can block (a background browser tab drains its socket slowly),
@@ -556,13 +549,7 @@ namespace NOTacMap
 		{
 			try
 			{
-				if (TypingInTextField())
-				{
-					return;
-				}
-				if (combatKey.Value.IsDown()) combatPresses++;
-				if (zoomInKey.Value.IsDown()) zoomInPresses++;
-				if (zoomOutKey.Value.IsDown()) zoomOutPresses++;
+				controls.Update(TypingInTextField());
 			}
 			catch (Exception ex)
 			{

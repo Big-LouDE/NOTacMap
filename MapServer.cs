@@ -113,6 +113,12 @@ namespace NOTacMap
 		// Returns null when it worked, or a short message for the user when it didn't.
 		public Func<bool, string> LanSwitch;
 
+		// Set by the plugin. The map buttons (DISPLAY > Keys): ControlsState gives the current state as json, ControlsCommand
+		// takes ("learn" | "clear" | "cancel", action name) and returns null when it worked, or a short message for the user.
+		private readonly HashSet<string> devicesSeen = new HashSet<string>();
+		public Func<string> ControlsState;
+		public Func<string, string, string> ControlsCommand;
+
 		// Set by the plugin. Makes a new secret for the phone link and cuts off the old one. Same
 		// result convention as LanSwitch.
 		public Func<string> LanNewLink;
@@ -730,6 +736,18 @@ namespace NOTacMap
 
 				if (path == "/events")
 				{
+					if (fromNetwork && sender != null)
+					{
+						// One line per device and address, so it shows in the log whether a phone reaches this PC at all.
+						string device = (sender.IsIPv4MappedToIPv6 ? sender.MapToIPv4() : sender).ToString();
+						lock (devicesSeen)
+						{
+							if (devicesSeen.Add(device))
+							{
+								Plugin.Log.LogInfo("NOTacMap: a device at " + device + " opened the map" + (FrontPeers.IsFronted(request.RemoteEndPoint) ? " (secure link)" : "") + ".");
+							}
+						}
+					}
 					// Closed tabs only drop out of the list when a write to them
 					// fails, and the first write to a dead socket can still
 					// succeed. Ping twice before turning anyone away, so a few
@@ -993,6 +1011,82 @@ namespace NOTacMap
 					if (lanUrl != null && front != null && fingerprint != null && !fromNetwork) json += ",\"certSha256\":" + Newtonsoft.Json.JsonConvert.ToString(fingerprint);
 					if (error != null) json += ",\"error\":" + Newtonsoft.Json.JsonConvert.ToString(error);
 					json += "}";
+					byte[] bytes = Encoding.UTF8.GetBytes(json);
+					context.Response.ContentType = "application/json";
+					context.Response.Headers.Add("Cache-Control", "no-store");
+					context.Response.ContentLength64 = bytes.Length;
+					context.Response.OutputStream.Write(bytes, 0, bytes.Length);
+					context.Response.Close();
+					return;
+				}
+
+				if (path == "/controls")
+				{
+					string error = null;
+					if (context.Request.HttpMethod == "POST")
+					{
+						// Same rules as /lan: our own page sends application/json, small bodies only.
+						string contentType = context.Request.ContentType ?? "";
+						if (!contentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase))
+						{
+							Reject(context, 415);
+							return;
+						}
+						if (context.Request.ContentLength64 > MaxLanBodyBytes)
+						{
+							Reject(context, 413);
+							return;
+						}
+						byte[] buffer = new byte[MaxLanBodyBytes + 1];
+						int total = 0;
+						int read;
+						Stream input = context.Request.InputStream;
+						while (total < buffer.Length && (read = input.Read(buffer, total, buffer.Length - total)) > 0)
+						{
+							total += read;
+						}
+						if (total > MaxLanBodyBytes)
+						{
+							Reject(context, 413);
+							return;
+						}
+						string command = null, action = null;
+						try
+						{
+							var body = Newtonsoft.Json.Linq.JObject.Parse(Encoding.UTF8.GetString(buffer, 0, total));
+							foreach (string name in new[] { "learn", "clear", "cancel" })
+							{
+								var v = body[name];
+								if (v == null) continue;
+								if (command != null) { Reject(context, 400); return; }
+								command = name;
+								if (name == "cancel")
+								{
+									if (v.Type != Newtonsoft.Json.Linq.JTokenType.Boolean || !(bool)v) { Reject(context, 400); return; }
+								}
+								else
+								{
+									if (v.Type != Newtonsoft.Json.Linq.JTokenType.String) { Reject(context, 400); return; }
+									action = (string)v;
+								}
+							}
+						}
+						catch (Newtonsoft.Json.JsonException)
+						{
+							Reject(context, 400);
+							return;
+						}
+						if (command == null)
+						{
+							Reject(context, 400);
+							return;
+						}
+						Func<string, string, string> handler = ControlsCommand;
+						error = handler == null ? "The map buttons can't be set from here." : handler(command, action);
+					}
+					Func<string> state = ControlsState;
+					string json = state != null ? state() : "{}";
+					if (error != null) json = json.Substring(0, json.Length - 1) + (json.Length > 2 ? "," : "") + "\"error\":" + Newtonsoft.Json.JsonConvert.ToString(error) + "}";
 					byte[] bytes = Encoding.UTF8.GetBytes(json);
 					context.Response.ContentType = "application/json";
 					context.Response.Headers.Add("Cache-Control", "no-store");

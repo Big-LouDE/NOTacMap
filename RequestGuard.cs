@@ -119,7 +119,8 @@ namespace NOTacMap
 
 			bool settingsPost = method == "POST" && path == "/settings";
 			bool lanPost = method == "POST" && path == "/lan";
-			if (method != "GET" && method != "HEAD" && !settingsPost && !lanPost)
+			bool controlsPost = method == "POST" && path == "/controls";
+			if (method != "GET" && method != "HEAD" && !settingsPost && !lanPost && !controlsPost)
 			{
 				return GuardDecision.Reject(405, "method not allowed");
 			}
@@ -157,8 +158,8 @@ namespace NOTacMap
 				return GuardDecision.Reject(403, "other devices may only use the secure link (HttpsOnly)",
 					"This map only answers on the secure link. Open the link with https from the map page on the game PC.");
 			}
-			// Saving settings, the phone link and the LAN switch are for this PC only.
-			if (settingsPost || path == "/lan")
+			// Saving settings, the phone link, the LAN switch and setting the map buttons are for this PC only.
+			if (settingsPost || path == "/lan" || path == "/controls")
 			{
 				return GuardDecision.Reject(403, "this page is for the game PC only");
 			}
