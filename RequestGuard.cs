@@ -121,7 +121,8 @@ namespace NOTacMap
 			bool lanPost = method == "POST" && path == "/lan";
 			bool controlsPost = method == "POST" && path == "/controls";
 			bool diagPost = method == "POST" && path == "/diag"; // errors from the map page for the flight log, also from a phone
-			if (method != "GET" && method != "HEAD" && !settingsPost && !lanPost && !controlsPost && !diagPost)
+			bool statsPost = method == "POST" && path == "/stats"; // resetting the all-time stats, this PC only
+			if (method != "GET" && method != "HEAD" && !settingsPost && !lanPost && !controlsPost && !diagPost && !statsPost)
 			{
 				return GuardDecision.Reject(405, "method not allowed");
 			}
@@ -160,7 +161,7 @@ namespace NOTacMap
 					"This map only answers on the secure link. Open the link with https from the map page on the game PC.");
 			}
 			// Saving settings, the phone link, the LAN switch and setting the map buttons are for this PC only.
-			if (settingsPost || path == "/lan" || path == "/controls")
+			if (settingsPost || path == "/lan" || path == "/controls" || statsPost)
 			{
 				return GuardDecision.Reject(403, "this page is for the game PC only");
 			}

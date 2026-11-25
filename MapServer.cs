@@ -121,6 +121,9 @@ namespace NOTacMap
 		public Action<string, bool> PageError;
 		// Set by the plugin: a screen opened the map (from another device, over the secure link, device number).
 		public Action<bool, bool, int> ScreenOpened;
+		// Set by the plugin: the STATS panel's numbers as json, and a reset of the all-time numbers ("mp" or "sp", PC only).
+		public Func<string> StatsJson;
+		public Func<string, string> StatsReset;
 		private int localScreensLogged;
 		public Func<string, string, string> ControlsCommand;
 
@@ -1100,6 +1103,47 @@ namespace NOTacMap
 					Func<string> state = ControlsState;
 					string json = state != null ? state() : "{}";
 					if (error != null) json = json.Substring(0, json.Length - 1) + (json.Length > 2 ? "," : "") + "\"error\":" + Newtonsoft.Json.JsonConvert.ToString(error) + "}";
+					byte[] bytes = Encoding.UTF8.GetBytes(json);
+					context.Response.ContentType = "application/json";
+					context.Response.Headers.Add("Cache-Control", "no-store");
+					context.Response.ContentLength64 = bytes.Length;
+					context.Response.OutputStream.Write(bytes, 0, bytes.Length);
+					context.Response.Close();
+					return;
+				}
+
+				if (path == "/stats")
+				{
+					string error = null;
+					if (context.Request.HttpMethod == "POST")
+					{
+						string contentType = context.Request.ContentType ?? "";
+						if (!contentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase) || context.Request.ContentLength64 > MaxLanBodyBytes)
+						{
+							Reject(context, 415);
+							return;
+						}
+						byte[] buffer = new byte[MaxLanBodyBytes + 1];
+						int total = 0, read;
+						Stream input = context.Request.InputStream;
+						while (total < buffer.Length && (read = input.Read(buffer, total, buffer.Length - total)) > 0) total += read;
+						try
+						{
+							var body = Newtonsoft.Json.Linq.JObject.Parse(Encoding.UTF8.GetString(buffer, 0, Math.Min(total, MaxLanBodyBytes)));
+							var which = body["reset"];
+							if (which == null || which.Type != Newtonsoft.Json.Linq.JTokenType.String) { Reject(context, 400); return; }
+							Func<string, string> reset = StatsReset;
+							error = reset == null ? "The stats can't be reset from here." : reset((string)which);
+						}
+						catch (Newtonsoft.Json.JsonException)
+						{
+							Reject(context, 400);
+							return;
+						}
+					}
+					Func<string> stats = StatsJson;
+					string json = stats != null ? stats() : "{}";
+					if (error != null) json = "{\"error\":" + Newtonsoft.Json.JsonConvert.ToString(error) + "}";
 					byte[] bytes = Encoding.UTF8.GetBytes(json);
 					context.Response.ContentType = "application/json";
 					context.Response.Headers.Add("Cache-Control", "no-store");

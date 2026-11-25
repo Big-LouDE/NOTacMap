@@ -176,6 +176,7 @@ namespace NOTacMap
 			// No key or button is set at first, so nothing clashes with the game's own bindings.
 			controls = new MapControls(Config);
 			FlightLog.Init(Config);
+			Stats.Init(new HarmonyLib.Harmony(PluginGuid));
 
 			string lan = null;
 			string token = null;
@@ -215,6 +216,8 @@ namespace NOTacMap
 			server.ControlsCommand = controls.Command;
 			server.PageError = FlightLog.PageError;
 			server.ScreenOpened = FlightLog.Screen;
+			server.StatsJson = Stats.Json;
+			server.StatsReset = Stats.Reset;
 			server.LanNewLink = NewLink;
 			server.HttpsSwitch = SwitchHttps;
 			server.HttpsFrontStart = StartHttpsFront;
@@ -467,6 +470,7 @@ namespace NOTacMap
 			RadarCheck.Watch();
 			OwnRadar.Update();
 			FlightLog.Update(OwnRadar.Watched, server.ScreenCount, controls.Presses());
+			Stats.Update(OwnRadar.Watched);
 			ReadKeys();
 
 			mapCheckTimer += Time.unscaledDeltaTime;
@@ -531,6 +535,7 @@ namespace NOTacMap
 			if (snapshot != null)
 			{
 				snapshot.keys = controls.Presses();
+				snapshot.stats = Stats.Note();
 				broadcastInFlight = true;
 				// Serialization and the socket write don't need the Unity API, and the
 				// write can block (a background browser tab drains its socket slowly),
@@ -611,6 +616,7 @@ namespace NOTacMap
 		private void OnDestroy()
 		{
 			FlightLog.Close();
+			Stats.Quit();
 			networkWatch?.Dispose();
 			server?.Stop();
 		}

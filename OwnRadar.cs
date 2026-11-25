@@ -129,6 +129,7 @@ namespace NOTacMap
 				f.radar = true;
 			}
 			f.lastSeen = Time.unscaledTime;
+			Stats.Found(target, det is Radar);
 			if (watched != null && loggedFinds.Count < 300 && loggedFinds.Add(id))
 			{
 				var c = System.Globalization.CultureInfo.InvariantCulture;

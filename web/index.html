@@ -76,6 +76,26 @@
   .control-row .control-name { flex: 1 1 auto; }
   .control-row .control-set { order: 3; flex: 1 1 100%; color: var(--hud-green); overflow-wrap: break-word; }
   .control-row .control-set.learning { color: var(--combat); }
+  /* STATS: solid background, so the map never shows through the numbers */
+  #statsPanel { width: 340px; background: rgb(0, 10, 0); }
+  #statsPanel .tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+  #statsPanel .tabs .mini-btn { flex: 1; }
+  #statsPanel .result { text-align: center; font-weight: bold; letter-spacing: 0.08em; padding: 4px 0 6px; font-size: 1.3em; }
+  #statsPanel .result.victory { color: var(--hud-green); }
+  #statsPanel .result.defeat { color: var(--hostile); }
+  #statsPanel .big { display: flex; gap: 6px; margin: 2px 0 8px; }
+  #statsPanel .big div { flex: 1; text-align: center; border: 1px solid var(--hud-dim); padding: 4px 0 3px; }
+  #statsPanel .big b { display: block; font-size: 1.6em; color: var(--hud-green); line-height: 1.1; }
+  #statsPanel .big span { font-size: 0.8em; color: var(--hud-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+  #statsPanel .line { display: flex; justify-content: space-between; gap: 10px; padding: 1px 0; }
+  #statsPanel .line span:first-child { color: var(--hud-dim); white-space: nowrap; }
+  #statsPanel .line span:last-child { text-align: right; color: var(--hud-green); }
+  #statsPanel .list { padding: 1px 0 3px; } #statsPanel .list > span { color: var(--hud-dim); } #statsPanel .list > div { color: var(--hud-green); }
+  #statsPanel table { width: 100%; border-collapse: collapse; color: var(--hud-green); }
+  #statsPanel td { padding: 1px 0; } #statsPanel td.n { text-align: right; width: 3.5em; }
+  #statsPanel th { text-align: right; color: var(--hud-dim); font-weight: normal; font-size: 0.85em; } #statsPanel th:first-child { text-align: left; }
+  #statsPanel .small { color: var(--hud-dim); font-size: 0.85em; margin-top: 6px; }
+  #statsPanel .small button { font: inherit; }
   #filterBtn.combat { color: var(--combat) !important; border-color: var(--combat) !important; box-shadow: 0 0 8px rgba(255, 176, 32, 0.6); }
   #themeWarning {
     position: absolute; bottom: 44px; left: 14px;
@@ -396,12 +416,14 @@
   <button id="mapUpBtn" title="Turns the map so that north is up, or so that your heading is up">&#8982; north up</button>
   <button id="displayBtn">&#9881; display</button>
   <button id="filterBtn">&#9776; filter</button>
+  <button id="statsBtn" title="Kills, deaths and what you found: this life, this round, all time">&#9733; stats</button>
   <button id="menuBtn" hidden title="Fullscreen, rotate and devices">&#8943; menu</button>
   <div id="menuRow" hidden>
     <button id="fullscreenBtn" hidden>&#9974; fullscreen</button>
     <button id="rotateBtn" hidden title="Turns the page sideways, for a phone that stays locked upright. Tap again to turn it the other way, and once more to switch it off">&#8635; rotate</button>
     <button id="devicesBtn" hidden>&#9742; devices</button>
   </div>
+  <div id="statsPanel" class="panel"></div>
   <div id="filterPanel" class="panel">
     <div class="group">
       <h4>Presets</h4>
@@ -1169,7 +1191,7 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false, neutral: true },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, nukeRadius: true, bombImpact: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true, mapUp: 'north', iconStyle: 'ours', keepScreenOn: true, followKeys: true, radarCone: true, radarSweep: false, warnLines: true, warnFaint: true, findLines: true, findBrackets: true },
+  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, nukeRadius: true, bombImpact: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true, mapUp: 'north', iconStyle: 'ours', keepScreenOn: true, followKeys: true, statsAfterRound: true, statsWithBoard: true, radarCone: true, radarSweep: false, warnLines: true, warnFaint: true, findLines: true, findBrackets: true },
   overlays: { runwayGuides: true, weaponRange: true, grid: true, rangeRings: false, scaleBar: true },
   // Which preset is on ('custom' = the boxes as you set them), and the boxes as they were before a preset was switched on.
   preset: { mode: 'custom', mine: null, lastCombat: 'combatAll' },
@@ -2530,6 +2552,126 @@ document.getElementById('filterBtn').addEventListener('click', () => {
 document.getElementById('devicesBtn').addEventListener('click', () => {
   togglePanel(document.getElementById('devicesPanel'), document.getElementById('devicesBtn'));
 });
+// ---- STATS (Stats.cs): this life, this round, all time. Opens by itself when a round ends and with the game's scoreboard (Esc).
+const statsPanel = document.getElementById('statsPanel'), statsBtn = document.getElementById('statsBtn');
+let statsData = null, statsTab = 'round', statsSeen = null, statsOpenedByBoard = false, statsLoading = false;
+document.getElementById('statsBtn').addEventListener('click', () => { togglePanel(statsPanel, statsBtn); if (statsPanel.classList.contains('open')) loadStats(); });
+async function loadStats() {
+  if (statsLoading) return;
+  statsLoading = true;
+  try { const r = await fetch('/stats', { cache: 'no-store' }); if (r.ok) { statsData = await r.json(); renderStats(); } } catch (e) { /* next note tries again */ }
+  statsLoading = false;
+}
+function openStats(tab) {
+  if (tab) statsTab = tab;
+  if (!statsPanel.classList.contains('open')) togglePanel(statsPanel, statsBtn);
+  loadStats();
+}
+function noteStats(n) {
+  if (!n) return;
+  const before = statsSeen;
+  statsSeen = n;
+  if (!before) { loadStats(); return; }
+  if (n.ended > before.ended && settings.display.statsAfterRound !== false) openStats('round');
+  if (n.board && !before.board && settings.display.statsWithBoard !== false && !statsPanel.classList.contains('open')) { statsOpenedByBoard = true; openStats(); }
+  if (!n.board && before.board && statsOpenedByBoard) { statsOpenedByBoard = false; if (statsPanel.classList.contains('open')) togglePanel(statsPanel, statsBtn); }
+  if (n.v !== before.v && statsPanel.classList.contains('open')) loadStats();
+  else if (n.v !== before.v) statsBtnLabel();
+}
+function statsBtnLabel() {
+  // the button stays short; the round's kills once there are some
+  const k = statsData && statsData.round && statsData.round.kills;
+  statsBtn.innerHTML = '&#9733; stats' + (k ? ' &middot; ' + k : '');
+}
+const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const STAT_KIND = { plane: ['jet', 'jets'], helicopter: ['heli', 'helis'], ship: ['ship', 'ships'], building: ['building', 'buildings'], ground: ['ground unit', 'ground'] };
+function statKind(key) {
+  const [kind, name] = key.split('|');
+  if (kind === 'aircraft') return classifyUnit({ type: name, name, baseType: 'aircraft' }) === 'helicopter' ? 'helicopter' : 'plane';
+  if (kind === 'ship') return 'ship';
+  if (kind === 'building') return 'building';
+  return 'ground';
+}
+function byKindLine(map) {
+  const sums = {};
+  for (const [k, n] of Object.entries(map || {})) { const c = statKind(k); sums[c] = (sums[c] || 0) + n; }
+  return Object.keys(STAT_KIND).filter(c => sums[c]).map(c => sums[c] + ' ' + STAT_KIND[c][sums[c] === 1 ? 0 : 1]).join(' &middot; ');
+}
+function topNames(map, n) {
+  const byName = {};
+  for (const [k, v] of Object.entries(map || {})) { const name = k.split('|')[1] || k; byName[name] = (byName[name] || 0) + v; }
+  return Object.entries(byName).sort((a, b) => b[1] - a[1]).slice(0, n);
+}
+function renderStats() {
+  statsBtnLabel();
+  const d = statsData;
+  if (!d || !d.round) { statsPanel.innerHTML = '<div class="note">Stats show up here once you fly a mission.</div>'; return; }
+  const line = (a, b) => `<div class="line"><span>${a}</span><span>${b}</span></div>`;
+  const list = (a, b) => b ? `<div class="list"><span>${a}</span><div>${b}</div></div>` : '';
+  const big = (n, t) => `<div><b>${n}</b><span>${t}</span></div>`;
+  const kd = (k, dd) => dd ? (k / dd).toFixed(1) : (k ? k + '.0' : '-');
+  const tab = (id, label) => `<button type="button" class="mini-btn ${statsTab === id ? 'active' : ''}" data-stats-tab="${id}">${label}</button>`;
+  let h = `<div class="tabs">${tab('life', 'this life')}${tab('round', 'this round')}${tab('all', 'all time')}</div>`;
+  if (statsTab === 'round' && d.roundEnded && d.result) h += `<div class="result ${d.result === 'Victory' ? 'victory' : 'defeat'}">${esc(d.result).toUpperCase()}</div>`;
+  const combat = (t, extra) => {
+    let x = `<div class="group"><h4>Combat</h4><div class="big">${big(t.kills, 'kills')}${big(t.assists, 'assists')}${big(t.deaths, 'deaths')}</div>`;
+    x += list('Destroyed', byKindLine(t.killsByName));
+    if (t.missiles) x += line('Missiles shot down', t.missiles);
+    if (t.friendlyFire) x += line('Friendly fire', t.friendlyFire);
+    x += extra || '';
+    return x + '</div>';
+  };
+  const found = t => `<div class="group"><h4>Found by your sensors</h4><div class="big">${big(t.finds, 'found')}${big(t.newForTeam, 'new for team')}${big(t.laterDestroyed, 'later destroyed')}</div>${list('Found', byKindLine(t.findsByName))}</div>`;
+  if (statsTab === 'life') {
+    const t = d.life || {};
+    h += combat(t, d.lifePlane ? line('Flying', esc(d.lifePlane)) : '');
+    h += found(t);
+  } else if (statsTab === 'round') {
+    const t = d.round;
+    const killedBy = topNames(t.killedBy, 1);
+    h += combat(t, line('K/D', kd(t.kills, t.deaths)) + (d.roundBestLife ? line('Best life', d.roundBestLife + ' kills') : '') + (killedBy.length ? line('Killed by', esc(killedBy[0][0])) : ''));
+    h += found(t);
+    if (d.map) h += `<div class="small">${esc(d.map)}${d.mode === 'sp' ? ' &middot; singleplayer' : ''}</div>`;
+  } else {
+    const a = d.all, t = a.tally;
+    const best = b => b && b.value ? `${b.value} (${[b.plane, b.map, b.date].filter(Boolean).map(esc).join(', ')})` : '-';
+    h += `<div class="group"><h4>Combat</h4><div class="big">${big(t.kills, 'kills')}${big(t.deaths, 'deaths')}${big(kd(t.kills, t.deaths), 'K/D')}</div>`;
+    h += line('Assists', t.assists) + line('Best life', best(a.bestLife)) + line('Best round', best(a.bestRound));
+    h += list('By type', byKindLine(t.killsByName));
+    const tops = topNames(t.killsByName, 5);
+    if (tops.length) h += list('Most destroyed', tops.map(([n, c]) => esc(n) + ' ' + c).join(' &middot; '));
+    if (t.missiles) h += line('Missiles shot down', t.missiles);
+    h += '</div>';
+    const planes = Object.entries(a.planes || {}).filter(([, p]) => p.kills || p.deaths).sort((x, y) => y[1].kills - x[1].kills);
+    if (planes.length) {
+      h += `<details class="group fold" open><summary>By your plane</summary><table><tr><th></th><th>kills</th><th>deaths</th><th>K/D</th></tr>`;
+      for (const [n, p] of planes) h += `<tr><td>${esc(n)}</td><td class="n">${p.kills}</td><td class="n">${p.deaths}</td><td class="n">${kd(p.kills, p.deaths)}</td></tr>`;
+      h += '</table></details>';
+    }
+    const killedBy = topNames(t.killedBy, 3);
+    if (killedBy.length) h += `<details class="group fold"><summary>Killed you most</summary>${killedBy.map(([n, c]) => line(esc(n), c)).join('')}</details>`;
+    h += `<div class="group"><h4>Found by your sensors</h4>${line('Found', t.finds + (a.bestLifeFinds && a.bestLifeFinds.value ? ' &middot; best life ' + a.bestLifeFinds.value : ''))}${line('New for the team', t.newForTeam)}${line('Later destroyed by your team', t.laterDestroyed)}</div>`;
+    h += `<div class="small">${d.mode === 'sp' ? 'Singleplayer' : 'Multiplayer'} &middot; counted since ${esc(a.since || 'today')}, while the mod runs`;
+    if (!isRemoteViewer) h += ` &middot; <button type="button" class="mini-btn" id="statsReset">reset</button>`;
+    h += '</div>';
+  }
+  h += `<div class="small"><label><input type="checkbox" id="statsAfterRound" ${settings.display.statsAfterRound !== false ? 'checked' : ''}> Open after a round</label> <label><input type="checkbox" id="statsWithBoard" ${settings.display.statsWithBoard !== false ? 'checked' : ''}> Open with the scoreboard (Esc)</label></div>`;
+  h += `<div class="small">Counted from the game's own kill messages and your sensors. "New for team" and "later destroyed" are good estimates.</div>`;
+  statsPanel.innerHTML = h;
+  statsPanel.querySelectorAll('[data-stats-tab]').forEach(b => b.addEventListener('click', () => { statsTab = b.dataset.statsTab; renderStats(); }));
+  const reset = document.getElementById('statsReset');
+  if (reset) reset.addEventListener('click', async () => {
+    if (!confirm('Start the all-time ' + (d.mode === 'sp' ? 'singleplayer' : 'multiplayer') + ' stats again from zero? The old numbers stay in a backup file, but the panel will not show them.')) return;
+    try { await fetch('/stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reset: d.mode }) }); } catch (e) { /* shows on the next load */ }
+    setTimeout(loadStats, 400);
+  });
+  for (const [id, key] of [['statsAfterRound', 'statsAfterRound'], ['statsWithBoard', 'statsWithBoard']]) {
+    const box = document.getElementById(id);
+    box.addEventListener('change', () => { settings.display[key] = box.checked; saveSettings(); });
+  }
+  if (statsPanel.classList.contains('open')) fitPanelToScreen(statsPanel);
+}
+
 document.getElementById('displayBtn').addEventListener('click', () => {
   togglePanel(document.getElementById('displayPanel'), document.getElementById('displayBtn'));
 });
@@ -5198,6 +5340,7 @@ function connect() {
     latestAt = performance.now();
     applyGameKeys(latest.keys);
     noteRadarScan(latest.player && latest.player.radar);
+    noteStats(latest.stats);
     if (latest.player) { lastPlayerPos = { x: latest.player.x, z: latest.player.z }; lastPlayerHeading = latest.player.heading; }
     updateCombat(latest.loadout);
     updateCombatBar();

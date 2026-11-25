@@ -188,6 +188,8 @@ namespace NOTacMap
 		public List<FindSnapshot> finds; // what YOUR radar and eyes see right now (OwnRadar)
 		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
 		public List<RadarWarningSnapshot> radarWarnings; // radar warnings on YOUR aircraft in the last 4 s, like the game's own map
+		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+		public StatsNote stats; // when to read /stats again, rounds ended, the game's scoreboard open
 	}
 
 	internal class KeyPresses
