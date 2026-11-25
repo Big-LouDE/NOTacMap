@@ -69,9 +69,10 @@
   }
   #combatBar .short, #combatBar.small .full, #combatBar.small .detail { display: none; }
   #combatBar.small .short { display: inline; }
-  .control-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
-  .control-row .control-name { flex: 0 0 7.5em; }
-  .control-row .control-set { flex: 1; color: var(--hud-green); overflow-wrap: anywhere; }
+  /* name and buttons on one line, what it is set to on its own full-width line below */
+  .control-row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; padding: 3px 0; }
+  .control-row .control-name { flex: 1 1 auto; }
+  .control-row .control-set { order: 3; flex: 1 1 100%; color: var(--hud-green); overflow-wrap: break-word; }
   .control-row .control-set.learning { color: var(--combat); }
   #filterBtn.combat { color: var(--combat) !important; border-color: var(--combat) !important; box-shadow: 0 0 8px rgba(255, 176, 32, 0.6); }
   #themeWarning {
@@ -535,7 +536,7 @@
     <details class="group fold" data-fold="keys">
       <summary>Keys</summary>
       <div id="controlsList"></div>
-      <div class="note" id="controlsNote">A key, or a button on your joystick, HOTAS or gamepad, for each. Press Set, then the key or button you want. Esc cancels. Pick one the game doesn't use.</div>
+      <div class="note" id="controlsNote">A key, or a button on your joystick, HOTAS or gamepad, for each. Press Set, click into the game window (the game only reads keys and buttons while it is in front), then press the key or button you want, within 15 seconds. Esc cancels. Pick one the game doesn't use.</div>
       <label data-note="Untick this on a device that should keep its own view, for example a phone that always shows Combat."><input type="checkbox" data-group="display" data-key="followKeys" checked>Follow the keys</label>
     </details>
     <details class="group fold" data-fold="warnings">
@@ -2264,7 +2265,7 @@ function renderControls(st) {
     const set = c.button || c.key;
     row.innerHTML = '<span class="control-name"></span><span class="control-set"></span>';
     row.querySelector('.control-name').textContent = c.name;
-    row.querySelector('.control-set').textContent = now ? 'press a key or button...' : (set || 'not set');
+    row.querySelector('.control-set').textContent = now ? 'click into the game window and press it there...' : (set || 'not set');
     if (now) row.querySelector('.control-set').classList.add('learning');
     const btn = (label, body) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'mini-btn'; b.textContent = label; b.addEventListener('click', () => controlsCommand(body)); row.appendChild(b); };
     if (now) btn('Cancel', { cancel: true });

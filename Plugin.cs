@@ -10,10 +10,14 @@ using UnityEngine;
 
 namespace NOTacMap
 {
-	// Read by name by the BepInEx Configuration Manager (F1), which looks for a field called Browsable.
+	// Read by name by the BepInEx Configuration Manager (F1), which looks for fields with these names.
 	internal sealed class ConfigurationManagerAttributes
 	{
 		public bool? Browsable;
+		public string DispName;
+		public int? Order;
+		public bool? HideDefaultButton;
+		public System.Action<BepInEx.Configuration.ConfigEntryBase> CustomDrawer;
 	}
 
 	[BepInPlugin(PluginGuid, PluginName, PluginVersion)]

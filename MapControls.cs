@@ -35,14 +35,20 @@ namespace NOTacMap
 		internal MapControls(ConfigFile config)
 		{
 			this.config = config;
-			const string keyNote = " Easiest to set from the map: DISPLAY > Keys > Set, then press the key or button you want. Pick one the game does not use. Nothing happens while you type in the chat. Every map that has DISPLAY > Follow the keys on reacts.";
-			keys[0] = config.Bind("Keys", "CombatOrAll", KeyboardShortcut.Empty, "Keyboard key that switches the map between your Combat view and All. From any other preset it goes to the Combat view you used last." + keyNote);
-			keys[1] = config.Bind("Keys", "ZoomIn", KeyboardShortcut.Empty, "Keyboard key that zooms the map in one step." + keyNote);
-			keys[2] = config.Bind("Keys", "ZoomOut", KeyboardShortcut.Empty, "Keyboard key that zooms the map out one step." + keyNote);
-			const string buttonNote = " A button on a joystick, HOTAS or gamepad, written by the map page (DISPLAY > Keys > Set). Leave it to the page; empty means none.";
-			buttons[0] = config.Bind("Keys", "CombatOrAllButton", "", "Controller button for Combat or All." + buttonNote);
-			buttons[1] = config.Bind("Keys", "ZoomInButton", "", "Controller button for zoom in." + buttonNote);
-			buttons[2] = config.Bind("Keys", "ZoomOutButton", "", "Controller button for zoom out." + buttonNote);
+			const string keyNote = " Set it here with F1 > NOTacMap > Keys > Set, or on the map with DISPLAY > Keys > Set. Pick one the game does not use. Nothing happens while you type in the chat. Every map that has DISPLAY > Follow the keys on reacts.";
+			// The keyboard keys stay in the file (and can be typed there), but F1 shows one row per action instead, drawn below.
+			var hidden = new ConfigurationManagerAttributes { Browsable = false };
+			keys[0] = config.Bind("Keys", "CombatOrAll", KeyboardShortcut.Empty, new ConfigDescription("Keyboard key that switches the map between your Combat view and All. From any other preset it goes to the Combat view you used last." + keyNote, null, hidden));
+			keys[1] = config.Bind("Keys", "ZoomIn", KeyboardShortcut.Empty, new ConfigDescription("Keyboard key that zooms the map in one step." + keyNote, null, hidden));
+			keys[2] = config.Bind("Keys", "ZoomOut", KeyboardShortcut.Empty, new ConfigDescription("Keyboard key that zooms the map out one step." + keyNote, null, hidden));
+			const string buttonNote = " A key, or a button on a joystick, HOTAS or gamepad. Press Set, then the key or button. Esc cancels.";
+			for (int a = 0; a < 3; a++)
+			{
+				int i = a;
+				var row = new ConfigurationManagerAttributes { DispName = ActionNames[i], Order = 3 - i, HideDefaultButton = true, CustomDrawer = _ => DrawRow(i) };
+				string[] entry = { "CombatOrAllButton", "ZoomInButton", "ZoomOutButton" };
+				buttons[i] = config.Bind("Keys", entry[i], "", new ConfigDescription(ActionNames[i] + "." + buttonNote + " The controller button is stored here; empty means none.", null, row));
+			}
 			BuildState();
 		}
 
@@ -82,6 +88,7 @@ namespace NOTacMap
 					learning = i;
 					learnUntil = Time.unscaledTime + LearnSeconds;
 					lastResult = null;
+					LogControllers();
 				}
 				else if (command == "clear" && i >= 0)
 				{
@@ -161,8 +168,82 @@ namespace NOTacMap
 			}
 		}
 
+		// One row in F1 > NOTacMap > Keys: what it is set to, and Set / Clear. F1 is inside the game, so the game has the focus
+		// and the next press is caught straight away. Runs in OnGUI, on the main thread like Update.
+		private void DrawRow(int i)
+		{
+			GUILayout.BeginHorizontal();
+			string now;
+			if (learning == i)
+			{
+				now = "Press a key or button now... (Esc cancels)";
+			}
+			else
+			{
+				string[] parts = (buttons[i].Value ?? "").Split('|');
+				KeyboardShortcut k = keys[i].Value;
+				now = parts.Length >= 4 ? parts[2] + ", " + parts[3] : k.MainKey != KeyCode.None ? k.ToString() : "not set";
+			}
+			GUILayout.Label(now, GUILayout.ExpandWidth(true));
+			if (learning == i)
+			{
+				if (GUILayout.Button("Cancel", GUILayout.ExpandWidth(false)))
+				{
+					learning = -1;
+					BuildState();
+				}
+			}
+			else
+			{
+				if (GUILayout.Button("Set", GUILayout.ExpandWidth(false)))
+				{
+					learning = i;
+					learnUntil = Time.unscaledTime + LearnSeconds;
+					lastResult = null;
+					LogControllers();
+					BuildState();
+				}
+				if ((buttons[i].Value ?? "") != "" || keys[i].Value.MainKey != KeyCode.None)
+				{
+					if (GUILayout.Button("Clear", GUILayout.ExpandWidth(false)))
+					{
+						keys[i].Value = KeyboardShortcut.Empty;
+						buttons[i].Value = "";
+						config.Save();
+						lastResult = ActionNames[i] + ": cleared.";
+						BuildState();
+					}
+				}
+			}
+			GUILayout.EndHorizontal();
+		}
+
+		// Which controllers the game's input library sees right now, so a controller that is not found shows in the log.
+		private static void LogControllers()
+		{
+			try
+			{
+				if (!ReInput.isReady)
+				{
+					Plugin.Log.LogInfo("NOTacMap keys: waiting for a key or button. The game's controller support is not ready yet.");
+					return;
+				}
+				var names = new List<string>();
+				foreach (Joystick j in ReInput.controllers.Joysticks)
+				{
+					if (j != null) names.Add(j.name + " (" + j.buttonCount + " buttons" + (j.isConnected ? "" : ", not connected") + ")");
+				}
+				Plugin.Log.LogInfo("NOTacMap keys: waiting for a key or button. Controllers the game sees: " + (names.Count == 0 ? "none" : string.Join("; ", names.ToArray())) + ".");
+			}
+			catch (Exception ex)
+			{
+				Plugin.Log.LogInfo("NOTacMap keys: could not list the controllers: " + ex.Message);
+			}
+		}
+
 		private void Done(int i, string what)
 		{
+			Plugin.Log.LogInfo("NOTacMap keys: " + ActionNames[i] + " is now " + what + ".");
 			config.Save();
 			lastResult = ActionNames[i] + " is now " + what + ".";
 			learning = -1;

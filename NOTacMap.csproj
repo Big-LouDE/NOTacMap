@@ -66,6 +66,10 @@
       <HintPath>$(GameDir)\NuclearOption_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(GameDir)\NuclearOption_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="Rewired_Core">
       <HintPath>$(GameDir)\NuclearOption_Data\Managed\Rewired_Core.dll</HintPath>
       <Private>false</Private>
