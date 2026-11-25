@@ -134,6 +134,15 @@ namespace NOTacMap
 				return;
 			}
 			int i = learning;
+			// a touchpad swipe or a left/right press (PlayStation controllers), before plain buttons, so a press on the pad is
+			// stored as left or right press
+			if (Touchpad.Any(out Joystick pj, out string gesture))
+			{
+				buttons[i].Value = string.Join("|", "touch", pj.hardwareTypeGuid.ToString(), gesture, Clean(pj.name), Touchpad.Name(gesture));
+				keys[i].Value = KeyboardShortcut.Empty;
+				Done(i, Clean(pj.name) + ", " + Touchpad.Name(gesture));
+				return;
+			}
 			// a controller button
 			if (ReInput.isReady)
 			{
@@ -176,13 +185,12 @@ namespace NOTacMap
 			string now;
 			if (learning == i)
 			{
-				now = "Press a key or button now... (Esc cancels)";
+				now = "Press a key or button, or swipe or press the touchpad, now... (Esc cancels)";
 			}
 			else
 			{
-				string[] parts = (buttons[i].Value ?? "").Split('|');
 				KeyboardShortcut k = keys[i].Value;
-				now = parts.Length >= 4 ? parts[2] + ", " + parts[3] : k.MainKey != KeyCode.None ? k.ToString() : "not set";
+				now = Describe(buttons[i].Value) ?? (k.MainKey != KeyCode.None ? k.ToString() : "not set");
 			}
 			GUILayout.Label(now, GUILayout.ExpandWidth(true));
 			if (learning == i)
@@ -258,6 +266,10 @@ namespace NOTacMap
 				return false;
 			}
 			string[] parts = binding.Split('|');
+			if (parts[0] == "touch")
+			{
+				return parts.Length >= 3 && Touchpad.Happened(parts[1], parts[2]);
+			}
 			if (parts.Length < 2 || !int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int button))
 			{
 				return false;
@@ -284,6 +296,14 @@ namespace NOTacMap
 				// some controllers have no names for their buttons
 			}
 			return "button " + (b + 1).ToString(CultureInfo.InvariantCulture);
+		}
+
+		// "Sony DualSense, Square" or "Sony DualSense, Swipe up", or null when no button is stored.
+		private static string Describe(string binding)
+		{
+			string[] parts = (binding ?? "").Split('|');
+			if (parts[0] == "touch") return parts.Length >= 5 ? parts[3] + ", " + parts[4] : null;
+			return parts.Length >= 4 ? parts[2] + ", " + parts[3] : null;
 		}
 
 		private static string Clean(string s) => (s ?? "").Replace("|", "/").Trim();
@@ -322,8 +342,7 @@ namespace NOTacMap
 				if (i > 0) sb.Append(',');
 				KeyboardShortcut k = keys[i].Value;
 				string key = k.MainKey == KeyCode.None ? "" : k.ToString();
-				string[] parts = (buttons[i].Value ?? "").Split('|');
-				string button = parts.Length >= 4 ? parts[2] + ", " + parts[3] : "";
+				string button = Describe(buttons[i].Value) ?? "";
 				sb.Append("{\"action\":").Append(Newtonsoft.Json.JsonConvert.ToString(Actions[i]))
 					.Append(",\"name\":").Append(Newtonsoft.Json.JsonConvert.ToString(ActionNames[i]))
 					.Append(",\"key\":").Append(Newtonsoft.Json.JsonConvert.ToString(key))

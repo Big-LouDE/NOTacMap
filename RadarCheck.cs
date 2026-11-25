@@ -124,7 +124,8 @@ namespace NOTacMap
 						Hook(now);
 					}
 				}
-				if (watched != null && watched.radar is Radar r && r.activated != radarWasOn)
+				Status();
+			if (watched != null && watched.radar is Radar r && r.activated != radarWasOn)
 				{
 					radarWasOn = r.activated;
 					Plugin.Log.LogInfo("NOTacMap radar watch: your radar is " + (radarWasOn ? "ON" : "OFF") + " at " + Time.timeSinceLevelLoad.ToString("0.0", CultureInfo.InvariantCulture) + " s");
@@ -146,7 +147,12 @@ namespace NOTacMap
 			radarWasOn = aircraft.radar is Radar r0 && r0.activated;
 			string name = aircraft.definition != null ? aircraft.definition.unitName : aircraft.name;
 			Plugin.Log.LogInfo("NOTacMap radar watch: now flying " + name + ", radar " + (aircraft.radar is Radar ? (radarWasOn ? "ON" : "OFF") : "none") + ", size on radar " + aircraft.RCS.ToString("0.###", CultureInfo.InvariantCulture));
-			foreach (TargetDetector d in aircraft.GetComponentsInChildren<TargetDetector>(true))
+			// The plane's own radar field and everything below it, without doubles. The radar is hooked through aircraft.radar
+			// as well, in case it does not sit below the aircraft in the scene.
+			var all = new List<TargetDetector>(aircraft.GetComponentsInChildren<TargetDetector>(true));
+			if (aircraft.radar != null && !all.Contains(aircraft.radar)) all.Add(aircraft.radar);
+			var found = new List<string>();
+			foreach (TargetDetector d in all)
 			{
 				TargetDetector det = d;
 				det.onDetectTarget += OnDetect(det);
@@ -155,7 +161,28 @@ namespace NOTacMap
 					det.onScan += OnScan;
 				}
 				watchedDetectors.Add(det);
+				found.Add((det is Radar ? "radar " : "eyes ") + det.name + (det == aircraft.radar ? " (the plane's radar)" : "") + (det.activated ? "" : " (not active)"));
 			}
+			Plugin.Log.LogInfo("NOTacMap radar watch: sensors on your plane: " + (found.Count == 0 ? "none" : string.Join(", ", found.ToArray())));
+			nextStatus = Time.unscaledTime + 20f;
+			scansTotal = 0;
+		}
+
+		private static float nextStatus;
+		private static int scansTotal;
+
+		// Every 20 seconds in flight: is the radar on, how many scans so far, how many contacts right now.
+		private static void Status()
+		{
+			if (watched == null || Time.unscaledTime < nextStatus)
+			{
+				return;
+			}
+			nextStatus = Time.unscaledTime + 20f;
+			var c = CultureInfo.InvariantCulture;
+			string radar = watched.radar is Radar r ? (r.activated ? "on" : "off") + ", contacts now " + r.detectedTargets.Count.ToString(c) + (r.IsJammed() ? ", jammed" : "") : "none";
+			Plugin.Log.LogInfo("NOTacMap radar watch: status at " + Time.timeSinceLevelLoad.ToString("0", c) + " s: radar " + radar + ", scans so far " + scansTotal.ToString(c)
+				+ ", you at " + watched.GlobalPosition().y.ToString("0", c) + " m, found this life " + seenThisLife.Count.ToString(c));
 		}
 
 		private static readonly Dictionary<TargetDetector, Action<Unit>> handlers = new Dictionary<TargetDetector, Action<Unit>>();
@@ -187,6 +214,7 @@ namespace NOTacMap
 
 		private static void OnScan()
 		{
+			scansTotal++;
 			if (scansLogged >= 4)
 			{
 				return;
