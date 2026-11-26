@@ -1,0 +1,64 @@
+# Keeps the reply labels on Discussions up to date:
+# - someone other than the owner comments in a thread labeled "waiting for reply":
+#   "waiting for reply" goes, "needs your reply" comes, so the owner sees whose turn it is
+# - the owner comments in a thread labeled "needs your reply": that label goes
+# - someone other than the owner starts a new discussion: it gets "needs your reply"
+# It only reads who wrote the comment and which labels the thread has, never the comment's text.
+name: Discussion reply labels
+
+on:
+  discussion_comment:
+    types: [created]
+  discussion:
+    types: [created]
+
+permissions:
+  discussions: write
+
+jobs:
+  labels:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Swap the labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          EVENT: ${{ github.event_name }}
+          AUTHOR: ${{ github.event_name == 'discussion' && github.event.discussion.user.login || github.event.comment.user.login }}
+          AUTHOR_TYPE: ${{ github.event_name == 'discussion' && github.event.discussion.user.type || github.event.comment.user.type }}
+          NUMBER: ${{ github.event.discussion.number }}
+        run: |
+          set -euo pipefail
+          if [ "$AUTHOR_TYPE" = "Bot" ]; then
+            echo "A bot wrote, nothing to do."
+            exit 0
+          fi
+          data=$(gh api graphql \
+            -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){discussion(number:$n){id labels(first:30){nodes{name}}} waiting:label(name:"waiting for reply"){id} needs:label(name:"needs your reply"){id}}}' \
+            -F o="$OWNER" -F r="$REPO" -F n="$NUMBER")
+          discussion=$(echo "$data" | jq -r '.data.repository.discussion.id')
+          has=$(echo "$data" | jq -r '[.data.repository.discussion.labels.nodes[].name] | join(",")')
+          waiting=$(echo "$data" | jq -r '.data.repository.waiting.id // empty')
+          needs=$(echo "$data" | jq -r '.data.repository.needs.id // empty')
+          if [ -z "$waiting" ] || [ -z "$needs" ]; then
+            echo "The labels 'waiting for reply' or 'needs your reply' do not exist, nothing to do."
+            exit 0
+          fi
+          remove() { gh api graphql -f query='mutation($l:ID!,$i:[ID!]!){removeLabelsFromLabelable(input:{labelableId:$l,labelIds:$i}){clientMutationId}}' -f l="$discussion" -f i[]="$1" > /dev/null; }
+          add() { gh api graphql -f query='mutation($l:ID!,$i:[ID!]!){addLabelsToLabelable(input:{labelableId:$l,labelIds:$i}){clientMutationId}}' -f l="$discussion" -f i[]="$1" > /dev/null; }
+          if [ "$EVENT" = "discussion" ]; then
+            if [ "$AUTHOR" != "$OWNER" ]; then add "$needs"; echo "$AUTHOR started a new discussion: added 'needs your reply'."; fi
+            exit 0
+          fi
+          if [ "$AUTHOR" = "$OWNER" ]; then
+            case ",$has," in
+              *",needs your reply,"*) remove "$needs"; echo "The owner answered: removed 'needs your reply'." ;;
+              *) echo "The owner wrote, no reply label to change." ;;
+            esac
+          else
+            case ",$has," in
+              *",waiting for reply,"*) remove "$waiting"; add "$needs"; echo "$AUTHOR answered: 'waiting for reply' -> 'needs your reply'." ;;
+              *) echo "No 'waiting for reply' label, nothing to do." ;;
+            esac
+          fi
