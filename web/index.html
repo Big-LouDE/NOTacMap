@@ -601,6 +601,18 @@
       <summary>Marks and info</summary>
       <label data-note="Name, type, side, and distance and bearing from you. Speed, altitude and heading for aircraft of your own side, and for enemy aircraft while your side has fresh info on them, like the game's own map tooltip."><input type="checkbox" data-group="display" data-key="infoCard" checked>Info card when you tap or hover a unit</label>
       <label data-note="Press on a unit and drag: a line from it to the pointer shows bearing and range. Over an aircraft it also shows its altitude and aspect (hot, flank, beam, drag), like a BRAA call. If your side hasn't seen that aircraft for a while, you get the altitude it was last seen at, marked (old), and no aspect. It stays only while you hold, and fades out after you let go."><input type="checkbox" data-group="display" data-key="measureTool" checked>Measuring tool (press on a unit and drag)</label>
+      <label data-note="How long the measuring line stays after you let go. With Stay, it stays until you tap or click empty map, press Esc, or start a new one. A line that stays keeps measuring: an end on a unit follows that unit, an end on empty map stays on that spot.">After you let go
+        <select id="measureHoldSelect">
+          <option value="1">1 s</option>
+          <option value="1.5">1.5 s</option>
+          <option value="2" selected>2 s</option>
+          <option value="2.5">2.5 s</option>
+          <option value="3">3 s</option>
+          <option value="4">4 s</option>
+          <option value="5">5 s</option>
+          <option value="stay">Stay until you tap again</option>
+        </select>
+      </label>
       <label data-note="Your aircraft stays on the map as LAST POSITION until you have a new one, and for 10 seconds after."><input type="checkbox" data-group="display" data-key="lastPosition" checked>Mark where you lost your aircraft</label>
       <label data-note="A ring with the real blast radius (from the game's own numbers) around the marked target while you have a nuclear weapon selected, around a nuclear missile that is on its way, and where one went off, for a minute."><input type="checkbox" data-group="display" data-key="nukeRadius" checked>Nuclear blast radius</label>
       <label data-note="While an unguided bomb is selected: where it would land if you let it go now, worked out the way the cockpit's own bombing display does it, with the time the bomb needs to fall. The bomb's blast ring is drawn around that point (the real blast radius of a nuclear bomb, how far the blast and fragments reach for an ordinary one)."><input type="checkbox" data-group="display" data-key="bombImpact" checked>Bomb impact point</label>
@@ -1162,16 +1174,17 @@ function endPointer(e) {
 // anywhere else closes it. A drag and a pinch never count as a tap.
 let lastPinchAt = -1e9;
 canvas.addEventListener('pointerup', e => {
-  if (measure && measure.releasedAt === null) measure.releasedAt = performance.now();
+  if (measure && measure.releasedAt === null) releaseMeasure();
   if (pointers.size >= 2) lastPinchAt = performance.now();
   const now = performance.now();
   if (gesture && gesture.type === 'pan' && !gesture.moved && pointers.size === 1 && now - gesture.t0 < 600 && now - lastPinchAt > 700) {
     const id = pickUnitAt(pagePoint(e));
+    if (id === null && measure) measure = null;
     infoPinnedId = (id !== null && id !== infoPinnedId) ? id : null;
   }
 });
 canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') infoHoverId = null; });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') infoPinnedId = null; });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { infoPinnedId = null; measure = null; } });
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
 // A long press on a touch screen would open a context menu mid-gesture.
@@ -1204,7 +1217,7 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false, neutral: true },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, nukeRadius: true, bombImpact: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true, mapUp: 'north', iconStyle: 'ours', keepScreenOn: true, followKeys: true, measureTool: true, statsAfterRound: true, statsWithBoard: true, radarCone: true, radarSweep: false, warnLines: true, warnFaint: true, findLines: true, findBrackets: true },
+  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, nukeRadius: true, bombImpact: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true, mapUp: 'north', iconStyle: 'ours', keepScreenOn: true, followKeys: true, measureTool: true, measureHold: 2, statsAfterRound: true, statsWithBoard: true, radarCone: true, radarSweep: false, warnLines: true, warnFaint: true, findLines: true, findBrackets: true },
   overlays: { runwayGuides: true, weaponRange: true, grid: true, rangeRings: false, scaleBar: true },
   // Which preset is on ('custom' = the boxes as you set them), and the boxes as they were before a preset was switched on.
   preset: { mode: 'custom', mine: null, lastCombat: 'combatAll' },
@@ -1287,6 +1300,8 @@ function syncDisplayControls() {
   if (sel) sel.value = String(settings.display.textScale);
   const fpsSel = document.getElementById('fpsSelect');
   if (fpsSel) fpsSel.value = String(settings.display.fps);
+  const holdSel = document.getElementById('measureHoldSelect');
+  if (holdSel) holdSel.value = String(settings.display.measureHold);
   const startSel = document.getElementById('startModeSelect');
   if (startSel) startSel.value = settings.display.startMode;
   const unitsSel = document.getElementById('unitsSelect');
@@ -2131,6 +2146,12 @@ document.querySelector('[data-group="display"][data-key="sharpCanvas"]').addEven
 document.getElementById('textScaleSelect').addEventListener('change', e => {
   settings.display.textScale = parseFloat(e.target.value);
   applyTextScale();
+  saveSettings();
+});
+
+document.getElementById('measureHoldSelect').addEventListener('change', e => {
+  settings.display.measureHold = e.target.value === 'stay' ? 'stay' : parseFloat(e.target.value);
+  measure = null;
   saveSettings();
 });
 
@@ -4928,8 +4949,17 @@ function drawGameIcon(ctx, g, x, y, color, headingDeg) {
 // and speed. For any other side only what the game's own tooltip shows an enemy anyway (the name and the type) plus the distance and
 // bearing from you, which your map already shows.
 // ---- Measuring tool: BRAA from one contact to the pointer (or the contact under it)
-const MEASURE_FADE_MS = 2000;
-let measure = null; // { fromId, pt: {x, y} on the page, releasedAt }
+let measure = null; // { fromId, pt: {x, y} on the page, releasedAt, then on release toId or world: {x, z} }
+function measureStays() { return settings.display.measureHold === 'stay'; }
+function measureFadeMs() { const s = parseFloat(settings.display.measureHold); return (s > 0 ? Math.min(5, s) : 2) * 1000; }
+function releaseMeasure() {
+  measure.releasedAt = performance.now();
+  const toId = pickUnitForMeasure(measure.pt, measure.fromId);
+  if (toId !== null) { measure.toId = toId; return; }
+  const o = getViewOrigin();
+  const [ox, oz] = screenOffsetToWorld(measure.pt.x - viewWidth / 2, measure.pt.y - viewHeight / 2, scale);
+  measure.world = { x: o.x + ox, z: o.z + oz };
+}
 function pickUnitForMeasure(pt, notId) {
   let best = null, bestD = INFO_PICK_PX;
   for (const c of infoPicks) {
@@ -4940,18 +4970,22 @@ function pickUnitForMeasure(pt, notId) {
   return best ? best.id : null;
 }
 function aspectWord(deg) { return deg <= 30 ? 'HOT' : deg <= 70 ? 'FLANK' : deg <= 120 ? 'BEAM' : 'DRAG'; }
-function measureActive() { return !!(measure && (measure.releasedAt === null || performance.now() - measure.releasedAt < MEASURE_FADE_MS)); }
+// while held or fading the map redraws every frame; a line that stays only changes with the feed, so it needs no extra frames
+function measureActive() { return !!(measure && (measure.releasedAt === null || (!measureStays() && performance.now() - measure.releasedAt < measureFadeMs()))); }
+function measureShown() { return !!(measure && (measureActive() || (measureStays() && measure.releasedAt !== null))); }
 function drawMeasure(ctx, toScreen) {
-  if (!measureActive() || settings.display.measureTool === false) { if (measure && !measureActive()) measure = null; return; }
+  if (!measureShown() || settings.display.measureTool === false) { if (measure && !measureShown()) measure = null; return; }
   const units = latest.units || [];
   const from = units.find(u => u.id === measure.fromId);
   if (!from) { measure = null; return; }
-  const fade = measure.releasedAt === null ? 1 : Math.max(0, 1 - (performance.now() - measure.releasedAt) / MEASURE_FADE_MS);
+  const fade = measure.releasedAt === null || measureStays() ? 1 : Math.max(0, 1 - (performance.now() - measure.releasedAt) / measureFadeMs());
   const [fx, fy] = toScreen(from.x, from.z);
-  const toId = pickUnitForMeasure(measure.pt, from.id);
+  const toId = measure.releasedAt === null ? pickUnitForMeasure(measure.pt, from.id) : (measure.toId ?? null);
   const to = toId !== null ? units.find(u => u.id === toId) : null;
+  if (toId !== null && !to) { measure = null; return; } // the unit it was fixed to is gone
   let tx, ty, wx, wz;
   if (to) { [tx, ty] = toScreen(to.x, to.z); wx = to.x; wz = to.z; }
+  else if (measure.world) { wx = measure.world.x; wz = measure.world.z; [tx, ty] = toScreen(wx, wz); }
   else {
     tx = measure.pt.x; ty = measure.pt.y;
     const o = getViewOrigin();
