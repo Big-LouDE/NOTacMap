@@ -49,6 +49,9 @@ namespace NOTacMap
 		public float y;
 		public float z;
 		public float heading; // transform.eulerAngles.y, which way the icon should point on the map
+		// Not your side, and your side has fresh info on it: the game's own test (FactionHQ.IsTargetPositionAccurate, 20 m), the one
+		// its map tooltip and cockpit target screen use before they show altitude, speed and heading. Your own side is always fresh.
+		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool fresh;
 
 		// Newtonsoft calls these by name: the target block only goes out for a
 		// unit that actually has a lock (targetId/targetName are covered by the
@@ -858,6 +861,7 @@ namespace NOTacMap
 					}
 					string faction = FactionString(unit.NetworkHQ);
 
+					bool fresh = faction != "friendly" && localHq.IsTargetPositionAccurate(unit, 20f);
 					var snap = new UnitSnapshot
 					{
 						id = id.Id,
@@ -876,7 +880,8 @@ namespace NOTacMap
 						isIncomingMissile = incomingMissileIds.Contains(id),
 						// Rounded to a tenth: at map scale a tenth of a metre is
 						// invisible, but it keeps every number short in the JSON.
-						speedKmh = (unit is Missile || (faction == "friendly" && unit is Aircraft)) && unit.rb != null ? Round1(unit.rb.velocity.magnitude * 3.6f) : 0f,
+						speedKmh = (unit is Missile || ((faction == "friendly" || fresh) && unit is Aircraft)) && unit.rb != null ? Round1(unit.rb.velocity.magnitude * 3.6f) : 0f,
+						fresh = fresh,
 						x = Round1(pos.x),
 						y = Round1(pos.y),
 						z = Round1(pos.z),

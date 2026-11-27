@@ -599,7 +599,8 @@
     </details>
     <details class="group fold" data-fold="marks">
       <summary>Marks and info</summary>
-      <label data-note="Name, type, side, and distance and bearing from you. Speed, altitude and heading only for your own side."><input type="checkbox" data-group="display" data-key="infoCard" checked>Info card when you tap or hover a unit</label>
+      <label data-note="Name, type, side, and distance and bearing from you. Speed, altitude and heading for aircraft of your own side, and for enemy aircraft while your side has fresh info on them, like the game's own map tooltip."><input type="checkbox" data-group="display" data-key="infoCard" checked>Info card when you tap or hover a unit</label>
+      <label data-note="Press on a unit and drag: a line from it to the pointer shows bearing and range. Over an aircraft it also shows its altitude and aspect (hot, flank, beam, drag), like a BRAA call. If your side hasn't seen that aircraft for a while, you get the altitude it was last seen at, marked (old), and no aspect. It stays only while you hold, and fades out after you let go."><input type="checkbox" data-group="display" data-key="measureTool" checked>Measuring tool (press on a unit and drag)</label>
       <label data-note="Your aircraft stays on the map as LAST POSITION until you have a new one, and for 10 seconds after."><input type="checkbox" data-group="display" data-key="lastPosition" checked>Mark where you lost your aircraft</label>
       <label data-note="A ring with the real blast radius (from the game's own numbers) around the marked target while you have a nuclear weapon selected, around a nuclear missile that is on its way, and where one went off, for a minute."><input type="checkbox" data-group="display" data-key="nukeRadius" checked>Nuclear blast radius</label>
       <label data-note="While an unguided bomb is selected: where it would land if you let it go now, worked out the way the cockpit's own bombing display does it, with the time the bomb needs to fall. The bomb's blast ring is drawn around that point (the real blast radius of a nuclear bomb, how far the blast and fragments reach for an ordinary one)."><input type="checkbox" data-group="display" data-key="bombImpact" checked>Bomb impact point</label>
@@ -774,6 +775,7 @@
     <p>A red ring with ATTACKER marks who fired at you. Amber rings show the blast of nuclear weapons and bombs.</p>
     <p>The circle or cone around you is the range of the weapon you have selected.</p>
     <p>LEGEND (top left) lists every symbol.</p>
+    <p>Measure: press on a unit and drag. The line shows bearing and range to the pointer, and over an aircraft its altitude and aspect (BRAA). It fades out after you let go.</p>
     <h3>Settings</h3>
     <p>FILTER: unit types, weapon kinds, overlays, trails and presets. Combat shows only what your weapons can hit. While it hides something, the FILTER button is amber and a bar at the bottom says how many units are hidden, with a button back to All. Combat is off again each time the map opens. You can also switch between Combat and All, and zoom, with keys you set in the game's BepInEx config (section Keys), or with a joystick, HOTAS or gamepad button (F1 > NOTacMap > Keys). DISPLAY > Your radar shows your radar's cone with a flash on each scan, lines and DETECTED on new finds, and the game's radar warning lines.</p>
     <p>DISPLAY: what the map shows, the look, names and colors. Hold the mouse over a switch, or touch and hold it, for a note.</p>
@@ -1107,6 +1109,10 @@ canvas.addEventListener('pointerdown', e => {
   canvas.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, pagePoint(e));
   startGesture();
+  if (gesture && gesture.type === 'pan' && pointers.size === 1 && settings.display.measureTool !== false) {
+    const from = pickUnitForMeasure(pagePoint(e));
+    if (from !== null) gesture.measureFrom = from;
+  }
   canvas.style.cursor = 'grabbing';
 });
 canvas.addEventListener('pointermove', e => {
@@ -1118,6 +1124,12 @@ canvas.addEventListener('pointermove', e => {
   const pt = pagePoint(e);
   pointers.set(e.pointerId, pt);
   if (!gesture) return;
+  if (gesture.type === 'pan' && pointers.size === 1 && gesture.measureFrom != null) {
+    if (!gesture.moved && Math.hypot(pt.x - gesture.x, pt.y - gesture.y) < PAN_START_PX) return;
+    gesture.moved = true;
+    measure = { fromId: gesture.measureFrom, pt, releasedAt: null };
+    return;
+  }
   if (gesture.type === 'pan' && pointers.size === 1) {
     const dx = pt.x - gesture.x;
     const dy = pt.y - gesture.y;
@@ -1150,6 +1162,7 @@ function endPointer(e) {
 // anywhere else closes it. A drag and a pinch never count as a tap.
 let lastPinchAt = -1e9;
 canvas.addEventListener('pointerup', e => {
+  if (measure && measure.releasedAt === null) measure.releasedAt = performance.now();
   if (pointers.size >= 2) lastPinchAt = performance.now();
   const now = performance.now();
   if (gesture && gesture.type === 'pan' && !gesture.moved && pointers.size === 1 && now - gesture.t0 < 600 && now - lastPinchAt > 700) {
@@ -1191,7 +1204,7 @@ function applyDarkMode() {
 const DEFAULT_SETTINGS = {
   unitTypes: { plane: true, helicopter: true, tank: true, apc: true, radar: true, aa: true, ship: true, vehicle: true, building: true, pilot: false, neutral: true },
   weapons: { air2air: true, air2ground: true, unlocked: true },
-  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, nukeRadius: true, bombImpact: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true, mapUp: 'north', iconStyle: 'ours', keepScreenOn: true, followKeys: true, statsAfterRound: true, statsWithBoard: true, radarCone: true, radarSweep: false, warnLines: true, warnFaint: true, findLines: true, findBrackets: true },
+  display: { units: 'game', rotate: 0, textScale: 1.25, showPilotNames: true, realNames: true, darkMode: false, closeOnGameExit: true, fps: 8, sleepWhenHidden: true, textOutline: true, legendOpen: null, sharpCanvas: true, startMode: 'ask', startIntroSeen: false, showMissileEta: true, fairPlay: false, ringKm: 'all', cueFill: true, cueBrackets: true, cueNumber: true, cueFade: true, cueSteer: true, cueClosing: true, cueCount: true, infoCard: true, lastPosition: true, nukeRadius: true, bombImpact: true, pulse: false, threatFocus: true, jamTag: true, jamLine: true, jamMine: true, jamMe: true, jamName: true, jamRadar: true, mapUp: 'north', iconStyle: 'ours', keepScreenOn: true, followKeys: true, measureTool: true, statsAfterRound: true, statsWithBoard: true, radarCone: true, radarSweep: false, warnLines: true, warnFaint: true, findLines: true, findBrackets: true },
   overlays: { runwayGuides: true, weaponRange: true, grid: true, rangeRings: false, scaleBar: true },
   // Which preset is on ('custom' = the boxes as you set them), and the boxes as they were before a preset was switched on.
   preset: { mode: 'custom', mine: null, lastCombat: 'combatAll' },
@@ -3921,7 +3934,7 @@ const boostRendering = () => { boostUntil = performance.now() + 1500; };
 window.addEventListener('pointermove', e => { if (e.buttons) boostRendering(); }, { passive: true });
 
 function animationActive() {
-  if (incomingMissileActive || lockLosses.size > 0 || inRangeAnimating() || radarAnimating()) return true;
+  if (incomingMissileActive || lockLosses.size > 0 || inRangeAnimating() || radarAnimating() || measureActive()) return true;
   const now = performance.now();
   for (const m of markedMemory.values()) {
     if (m.lostAt !== null) return true; // the LOST marker spins the whole time
@@ -4539,6 +4552,7 @@ function draw() {
   if (settings.overlays.weaponRange && latest.weaponRange && latest.weaponRange.armed && settings.display.cueCount) drawInRangeCount(ctx);
 
   drawRadarWarnings(ctx, toScreen);
+  drawMeasure(ctx, toScreen);
   drawOwnRadar(ctx, toScreen);
   drawFinds(ctx, toScreen);
   drawJamming(ctx, toScreen);
@@ -4913,9 +4927,79 @@ function drawGameIcon(ctx, g, x, y, color, headingDeg) {
 // The card of the tapped or hovered unit. For a unit of your own side: name, type, distance and bearing from you, altitude, heading
 // and speed. For any other side only what the game's own tooltip shows an enemy anyway (the name and the type) plus the distance and
 // bearing from you, which your map already shows.
+// ---- Measuring tool: BRAA from one contact to the pointer (or the contact under it)
+const MEASURE_FADE_MS = 2000;
+let measure = null; // { fromId, pt: {x, y} on the page, releasedAt }
+function pickUnitForMeasure(pt, notId) {
+  let best = null, bestD = INFO_PICK_PX;
+  for (const c of infoPicks) {
+    if (c.id === notId) continue;
+    const d = Math.hypot(c.x - pt.x, c.y - pt.y);
+    if (d <= bestD) { best = c; bestD = d; }
+  }
+  return best ? best.id : null;
+}
+function aspectWord(deg) { return deg <= 30 ? 'HOT' : deg <= 70 ? 'FLANK' : deg <= 120 ? 'BEAM' : 'DRAG'; }
+function measureActive() { return !!(measure && (measure.releasedAt === null || performance.now() - measure.releasedAt < MEASURE_FADE_MS)); }
+function drawMeasure(ctx, toScreen) {
+  if (!measureActive() || settings.display.measureTool === false) { if (measure && !measureActive()) measure = null; return; }
+  const units = latest.units || [];
+  const from = units.find(u => u.id === measure.fromId);
+  if (!from) { measure = null; return; }
+  const fade = measure.releasedAt === null ? 1 : Math.max(0, 1 - (performance.now() - measure.releasedAt) / MEASURE_FADE_MS);
+  const [fx, fy] = toScreen(from.x, from.z);
+  const toId = pickUnitForMeasure(measure.pt, from.id);
+  const to = toId !== null ? units.find(u => u.id === toId) : null;
+  let tx, ty, wx, wz;
+  if (to) { [tx, ty] = toScreen(to.x, to.z); wx = to.x; wz = to.z; }
+  else {
+    tx = measure.pt.x; ty = measure.pt.y;
+    const o = getViewOrigin();
+    const [ox, oz] = screenOffsetToWorld(tx - viewWidth / 2, ty - viewHeight / 2, scale);
+    wx = o.x + ox; wz = o.z + oz;
+  }
+  const dx = wx - from.x, dz = wz - from.z;
+  const brg = (Math.atan2(dx, dz) * 180 / Math.PI + 360) % 360;
+  // reads like a BRAA call: bearing / range / altitude / aspect. Altitude and aspect only for aircraft, that's what the call is for.
+  const parts = [String(Math.round(brg) % 360).padStart(3, '0'), fmtDistance(Math.hypot(dx, dz))];
+  const braa = !!to && to.baseType === 'aircraft';
+  if (braa) {
+    const current = to.faction === 'friendly' || to.fresh;
+    // every contact on the map is in your side's data link; an old one still has the altitude it was last seen at
+    parts.push(fmtAltitude(to.y) + (current ? '' : ' (old)'));
+    if (current) {
+      // aspect: the angle between where it flies and the line from it back to the contact you picked
+      const back = (brg + 180) % 360;
+      const off = Math.abs(((back - (to.heading || 0)) % 360 + 540) % 360 - 180);
+      parts.push(aspectWord(off));
+    }
+  }
+  ctx.save();
+  ctx.globalAlpha = fade;
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.setLineDash([6, 5]);
+  ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(tx, ty); ctx.stroke(); ctx.setLineDash([]);
+  ctx.beginPath(); ctx.arc(fx, fy, 10, 0, Math.PI * 2); ctx.stroke();
+  if (to) { ctx.beginPath(); ctx.arc(tx, ty, 10, 0, Math.PI * 2); ctx.stroke(); }
+  const title = (from.type || from.name || '').trim() + (to ? ' \u2192 ' + (to.type || to.name || '').trim() : '');
+  const line = (braa ? 'BRAA ' : 'BR ') + parts.join(' / ');
+  setFont(11); const w1 = ctx.measureText(title).width;
+  setFont(12, true); const w2 = ctx.measureText(line).width;
+  const lineH = Math.round(14 * settings.display.textScale);
+  const boxW = Math.max(w1, w2) + 14, boxH = lineH * 2 + 8;
+  let bx = tx + 16, by = ty + 8;
+  if (bx + boxW > viewWidth - 6) bx = tx - 16 - boxW;
+  if (by + boxH > viewHeight - 6) by = ty - 8 - boxH;
+  bx = Math.max(6, bx); by = Math.max(6, by);
+  ctx.fillStyle = 'rgba(0,0,0,0.9)'; ctx.fillRect(bx, by, boxW, boxH);
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, by + 0.5, boxW - 1, boxH - 1);
+  setFont(11); ctx.fillStyle = col('--hud-dim'); ctx.fillText(title, bx + 7, by + lineH - 1);
+  setFont(12, true); ctx.fillStyle = '#ffffff'; ctx.fillText(line, bx + 7, by + lineH * 2 - 1);
+  ctx.restore();
+}
+
 function drawInfoCard(ctx, toScreen) {
   const id = infoPinnedId !== null ? infoPinnedId : infoHoverId;
-  if (id === null || settings.display.infoCard === false) return;
+  if (id === null || settings.display.infoCard === false || (measure && measure.releasedAt === null)) return;
   const u = (latest.units || []).find(x => x.id === id);
   if (!u) { if (infoPinnedId === id) infoPinnedId = null; return; }
   const [sx, sy] = toScreen(u.x, u.z);
@@ -4931,7 +5015,7 @@ function drawInfoCard(ctx, toScreen) {
     const brg = (Math.atan2(dx, dz) * 180 / Math.PI + 360) % 360;
     lines.push({ text: `${fmtDistance(Math.hypot(dx, dz))}  BRG ${String(Math.round(brg)).padStart(3, '0')}\u00b0` });
   }
-  if (own && u.baseType === 'aircraft') {
+  if ((own || u.fresh) && u.baseType === 'aircraft') {
     const bits = [`ALT ${fmtAltitude(u.y)}`, `HDG ${Math.round(u.heading)}\u00b0`];
     if (u.speedKmh) bits.unshift(`SPD ${fmtSpeed(u.speedKmh)}`);
     lines.push({ text: bits.join('  ') });
