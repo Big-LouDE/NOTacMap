@@ -143,6 +143,7 @@ namespace NOTacMap
 		public float y;
 		public float z;
 		public float heading;
+		[JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool landed; // on the ground (Aircraft.IsLanded): leaving the aircraft then is no loss
 		[JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public RadarSnapshot radar; // your own radar, see OwnRadar
 	}
 
@@ -654,7 +655,8 @@ namespace NOTacMap
 					x = pos.x,
 					y = pos.y,
 					z = pos.z,
-					heading = playerAircraft.transform.eulerAngles.y
+					heading = playerAircraft.transform.eulerAngles.y,
+					landed = playerAircraft.IsLanded()
 				};
 				FillPlayerJamming(playerAircraft, snapshot.player);
 				UnitIconCapture.Want(playerAircraft.definition);

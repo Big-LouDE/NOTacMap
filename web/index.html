@@ -613,7 +613,7 @@
           <option value="stay">Stay until you tap again</option>
         </select>
       </label>
-      <label data-note="Your aircraft stays on the map as LAST POSITION until you have a new one, and for 10 seconds after."><input type="checkbox" data-group="display" data-key="lastPosition" checked>Mark where you lost your aircraft</label>
+      <label data-note="Where you crashed, were shot down or ejected stays on the map as LAST POSITION until you have a new one, and for 10 seconds after. Leaving an aircraft after a landing leaves no mark."><input type="checkbox" data-group="display" data-key="lastPosition" checked>Mark where you lost your aircraft</label>
       <label data-note="A ring with the real blast radius (from the game's own numbers) around the marked target while you have a nuclear weapon selected, around a nuclear missile that is on its way, and where one went off, for a minute."><input type="checkbox" data-group="display" data-key="nukeRadius" checked>Nuclear blast radius</label>
       <label data-note="While an unguided bomb is selected: where it would land if you let it go now, worked out the way the cockpit's own bombing display does it, with the time the bomb needs to fall. The bomb's blast ring is drawn around that point (the real blast radius of a nuclear bomb, how far the blast and fragments reach for an ordinary one)."><input type="checkbox" data-group="display" data-key="bombImpact" checked>Bomb impact point</label>
     </details>
@@ -2572,9 +2572,12 @@ function togglePanel(panel, btn) {
 // under that point. Taller than that and it scrolls inside instead of running
 // off the bottom of a phone screen.
 function fitPanelToScreen(panel) {
+  // clearing the height for a moment drops the scroll position, so opening a fold further down jumped back to the top
+  const keep = panel.scrollTop;
   panel.style.maxHeight = '';
   const room = effectiveSize().h - pageTop(panel) - 8;
   panel.style.maxHeight = Math.max(120, room) + 'px';
+  panel.scrollTop = keep;
 }
 window.addEventListener('resize', () => {
   const open = document.querySelector('.panel.open');
@@ -4834,19 +4837,33 @@ let lastPosMark = null;          // { x, z, heading, heli, t0, backAt }
 let lastPosHadPlayer = false;
 let lastPosPlayer = null;        // the player block of the last snapshot that had one
 
+const LASTPOS_DEATH_WAIT_MS = 5000; // after leaving a landed aircraft, how long a death still counts as losing it
+let lastPosLandedAt = null;
+let lastPosDied = null;
 function updateLastPosition(snap) {
   const now = performance.now();
+  const died = snap.stats && typeof snap.stats.died === 'number' ? snap.stats.died : 0;
+  if (lastPosDied === null) lastPosDied = died;
   if (snap.player) {
-    lastPosPlayer = { type: snap.player.type, x: snap.player.x, z: snap.player.z, heading: snap.player.heading, heli: classifyUnit({ type: snap.player.type, baseType: 'aircraft', isHelicopter: snap.player.isHelicopter }) === 'helicopter' };
+    lastPosPlayer = { type: snap.player.type, x: snap.player.x, z: snap.player.z, heading: snap.player.heading, landed: !!snap.player.landed, heli: classifyUnit({ type: snap.player.type, baseType: 'aircraft', isHelicopter: snap.player.isHelicopter }) === 'helicopter' };
     if (lastPosMark && lastPosMark.backAt === null) {
       if (now - lastPosMark.t0 < LASTPOS_BLIP_MS) lastPosMark = null;
       else lastPosMark.backAt = now;
     }
     lastPosHadPlayer = true;
   } else {
-    if (lastPosHadPlayer && lastPosPlayer && !lastPosMark) lastPosMark = { ...lastPosPlayer, t0: now, backAt: null };
+    // leaving an aircraft that stood on the ground is no loss: no mark, unless a death comes in right after (bombed on the runway)
+    if (lastPosHadPlayer && lastPosPlayer && !lastPosMark) {
+      if (!lastPosPlayer.landed) lastPosMark = { ...lastPosPlayer, t0: now, backAt: null };
+      else lastPosLandedAt = now;
+    }
+    if (lastPosLandedAt !== null && died > lastPosDied && !lastPosMark && lastPosPlayer && now - lastPosLandedAt < LASTPOS_DEATH_WAIT_MS) {
+      lastPosMark = { ...lastPosPlayer, t0: now, backAt: null };
+    }
     lastPosHadPlayer = false;
   }
+  if (snap.player || (lastPosLandedAt !== null && now - lastPosLandedAt >= LASTPOS_DEATH_WAIT_MS)) lastPosLandedAt = null;
+  lastPosDied = died;
 }
 
 function lastPosAlpha() {

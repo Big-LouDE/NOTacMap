@@ -53,7 +53,7 @@ namespace NOTacMap
 		private static readonly Dictionary<uint, float> pendingCredit = new Dictionary<uint, float>();
 		private static bool dirty;
 		private static float nextSave;
-		private static int version, endedCount;
+		private static int version, endedCount, deathCount;
 		private static bool boardOpen;
 		private static volatile string json = "{}";
 
@@ -112,6 +112,7 @@ namespace NOTacMap
 				string by = killer == null ? "unknown (a crash or no damage)" : (killer.definition != null ? killer.definition.unitName : "unknown") + (killer.player != null && killer.player != me ? " (a player)" : "");
 				if (killer != null && killer.player == me) by = "yourself";
 				Each(t => { t.deaths++; Add(t.killedBy, by); });
+				deathCount++;
 				if (lifePlane != null) PlaneOf(lifePlane).deaths++;
 				Changed();
 				return;
@@ -333,7 +334,7 @@ namespace NOTacMap
 		internal static string Json() => json;
 
 		// For the snapshot: a small note that tells every map when to read /stats again, when a round ended and if the scoreboard is open.
-		internal static StatsNote Note() => new StatsNote { v = version, ended = endedCount, board = boardOpen };
+		internal static StatsNote Note() => new StatsNote { v = version, ended = endedCount, board = boardOpen, died = deathCount };
 
 		// ---- the file: written to a new file, then swapped in, the old one kept as a backup
 		private static void Load()
@@ -408,5 +409,6 @@ namespace NOTacMap
 		public int v;      // stats changed: read /stats again
 		public int ended;  // rounds ended since the game started: opens the panel when it goes up
 		public bool board; // the game's scoreboard (Esc) is open
+		public int died;   // times you died since the game started (crashes too): the map marks where you lost the aircraft
 	}
 }
