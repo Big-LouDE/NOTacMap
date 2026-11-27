@@ -20,6 +20,36 @@ namespace NOTacMap
 		private static readonly FieldInfo AlertInterval = typeof(TargetDetector).GetField("alertCheckInterval", BindingFlags.Instance | BindingFlags.NonPublic);
 		private static readonly FieldInfo VisualRange = typeof(TargetDetector).GetField("visualRange", BindingFlags.Instance | BindingFlags.NonPublic);
 		private static readonly FieldInfo RadarCone = typeof(Radar).GetField("radarCone", BindingFlags.Instance | BindingFlags.NonPublic);
+		private static readonly FieldInfo Rotators = typeof(TargetDetector).GetField("rotators", BindingFlags.Instance | BindingFlags.NonPublic);
+		private static readonly FieldInfo Scanner = typeof(TargetDetector).GetField("scanner", BindingFlags.Instance | BindingFlags.NonPublic);
+
+		// The parts of a radar that spin (TargetDetector.rotators, turned by Radar.Update at axis degrees per second), and whether
+		// the radar's scanner sits on one of them, so its cone turns with it.
+		private static string Spin(TargetDetector d)
+		{
+			try
+			{
+				var arr = Rotators?.GetValue(d) as Array;
+				if (arr == null || arr.Length == 0) return "no spinning part";
+				var scanner = Scanner?.GetValue(d) as Transform;
+				var parts = new List<string>();
+				bool turns = false;
+				foreach (object r in arr)
+				{
+					if (r == null) continue;
+					var t = r.GetType().GetField("transform")?.GetValue(r) as Transform;
+					var axis = r.GetType().GetField("axis")?.GetValue(r) is Vector3 v ? v : Vector3.zero;
+					bool carries = t != null && scanner != null && scanner.IsChildOf(t);
+					turns |= carries && Mathf.Abs(axis.y) > 0.01f;
+					parts.Add((t != null ? t.name : "?") + " axis " + axis.ToString("0.#") + " deg/s" + (carries ? " (carries the scanner)" : ""));
+				}
+				return "spins: " + string.Join(", ", parts.ToArray()) + (turns ? " -> the cone turns around" : " -> the cone does not turn");
+			}
+			catch (Exception ex)
+			{
+				return "spin unknown (" + ex.GetType().Name + ")";
+			}
+		}
 
 		// Called from Update. Tries now and then until the encyclopedia is there, then writes the list once.
 		internal static void TryOnce()
@@ -85,7 +115,7 @@ namespace NOTacMap
 						RadarParams p = radar.RadarParameters;
 						string range = (p.maxRange / 1000f).ToString("0.#", c) + " km";
 						lines.Add($"  {kind} | {def.unitName} | radar {d.name} | range {range} | cone {(cone == "0" ? "all round" : cone + " deg half-angle")} | scan {scan} | contacts {contacts} | eyes {eyes} m"
-							+ $" | minSignal {p.minSignal.ToString("0.###", c)} | maxSignal {p.maxSignal.ToString("0.###", c)} | clutterFactor {p.clutterFactor.ToString("0.###", c)} | dopplerFactor {p.dopplerFactor.ToString("0.#####", c)}");
+							+ $" | minSignal {p.minSignal.ToString("0.###", c)} | maxSignal {p.maxSignal.ToString("0.###", c)} | clutterFactor {p.clutterFactor.ToString("0.###", c)} | dopplerFactor {p.dopplerFactor.ToString("0.#####", c)} | {Spin(radar)}");
 					}
 					else
 					{
