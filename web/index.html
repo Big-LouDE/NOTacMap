@@ -120,7 +120,11 @@
     text-transform: uppercase; letter-spacing: 0.05em;
     padding: 4px 8px; cursor: pointer; white-space: nowrap;
   }
-  #controls button:hover, #controls button.active, #controls button.rotated { color: var(--hud-green); border-color: var(--hud-green); }
+  #controls button.active, #controls button.rotated { color: var(--hud-green); border-color: var(--hud-green); }
+  /* only with a real mouse: on a phone the last tapped button would keep the hover look after its panel closed */
+  @media (hover: hover) { #controls button:hover { color: var(--hud-green); border-color: var(--hud-green); } }
+  /* the browser's focus ring stayed on the last clicked button once a key was pressed; a closed panel's button gives up focus */
+  #controls button:focus:not(:focus-visible) { outline: none; }
   html.game-icons #legendHead, html.game-icons #legend .legend-rows { display: none !important; }
   .panel details.fold > summary { cursor: pointer; }
   .panel label[data-note] { position: relative; cursor: help; }
@@ -2515,6 +2519,11 @@ menuBtn.addEventListener('click', e => {
 menuRow.addEventListener('click', e => { if (e.target.closest('button')) setTimeout(closeMenu, 0); });
 document.addEventListener('click', e => { if (!menuRow.hidden && !e.target.closest('#menuRow, #menuBtn')) closeMenu(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+// a key pressed while a corner button still has focus from its last click made the browser draw its focus ring on it
+document.addEventListener('keydown', () => {
+  const a = document.activeElement;
+  if (a && a.closest && a.closest('#controls') && a.tagName === 'BUTTON' && !a.classList.contains('active')) a.blur();
+}, true);
 new MutationObserver(updateMenu).observe(menuRow, { subtree: true, attributes: true, attributeFilter: ['hidden'] });
 updateMenu();
 
@@ -2564,6 +2573,8 @@ function togglePanel(panel, btn) {
     panel.classList.add('open');
     btn.classList.add('active');
     fitPanelToScreen(panel);
+  } else if (btn && btn.blur) {
+    btn.blur();
   }
   if (!document.getElementById('devicesPanel').classList.contains('open')) hideSecret();
 }
